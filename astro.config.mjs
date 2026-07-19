@@ -4,6 +4,7 @@ import mdx from '@astrojs/mdx';
 import react from '@astrojs/react';
 
 export default defineConfig({
+  site: 'http://localhost',
   integrations: [
     starlight({
       title: 'Hermes Agent 学习教程',

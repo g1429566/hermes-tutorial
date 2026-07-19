@@ -26,11 +26,7 @@ export default function TryIt({ id, command, note }: TryItProps) {
       {note && <p className="ht-tryit-note">{note}</p>}
       <div className="ht-tryit-actions">
         <label>
-          <input
-            type="checkbox"
-            checked={done}
-            onChange={() => setItem(`tryit:${id}`, !done)}
-          />{' '}
+          <input type="checkbox" checked={done} onChange={() => setItem(`tryit:${id}`, !done)} />{' '}
           我在终端跑过了
         </label>
         <button type="button" onClick={copy}>

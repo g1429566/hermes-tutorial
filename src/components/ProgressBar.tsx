@@ -7,9 +7,7 @@ export default function ProgressBar() {
 
   return (
     <div className="ht-progress">
-      <span>
-        📊 学习进度：已完成 {count} 项
-      </span>
+      <span>📊 学习进度：已完成 {count} 项</span>
       {count > 0 && (
         <button
           type="button"
