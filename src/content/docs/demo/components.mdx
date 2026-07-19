@@ -1,0 +1,32 @@
+---
+title: 组件演示
+description: 交互组件一览（阶段 0 Part 1）。
+---
+
+import TryIt from '../../../components/TryIt.tsx';
+import Quiz from '../../../components/Quiz.tsx';
+import Checkpoint from '../../../components/Checkpoint.tsx';
+
+本页展示阶段 0 Part 1 提供的三个交互组件。它们都写入浏览器本地进度（见页面顶部进度条）。
+
+## TryIt —— 终端动手
+
+<TryIt id="demo-tryit" command="echo hello && hermes --version" note="把命令复制到你的终端运行。" />
+
+## Quiz —— 知识检查
+
+<Quiz
+  id="demo-quiz"
+  question="以下哪个是 Hermes Agent 的核心差异化能力？（单选）"
+  options={[
+    { key: 'a', text: '支持多种 LLM provider' },
+    { key: 'b', text: '内置自进化学习循环' },
+    { key: 'c', text: '有 TUI 界面' },
+  ]}
+  correct={['b']}
+  explanation="provider 多样、TUI 都是不错的特性，但核心差异化是『自进化学习循环』。"
+/>
+
+## Checkpoint —— 节点完成
+
+<Checkpoint id="demo-checkpoint" label="我看完了组件演示" />

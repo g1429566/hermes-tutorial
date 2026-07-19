@@ -1,0 +1,52 @@
+---
+title: 安装与第一次对话
+description: 安装 Hermes 并完成第一次对话。
+---
+
+import TryIt from '../../../components/TryIt.tsx';
+import Quiz from '../../../components/Quiz.tsx';
+import Checkpoint from '../../../components/Checkpoint.tsx';
+
+## 安装
+
+Linux / macOS / WSL2 / Termux：
+
+<TryIt
+  id="install"
+  command="curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+  note="安装器会自动处理 uv、Python 3.11、Node.js、ripgrep、ffmpeg 等依赖。"
+/>
+
+安装完成后重新加载 shell：
+
+<TryIt id="reload-shell" command="source ~/.bashrc   # 或 source ~/.zshrc" />
+
+## 第一次对话
+
+<TryIt id="first-chat" command="hermes" note="启动交互式 CLI，开始第一次对话。" />
+
+## 常用命令
+
+| 命令 | 作用 |
+| --- | --- |
+| `hermes model` | 选择 LLM provider 与模型 |
+| `hermes tools` | 配置启用的工具 |
+| `hermes config set` / `get` | 设置 / 读取单个配置项 |
+| `hermes gateway` | 启动消息网关（Telegram、Discord 等） |
+| `hermes setup` | 一次性完整配置向导 |
+| `hermes doctor` | 诊断问题 |
+
+<Quiz
+  id="install-1"
+  question="下列哪个命令用于启动 Hermes 的交互式对话？"
+  options={[
+    { key: 'a', text: 'hermes setup' },
+    { key: 'b', text: 'hermes' },
+    { key: 'c', text: 'hermes doctor' },
+    { key: 'd', text: 'hermes tools' },
+  ]}
+  correct={['b']}
+  explanation="直接运行 `hermes` 进入交互式 CLI。setup 是配置向导，doctor 是诊断工具，tools 用于配置启用的工具。"
+/>
+
+<Checkpoint id="install-and-first-chat" label="我已安装并完成第一次对话" />

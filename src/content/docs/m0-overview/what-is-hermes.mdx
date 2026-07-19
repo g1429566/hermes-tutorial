@@ -1,0 +1,48 @@
+---
+title: 认识 Hermes
+description: Hermes 是什么、解决什么问题、核心差异化与功能全景。
+---
+
+import Quiz from '../../../components/Quiz.tsx';
+import Checkpoint from '../../../components/Checkpoint.tsx';
+
+## Hermes 是什么
+
+**Hermes Agent** 是 [Nous Research](https://nousresearch.com) 开发的**自进化 AI agent**，用 Python 实现、开源（MIT）。它是目前唯一内置**学习循环**的 agent：从经验中创建技能、在使用中改进技能、主动持久化知识、搜索自己的历史会话，并跨会话逐步建立对你的深度理解。
+
+它可以在一台 5 美元的 VPS、一个 GPU 集群，或几乎闲置零成本的 serverless 基础设施上运行，并且不绑定你的笔记本——你可以从 Telegram 跟它对话，而它在云 VM 上工作。
+
+## 它解决什么问题
+
+大多数 AI agent 用完即弃、每次从零开始。Hermes 的核心差异在于它会**积累**：
+
+- **技能自进化**：复杂任务后自动创建可复用技能，并在使用中自我改进。
+- **跨会话记忆**：基于 FTS5 的会话搜索 + LLM 摘要，实现跨会话回忆。
+- **用户建模**：借助 [Honcho](https://github.com/plastic-labs/honcho) 的 dialectic modeling，跨会话建立对你的理解。
+
+## 功能全景
+
+| 能力 | 说明 |
+| --- | --- |
+| 完整 TUI | 多行编辑、斜杠命令自动补全、历史、中断重定向、流式工具输出 |
+| 多平台网关 | Telegram / Discord / Slack / WhatsApp / Signal，单一 gateway 进程 |
+| 技能系统 | 自进化，兼容 [agentskills.io](https://agentskills.io) 开放标准 |
+| 定时自动化 | 内建 cron，自然语言描述、无人值守 |
+| 委派与并行 | 派生隔离子 agent；用 RPC 脚本压缩多步流水线 |
+| 多终端后端 | local / Docker / SSH / Singularity / Modal / Daytona（后两者支持 serverless 休眠） |
+| 模型可切换 | Nous Portal、OpenRouter、OpenAI、自有 endpoint 等，`hermes model` 一键切换 |
+
+<Quiz
+  id="what-is-hermes-1"
+  question="Hermes Agent 最核心的差异化能力是什么？"
+  options={[
+    { key: 'a', text: '它支持很多 LLM provider' },
+    { key: 'b', text: '内置自进化学习循环：从经验创建并改进技能、跨会话记忆' },
+    { key: 'c', text: '它有一个 TUI 界面' },
+    { key: 'd', text: '它可以跑在 Docker 里' },
+  ]}
+  correct={['b']}
+  explanation="provider 多样、TUI、Docker 都是不错的特性，但核心差异化是『自进化学习循环』——技能自创建/自改进 + 跨会话记忆 + 用户建模。"
+/>
+
+<Checkpoint id="what-is-hermes" label="我理解了 Hermes 是什么" />
