@@ -7,153 +7,163 @@
 
 ---
 
-## 1. 背景与目标
+## 1. 主线任务与学习成果（本项目的脊柱）
 
-将 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（Nous Research 出品的自进化 AI agent，Python 实现）转化为一个**可本地部署的交互式学习教程网站**。
+本项目交付一个**交互式教学网站**，教学对象是 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（Nous Research 出品的自进化 AI agent，Python 实现）。网站与交互是**交付手段**，真正的产品是下面这条**学习成果主线**：
 
-它不是又一份参考文档——官方 Docusaurus 站已有 358 篇文档。它的差异化在于：
+> **了解 Hermes 各项功能 → 深入 Hermes 原理 → 基于原理能自己设计新 agent、扩展 agent 功能 → 达到 AI agent 工程方向的面试要求。**
 
-1. **学习路径导向**：有序章节（目标 → 讲解 → 交互练习 → 检查点），而非平铺的 API 参考。
-2. **交互式**：浏览器内可运行的 Python 概念 demo、测验、带注释源码阅读、进度追踪，以及配套本地终端动手步骤。
-3. **三轨合一**：既教"用会 Hermes"，也以源码为教材讲"Agent 工程原理"，再用一条引导主线把二者串起来。
+终点标尺是 **AI agent 工程面试**：学习者要能讲清 agent loop 设计、工具调用机制、记忆/召回策略、多 agent 协作、self-improvement（自进化）的权衡与可扩展性等，并能现场设计 agent、回答追问。
 
-### 成功标准
+每个概念都教到 **"能讲清楚 + 能设计 + 能答追问"** 的深度。
 
-- 学习者能在本地一键跑起站点（`npm run dev` / Docker 任选）。
-- 浏览器内能跑通纯 Python 概念 demo（Pyodide），无需后端。
-- 进度（已完成节/检查点）在浏览器本地持久化、可重置。
-- 内容为中文学习路径，覆盖使用上手与原理两条 track。
-- 站点无后端、纯静态可托管，性能良好（Starlight 群岛架构，非交互页面近乎零 JS）。
+### 成功标准（围绕学习成果）
+
+- 学习者按主线学完后，能：
+  - 复述 Hermes 全部主要功能并说明各自解决什么问题；
+  - 在源码级讲清核心模块（agent 主循环、技能系统+策展器、工具/toolsets、记忆与召回、委派、cron/kanban、网关、终端后端、profiles）的工作原理；
+  - 动手写出新技能 / 新工具 / 新 provider / 新 plugin，并基于这些模式从零设计一个新 agent；
+  - 应对 AI agent 工程方向的典型面试题与设计题。
+- 网站本身：可本地一键部署；交互组件服务于上述成果；进度在浏览器本地持久化、可重置；纯静态、无后端、性能良好。
 
 ---
 
-## 2. 范围与分阶段
+## 2. 定位
 
-整体范围较大，拆分为独立可交付的阶段，每阶段各自走 spec → plan → 实现。本 spec 聚焦**整体架构 + 阶段 0（地基）**。
+- **不是**又一份参考文档（官方 Docusaurus 站已有 358 篇）。
+- **是**一条有序的、交互式的学习路径，把"会用 → 懂原理 → 能造 → 能面"串成一条主线。
+- Hermes 在这里既是**被教学的对象**（了解功能），也是**原理的载体**（深入源码），也是**构建的范本**（扩展/设计）。
 
-| 阶段 | 内容 | 状态 |
+---
+
+## 3. 范围与分阶段
+
+学习主线 = 4 个模块（M0–M3）。交付按阶段推进，基础设施（阶段 0）先行并贯穿全程。
+
+| 阶段 | 内容 | 说明 |
 |---|---|---|
-| **0 · 地基** | 站点骨架、学习路径导航、进度追踪、交互组件基础设施（Pyodide 运行器、测验、源码阅读器、检查点、终端动手步骤） | 本 spec 重点 |
-| **1 · 使用上手 track** | 安装/配置/对话/技能/网关/cron——"用会 Hermes"，配本地终端动手步骤 | 后续 |
-| **2 · Agent 工程原理 track** | 以 `AGENTS.md` + 源码为教材，逐模块拆解自进化架构（学习循环、技能系统与策展器、工具调用、委派、cron/kanban、TUI）——Pyodide 概念 demo + 源码精读 + 测验 | 后续 |
-| **3 · 引导式路径 + capstone** | 把 1+2 串成"从用到原理"主线，加毕业项目 | 后续 |
+| **0 · 地基 + M0 纵切片** | 站点骨架、全部交互组件、进度追踪、本地部署、工程化基线；+ 足够的 M0 内容验证端到端 | 本 spec 的实现重点 |
+| **1 · M0 全量 + M1 原理** | 认识 Hermes 全功能；逐模块源码级原理 | 内容最重的阶段 |
+| **2 · M2 构建** | 写技能/工具/provider/plugin、从零设计 agent | 后续 |
+| **3 · M3 面试冲刺** | 高频题、设计题、自评 | 后续 |
 
 ### 本阶段（阶段 0）范围内 / 范围外
 
-**范围内**：
-- Astro + Starlight 项目初始化与目录结构。
-- 6 个交互组件的实现（见 §5）。
-- 进度追踪（localStorage）。
-- 本地部署三档（dev / preview / Docker）。
-- 工程化基线（git、Prettier/ESLint、Vitest、CI 雏形）。
-- 少量示例内容用于验证组件（非正式课程内容）。
+**范围内**：Astro+Starlight 项目初始化与目录结构；全部 8 个交互组件（见 §6）的实现；进度追踪（localStorage）；本地部署三档；工程化基线（git、Prettier/ESLint、Vitest、CI 雏形）；M0 的少量示例内容用于端到端验证。
 
-**范围外（留给后续阶段）**：
-- 正式课程内容撰写（使用上手 / 原理 track 的全部章节）。
-- 自托管 Pyodide wheel（阶段 0 先用 CDN）。
-- 账户体系 / 服务端 / 多用户（本站始终纯静态、无后端）。
+**范围外**：M0–M3 的正式全部课程内容（后续阶段）；自托管 Pyodide wheel（阶段 0 用 CDN）；账户/服务端/多用户（始终纯静态）。
 
 ---
 
-## 3. 用户与使用场景
+## 4. 课程主线设计（产品核心）
 
-- **主用户**：想系统掌握 Hermes（既能用、又懂原理）的开发者与 AI agent 学习者。
-- **使用方式**：本地部署，按学习路径顺序阅读 → 在页面内做交互练习 → 在本地终端按 `<TryIt>` 指引真跑 `hermes` 命令 → 完成检查点、看进度增长。
-- **离线/降级**：Pyodide 首次需联网加载；离线时 demo 降级为只读展示，内容仍可读。
+每个模块 = `目标 → 讲解（含源码/图）→ 交互练习 → 检查点`。
+
+### M0 · 认识 Hermes（了解各项功能）
+- Hermes 是什么、解决什么、核心差异化（**自进化学习循环**）。
+- 功能全景：TUI、消息网关（Telegram/Discord/Slack/WhatsApp/Signal）、技能、记忆、cron 定时、委派/子agent、工具与 toolsets、provider/模型切换、6 种终端后端（local/Docker/SSH/Singularity/Modal/Daytona）、profiles 多实例。
+- 安装配置、第一次对话。
+- 交互：`<TryIt>`（本地终端跑 `hermes` 命令）、`<Quiz>`（功能辨识）。
+
+### M1 · 深入原理（源码级拆解）— 对应 `AGENTS.md` 架构
+- **Agent 主循环**（`run_agent.py` / `AIAgent`）：消息流、工具调用循环、流式输出。
+- **技能系统 + 策展器**（skill lifecycle, self-improvement loop）：Hermes 的核心差异化——技能如何被创建、匹配、调用、使用中自我改进；agentskills.io 标准。
+- **工具与 toolsets**：工具调用机制、toolset 分发。
+- **记忆与跨会话召回**：FTS5 会话搜索、LLM 摘要、Honcho dialectic user modeling。
+- **委派与子 agent**（`delegate_task`）：并行工作流、RPC 脚本。
+- **cron / kanban**：定时调度、多 agent 工作队列。
+- **网关与消息**（gateway）：多平台接入、语音转录、跨平台连续性。
+- **TUI 架构**（`ui-tui` + `tui_gateway`）。
+- **终端后端**：6 种后端的差异与选择（含 serverless 休眠/唤醒）。
+- **profiles**：多实例支持。
+- 交互：`<SourceRead>`（源码精读）、`<PyDemo>`（算法/概念理解，如技能匹配、工具路由、cron 解析、轨迹压缩）、`<Quiz>`。
+
+### M2 · 基于原理构建（自己设计 agent + 扩展功能）
+- 写一个新**技能**（技能格式、curator 如何发现/改进）。
+- 加一个新**工具 / toolset**（对应 `AGENTS.md` 的 "Adding New Tools"）。
+- 加一个新 **provider / 模型接入**。
+- 写一个 **plugin**。
+- **从零设计一个新 agent**：基于上述模式组合出一个解决具体问题的 agent。
+- 交互：`<BuildExercise>`（带结构校验的动手构建练习）。
+
+### M3 · 面试冲刺（达到面试要求）
+- 每个核心概念到面试深度的复盘。
+- 高频面试题：agent loop 设计、工具调用、记忆策略、多 agent 协作、self-improvement 权衡、可扩展性、选型理由。
+- 设计题演练（"设计一个 X agent"）。
+- 自评清单（"能讲清/能设计/能答追问"三档自评）。
+- 交互：`<InterviewQ>`（问答 + 模范思路 / 可翻转卡片）、自评 `<Checkpoint>`。
 
 ---
 
-## 4. 技术栈决策
+## 5. 技术栈决策
 
 | 维度 | 选择 | 理由 |
 |---|---|---|
 | 框架 | **Astro + Starlight** | 群岛架构：静态内容零 JS，交互组件按需水合；MDX 友好；专为文档/教程设计；性能最佳。 |
 | 内容格式 | MDX | 可在 Markdown 中内嵌交互组件。 |
-| 群岛 UI 框架 | **React**（Starlight 原生支持，零额外配置） | 与 Starlight 内部组件一致；群岛架构按需水合，JS 体积主要由交互点数量决定，非 React 本身。 |
-| 浏览器内 Python | **Pyodide**（CDN 懒加载） | WASM 跑纯 Python，支持 pytest 级校验；无后端。 |
+| 群岛 UI 框架 | **React**（Starlight 原生支持，零额外配置） | 与 Starlight 内部组件一致；按需水合，JS 体积由交互点数量决定。 |
+| 浏览器内 Python | **Pyodide**（CDN 懒加载） | WASM 跑纯 Python，支持 pytest 级校验；无后端。服务于 M1 概念理解。 |
 | 进度存储 | 浏览器 `localStorage` | 本地、无后端、纯静态站点的唯一合理选择。 |
 | 样式 | Starlight 主题 + 少量自定义 CSS | 复用 Starlight 设计系统，保持一致。 |
-| 测试 | Vitest（单测）+ astro build + 链接检查（CI） | 与 hermes-agent 的 `web/` 已有 vitest 配置思路一致。 |
+| 代码编辑器 | **CodeMirror 6** | 轻量、框架无关，用于 `<PyDemo>` / `<BuildExercise>` 的可编辑代码区。 |
+| 测试 | Vitest（单测）+ astro build + 链接检查（CI） | 与 hermes-agent 的 `web/` vitest 配置思路一致。 |
 | 代码规范 | Prettier + ESLint | 可借鉴 hermes-agent 的 `eslint.config.shared.mjs`。 |
 | 容器 | Dockerfile + docker compose（nginx 托管 `dist/`） | 一键本地"部署"。 |
 
-### 架构取舍：交互层走"方案 A"
+### 架构取舍：交互层走"方案 A"（Starlight 原生 + 自定义群岛）
 
-**A. Starlight 原生 + 自定义群岛（采纳）**：Starlight 出内容骨架（侧边栏/搜索/主题/i18n），交互能力是若干独立小岛按需水合。JS 体积最小、内容体验最 Starlight、复杂度中。
-
-放弃的 **B. Starlight + 一个大 React 应用岛**：发更多 JS、弱化文档优势、复杂度更高，对本站性价比低。
+Starlight 出内容骨架（侧边栏/搜索/主题/i18n），交互能力是若干**独立小岛**按需水合。JS 体积最小、内容体验最 Starlight、复杂度中。放弃"一个大 React 应用岛"方案（发更多 JS、弱化文档优势）。
 
 ---
 
-## 5. 组件清单（阶段 0 交付）
+## 6. 交互组件清单（全部服务于学习成果）
 
-所有组件位于 `src/components/`，作为 Astro/Preact 群岛使用，MDX 中内嵌。
+组件位于 `src/components/`，作为 React 群岛在 MDX 中内嵌。
 
-1. **`<PyDemo>` — Pyodide 代码运行器**
-   - 可编辑 Python 代码区（**CodeMirror 6**，轻量、框架无关）+ "运行"按钮 + 输出区。
-   - **懒加载**：Pyodide 首屏不拉取，点击运行或进入视口才加载；加载中显示状态。
-   - 支持"预置代码 + 期望输出"校验（用于练习判定）。
-   - 错误：捕获并友好展示 traceback，不崩页。
-
-2. **`<Quiz>` — 测验组件**
-   - 单选 / 多选 / 填空；即时反馈 + 正确答案解释。
-   - 答对可触发检查点写入。
-
-3. **`<SourceRead>` — 带注释源码阅读器**
-   - 左：源码片段（行号、高亮、锚点）；右：注释面板，可折叠。
-   - 源码从 hermes-agent 仓库的片段提炼（手动摘录，非运行时读取）。
-
-4. **`<Checkpoint>` — 检查点**
-   - 标记本节完成，写入进度；可由 `<Quiz>` 答对或用户手动触发。
-
-5. **`<TryIt>` — 本地终端动手步骤**
-   - 展示一条 `hermes ...` 命令 + 说明 + "我在终端跑过了 ✓" 自评勾选（写进度）。
-   - **不真正执行命令**，只引导学习者在自己的终端操作。
-
-6. **进度追踪（全局）**
-   - `localStorage` 存：已完成节 slug、已通过检查点、`<TryIt>` 勾选项。
-   - 侧边栏/顶部进度条；一键重置。
-   - 作为 Starlight 布局覆盖（layout override）注入到所有页面。
+| 组件 | 用途 | 服务模块 |
+|---|---|---|
+| `<TryIt>` | 展示一条 `hermes ...` 命令 + 说明 + "我在终端跑过了 ✓" 自评勾选（写进度，**不真正执行**） | M0 |
+| `<Quiz>` | 单选/多选/填空，即时反馈 + 解释；答对可触发检查点 | M0/M1/M3 |
+| `<SourceRead>` | 带注释源码阅读器：左源码（行号/高亮/锚点），右注释，可折叠 | M1 |
+| `<PyDemo>` | Pyodide 运行器：CodeMirror 可编辑 Python + 运行按钮 + 输出区；**懒加载**；支持期望输出校验 | M1 |
+| `<BuildExercise>` | 动手构建练习：编辑器 + 任务说明 + 结构校验（如校验技能文件字段、工具签名） | M2 |
+| `<InterviewQ>` | 面试题 + 可折叠模范思路 / 翻转卡片 | M3 |
+| `<Checkpoint>` | 标记本节/模块完成，写进度 | 全局 |
+| **进度追踪（全局）** | `localStorage` 存已完成节/检查点；侧边栏/顶部进度条；一键重置；作为 Starlight 布局覆盖注入所有页面 | 全局 |
 
 ---
 
-## 6. 内容组织（学习路径）
+## 7. 内容组织与来源
 
-- 顶层不是参考文档式平铺，而是**有序学习路径**。
-- 目录结构（`src/content/docs/`）按 track 分：
-  - `get-started/`（阶段 1）
-  - `internals/`（阶段 2）
-  - `path/`（阶段 3 引导主线）
-  - 阶段 0 仅放 `demo/` 示例页验证组件。
-- 每章结构：`目标 → 讲解 → 交互练习 → 检查点`。
-- Starlight sidebar 配置成按 track 分组、有序排列。
-- **内容来源**：从 `hermes-agent/website/docs`（358 篇）+ `AGENTS.md` + 源码**提炼改写**为中文学习路径，非直接复制。
+- 顶层是**有序学习路径**（非参考文档平铺）。目录（`src/content/docs/`）按模块分：`m0-overview/`、`m1-internals/`、`m2-build/`、`m3-interview/`；阶段 0 先放 `demo/` 示例页验证组件。
+- Starlight sidebar 配置成按模块分组、有序排列，体现 M0→M3 的主线。
+- **内容来源**：以 hermes-agent 自身的 `README`/`website/docs`（358 篇）/`AGENTS.md`/源码为素材，**提炼改写**为中文学习路径（非直接复制）。
 
 ---
 
-## 7. 数据流
+## 8. 数据流
 
-- **构建时**：Astro 读 MDX → 生成静态 HTML + 群岛占位符；输出到 `dist/`。
+- **构建时**：Astro 读 MDX → 静态 HTML + 群岛占位符；输出到 `dist/`。
 - **运行时（纯前端，无后端）**：
-  - 群岛水合 → 用户点击 → Pyodide 从 CDN 懒加载 → WASM 执行代码 → 输出渲染到页面。
-  - 测验判定 / 检查点 / `<TryIt>` 勾选 → 读写 `localStorage` → 进度条更新。
+  - 群岛水合 → 用户交互 → Pyodide 从 CDN 懒加载（仅 `<PyDemo>`/`<BuildExercise>` 需要）→ WASM 执行 → 输出渲染。
+  - 测验判定 / 检查点 / `<TryIt>` 勾选 / 自评 → 读写 `localStorage` → 进度条更新。
 - **无任何服务端调用**：站点是纯静态资源。
 
 ---
 
-## 8. 本地部署（三档）
+## 9. 本地部署（三档，写进 README）
 
 1. **开发**：`npm run dev`（Vite dev server，热更新）。
 2. **预览**：`npm run build && npm run preview`（或 `npx serve dist`）。
 3. **一键容器**：`docker compose up`（构建 `dist/` 后由 nginx 托管）。
 
-三者均写入 README，并标注最低 Node 版本（`package.json` `engines` 固定）。
+最低 Node 版本由 `package.json` `engines` 固定。
 
 ---
 
-## 9. 错误处理与边界
+## 10. 错误处理与边界
 
-- **Pyodide 能力边界（关键约束）**：只能跑纯标准库 / 轻量包的概念 demo（技能匹配、工具调用循环、轨迹解析等）。Hermes 依赖的真实文件系统 / 子进程 / LLM API **跑不了**——这类内容一律用 `<TryIt>` 引导在本地真跑。内容设计须明确划线，避免给学习者错误预期。
+- **Pyodide 能力边界（关键约束）**：只能跑纯标准库 / 轻量包的概念 demo（技能匹配、工具路由、cron 解析、轨迹压缩等）。Hermes 依赖的真实文件系统 / 子进程 / LLM API **跑不了**——这类一律用 `<TryIt>` 引导本地真跑或用 `<BuildExercise>` 在本地环境构建。内容设计须明确划线，避免给学习者错误预期。
 - **Pyodide 加载失败 / 离线**：降级为只读代码展示 + 提示"首次需联网加载"。后续阶段可自托管 wheel。
 - **代码运行异常**：捕获 Python 异常，友好展示 traceback，不影响页面其他部分。
 - **`localStorage` 不可用**（隐私模式等）：进度功能静默降级，内容仍完全可读。
@@ -161,30 +171,31 @@
 
 ---
 
-## 10. 测试策略
+## 11. 测试策略
 
 - **组件单测（Vitest）**：
   - `<PyDemo>`：懒加载触发、降级路径、错误展示、期望输出校验逻辑。
+  - `<BuildExercise>`：结构校验逻辑（技能字段、工具签名等）。
   - `<Quiz>`：单选/多选/填空判定。
   - 进度模块：localStorage 读写、不可用时降级、重置。
-- **内容正确性（CI 脚本）**：每个 `<PyDemo>` 的预置代码在 CI 用真实 CPython 跑一遍，校验期望输出（防止示例代码错误）。
-- **构建与链接**：`astro build` 成功 + Starlight/astro 链接检查器无死链。
-- **手动验证**：本地 `npm run dev` 跑通每个组件的 demo 页。
+- **内容正确性（CI 脚本）**：每个 `<PyDemo>` 预置代码在 CI 用真实 CPython 跑一遍，校验期望输出。
+- **构建与链接**：`astro build` 成功 + 链接检查器无死链。
+- **手动验证**：本地 `npm run dev` 跑通每个组件的 demo 页 + M0 纵切片。
 
 ---
 
-## 11. 工程化约定
+## 12. 工程化约定
 
-- **git**：独立仓库（已 `git init -b main`）；约定式 commit；阶段 0 提交粒度按组件切分。
+- **git**：独立仓库（已 `git init -b main`）；约定式 commit；阶段 0 提交粒度按组件/模块切分。
 - **目录结构**：
   ```
   hermes-tutorial/
-  ├── docs/                     # 本 spec 所在的设计文档
+  ├── docs/                     # 设计文档（本 spec）
   ├── src/
-  │   ├── components/           # 交互组件（PyDemo/Quiz/SourceRead/Checkpoint/TryIt/Progress）
-  │   ├── content/docs/         # MDX 学习内容（按 track 分）
+  │   ├── components/           # 交互组件（TryIt/Quiz/SourceRead/PyDemo/BuildExercise/InterviewQ/Checkpoint/Progress）
+  │   ├── content/docs/         # MDX 学习内容（按模块 m0–m3 分）
   │   ├── layouts/              # Starlight 布局覆盖（注入进度条）
-  │   └── lib/                  # 进度、Pyodide 封装等纯逻辑
+  │   └── lib/                  # 进度、Pyodide 封装、校验逻辑等纯逻辑
   ├── public/                   # 静态资源
   ├── scripts/                  # 内容/示例代码校验脚本
   ├── Dockerfile
@@ -198,21 +209,23 @@
 
 ---
 
-## 12. 阶段 0 完成定义（Definition of Done）
+## 13. 阶段 0 完成定义（Definition of Done）
 
-- [ ] Astro + Starlight 项目可 `npm run dev` 启动，首页与导航正常。
-- [ ] 6 个交互组件全部实现，各有 demo 页可演示。
+- [ ] Astro + Starlight 项目可 `npm run dev` 启动，首页与按模块分组的导航正常。
+- [ ] 8 个交互组件全部实现，各有 demo 页可演示。
 - [ ] 进度追踪在 localStorage 持久化、可重置，进度条在布局中可见。
+- [ ] M0 纵切片内容上站，端到端跑通（阅读 → `<TryIt>`/`<Quiz>` → `<Checkpoint>` → 进度更新）。
 - [ ] `npm run build` 产出 `dist/`，`npm run preview` 可访问。
 - [ ] Dockerfile + docker compose 可一键起 nginx 托管。
 - [ ] Vitest 单测覆盖关键逻辑并通过；示例代码 CI 校验通过。
-- [ ] README 写清三档本地部署方式。
+- [ ] README 写清三档本地部署方式 + 主线任务说明。
 - [ ] Prettier/ESLint 通过。
 
 ---
 
-## 13. 未决事项 / 后续
+## 14. 未决事项 / 后续
 
-- 正式课程内容（阶段 1/2/3）各自再开 spec。
-- 自托管 Pyodide wheel（若 CDN 在目标网络不稳定）。
-- 是否引入轻量前端依赖分析（bundle 预算），待阶段 0 跑起来后评估。
+- M0–M3 各模块的详细课纲（各阶段开始前再细化）。
+- 自托管 Pyodide wheel（若目标网络对 CDN 不稳定）。
+- `<BuildExercise>` 的校验深度（纯前端结构校验 vs. 接入本地 hermes 环境实跑）——M2 阶段定。
+- 是否引入轻量前端 bundle 预算，待阶段 0 跑起来后评估。
