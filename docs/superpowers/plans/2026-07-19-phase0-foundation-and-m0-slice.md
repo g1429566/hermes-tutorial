@@ -62,6 +62,7 @@ hermes-tutorial/
 ```
 
 **Responsibilities:**
+
 - `lib/progress.ts` — the single source of truth for learning progress; pure-ish module with external store API. All components read/write through it.
 - `lib/judge.ts` — pure function, no React, fully unit-tested.
 - `components/*.tsx` — thin React islands: render UI, delegate state to `progress.ts`, delegate quiz logic to `judge.ts`.
@@ -73,6 +74,7 @@ hermes-tutorial/
 ## Task 1: Bootstrap Astro + Starlight project
 
 **Files:**
+
 - Create: `package.json`
 - Create: `astro.config.mjs`
 - Create: `tsconfig.json`
@@ -113,17 +115,21 @@ engine-strict=true
 - [ ] **Step 3: Install dependencies (runtime)**
 
 Run:
+
 ```bash
 npm install astro@latest @astrojs/starlight@latest @astrojs/react@latest @astrojs/mdx@latest react@latest react-dom@latest
 ```
+
 Expected: a `package-lock.json` is created and the packages appear under `dependencies` in `package.json`.
 
 - [ ] **Step 4: Install dependencies (dev)**
 
 Run:
+
 ```bash
 npm install -D typescript@latest @types/react@latest @types/react-dom@latest @astrojs/check@latest vitest@latest jsdom@latest eslint@latest @eslint/js@latest typescript-eslint@latest prettier@latest prettier-plugin-astro@latest
 ```
+
 Expected: packages appear under `devDependencies`.
 
 - [ ] **Step 5: Create `astro.config.mjs`**
@@ -182,14 +188,17 @@ export default defineConfig({
 - [ ] **Step 8: Create placeholder Header override + landing page**
 
 Create `src/components/overrides/Header.astro`:
+
 ```astro
 ---
 import Default from '@astrojs/starlight/components/Header.astro';
 ---
+
 <Default {...Astro.props} />
 ```
 
 Create `src/content/docs/index.mdx`:
+
 ```mdx
 ---
 title: Hermes Agent 学习教程
@@ -203,10 +212,11 @@ hero:
       icon: right-arrow
 ---
 
- bootstrap 占位页。
+bootstrap 占位页。
 ```
 
 Create `public/favicon.svg`:
+
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="6" fill="#FFD700"/><text x="16" y="22" font-size="18" text-anchor="middle" fill="#111">☤</text></svg>
 ```
@@ -215,9 +225,11 @@ Create `public/favicon.svg`:
 
 Run: `npm run build`
 Expected: build succeeds; `dist/index.html` exists.
+
 ```bash
 ls dist/index.html
 ```
+
 Expected: path prints (file exists).
 
 - [ ] **Step 10: Commit**
@@ -232,6 +244,7 @@ git commit -m "feat: bootstrap astro + starlight project"
 ## Task 2: Lint / format / test tooling
 
 **Files:**
+
 - Create: `vitest.config.ts`
 - Create: `eslint.config.mjs`
 - Create: `.prettierrc.json`
@@ -314,12 +327,14 @@ git commit -m "chore: add prettier, eslint, vitest configs"
 ## Task 3: Progress store (TDD)
 
 **Files:**
+
 - Create: `src/lib/progress.ts`
 - Test: `tests/lib/progress.test.ts`
 
 - [ ] **Step 1: Write the failing test**
 
 Create `tests/lib/progress.test.ts`:
+
 ```ts
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -410,6 +425,7 @@ Expected: FAIL — `Failed to resolve import "../../src/lib/progress"` (module d
 - [ ] **Step 3: Write the implementation**
 
 Create `src/lib/progress.ts`:
+
 ```ts
 const STORAGE_KEY = 'hermes-tutorial:progress:v1';
 
@@ -499,6 +515,7 @@ git commit -m "feat: add versioned localStorage progress store"
 ## Task 4: Global ProgressBar + Header override
 
 **Files:**
+
 - Create: `src/components/ProgressBar.tsx`
 - Modify: `src/components/overrides/Header.astro`
 - Create: `src/styles/custom.css`
@@ -558,11 +575,13 @@ export default function ProgressBar() {
 - [ ] **Step 3: Wire the ProgressBar into the Header override**
 
 Replace `src/components/overrides/Header.astro` with:
+
 ```astro
 ---
 import Default from '@astrojs/starlight/components/Header.astro';
 import ProgressBar from '../ProgressBar.tsx';
 ---
+
 <Default {...Astro.props} />
 <ProgressBar client:idle />
 ```
@@ -570,6 +589,7 @@ import ProgressBar from '../ProgressBar.tsx';
 - [ ] **Step 4: Register the custom CSS in Starlight config**
 
 In `astro.config.mjs`, inside the `starlight({...})` call, add a `customCss` entry. The final `starlight({...})` block should read:
+
 ```js
     starlight({
       title: 'Hermes Agent 学习教程',
@@ -608,6 +628,7 @@ git commit -m "feat: inject global ProgressBar via Starlight Header override"
 ## Task 5: Checkpoint component
 
 **Files:**
+
 - Create: `src/components/Checkpoint.tsx`
 
 - [ ] **Step 1: Create `src/components/Checkpoint.tsx`**
@@ -640,6 +661,7 @@ export default function Checkpoint({ id, label = '标记本节完成' }: Checkpo
 - [ ] **Step 2: Append Checkpoint styles to `src/styles/custom.css`**
 
 Append:
+
 ```css
 .ht-checkpoint {
   display: block;
@@ -675,6 +697,7 @@ git commit -m "feat: add Checkpoint component"
 ## Task 6: Quiz component (judge logic TDD first)
 
 **Files:**
+
 - Create: `src/lib/judge.ts`
 - Test: `tests/lib/judge.test.ts`
 - Create: `src/components/Quiz.tsx`
@@ -682,6 +705,7 @@ git commit -m "feat: add Checkpoint component"
 - [ ] **Step 1: Write the failing test for `judge`**
 
 Create `tests/lib/judge.test.ts`:
+
 ```ts
 import { describe, expect, it } from 'vitest';
 import { judge } from '../../src/lib/judge';
@@ -719,6 +743,7 @@ Expected: FAIL — cannot resolve `../../src/lib/judge`.
 - [ ] **Step 3: Write `judge`**
 
 Create `src/lib/judge.ts`:
+
 ```ts
 export type QuizOption = { key: string; text: string };
 
@@ -768,11 +793,7 @@ export default function Quiz({
   function toggle(key: string) {
     if (submitted) return;
     setSelected((prev) =>
-      multiple
-        ? prev.includes(key)
-          ? prev.filter((k) => k !== key)
-          : [...prev, key]
-        : [key],
+      multiple ? (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]) : [key],
     );
   }
   function submit() {
@@ -829,6 +850,7 @@ export default function Quiz({
 - [ ] **Step 6: Append Quiz styles to `src/styles/custom.css`**
 
 Append:
+
 ```css
 .ht-quiz {
   border: 1px solid var(--sl-color-gray-5, #bbb);
@@ -876,6 +898,7 @@ git commit -m "feat: add Quiz component with pure judge logic"
 ## Task 7: TryIt component
 
 **Files:**
+
 - Create: `src/components/TryIt.tsx`
 
 - [ ] **Step 1: Create `src/components/TryIt.tsx`**
@@ -909,11 +932,7 @@ export default function TryIt({ id, command, note }: TryItProps) {
       {note && <p className="ht-tryit-note">{note}</p>}
       <div className="ht-tryit-actions">
         <label>
-          <input
-            type="checkbox"
-            checked={done}
-            onChange={() => setItem(`tryit:${id}`, !done)}
-          />{' '}
+          <input type="checkbox" checked={done} onChange={() => setItem(`tryit:${id}`, !done)} />{' '}
           我在终端跑过了
         </label>
         <button type="button" onClick={copy}>
@@ -928,6 +947,7 @@ export default function TryIt({ id, command, note }: TryItProps) {
 - [ ] **Step 2: Append TryIt styles to `src/styles/custom.css`**
 
 Append:
+
 ```css
 .ht-tryit {
   border: 1px solid var(--sl-color-gray-5, #bbb);
@@ -970,12 +990,14 @@ git commit -m "feat: add TryIt component"
 ## Task 8: Component demo page + sidebar wiring
 
 **Files:**
+
 - Create: `src/content/docs/demo/components.mdx`
 - Replace: `src/content/docs/index.mdx` (real landing page)
 
 - [ ] **Step 1: Create the demo page**
 
 Create `src/content/docs/demo/components.mdx`:
+
 ```mdx
 ---
 title: 组件演示
@@ -1014,6 +1036,7 @@ import Checkpoint from '../../components/Checkpoint.tsx';
 - [ ] **Step 2: Replace the landing page**
 
 Replace `src/content/docs/index.mdx` with:
+
 ```mdx
 ---
 title: Hermes Agent 学习教程
@@ -1061,6 +1084,7 @@ git commit -m "feat: add component demo page and landing page"
 ## Task 9: M0 vertical slice content
 
 **Files:**
+
 - Create: `src/content/docs/m0-overview/what-is-hermes.mdx`
 - Create: `src/content/docs/m0-overview/install-and-first-chat.mdx`
 
@@ -1069,6 +1093,7 @@ Content is adapted (not copied) from the Hermes Agent README (`hermes-agent/READ
 - [ ] **Step 1: Create `what-is-hermes.mdx`**
 
 Create `src/content/docs/m0-overview/what-is-hermes.mdx`:
+
 ```mdx
 ---
 title: 认识 Hermes
@@ -1094,15 +1119,15 @@ import Checkpoint from '../../components/Checkpoint.tsx';
 
 ## 功能全景
 
-| 能力 | 说明 |
-| --- | --- |
-| 完整 TUI | 多行编辑、斜杠命令自动补全、历史、中断重定向、流式工具输出 |
-| 多平台网关 | Telegram / Discord / Slack / WhatsApp / Signal，单一 gateway 进程 |
-| 技能系统 | 自进化，兼容 [agentskills.io](https://agentskills.io) 开放标准 |
-| 定时自动化 | 内建 cron，自然语言描述、无人值守 |
-| 委派与并行 | 派生隔离子 agent；用 RPC 脚本压缩多步流水线 |
+| 能力       | 说明                                                                               |
+| ---------- | ---------------------------------------------------------------------------------- |
+| 完整 TUI   | 多行编辑、斜杠命令自动补全、历史、中断重定向、流式工具输出                         |
+| 多平台网关 | Telegram / Discord / Slack / WhatsApp / Signal，单一 gateway 进程                  |
+| 技能系统   | 自进化，兼容 [agentskills.io](https://agentskills.io) 开放标准                     |
+| 定时自动化 | 内建 cron，自然语言描述、无人值守                                                  |
+| 委派与并行 | 派生隔离子 agent；用 RPC 脚本压缩多步流水线                                        |
 | 多终端后端 | local / Docker / SSH / Singularity / Modal / Daytona（后两者支持 serverless 休眠） |
-| 模型可切换 | Nous Portal、OpenRouter、OpenAI、自有 endpoint 等，`hermes model` 一键切换 |
+| 模型可切换 | Nous Portal、OpenRouter、OpenAI、自有 endpoint 等，`hermes model` 一键切换         |
 
 <Quiz
   id="what-is-hermes-1"
@@ -1123,6 +1148,7 @@ import Checkpoint from '../../components/Checkpoint.tsx';
 - [ ] **Step 2: Create `install-and-first-chat.mdx`**
 
 Create `src/content/docs/m0-overview/install-and-first-chat.mdx`:
+
 ```mdx
 ---
 title: 安装与第一次对话
@@ -1153,14 +1179,14 @@ Linux / macOS / WSL2 / Termux：
 
 ## 常用命令
 
-| 命令 | 作用 |
-| --- | --- |
-| `hermes model` | 选择 LLM provider 与模型 |
-| `hermes tools` | 配置启用的工具 |
-| `hermes config set` / `get` | 设置 / 读取单个配置项 |
-| `hermes gateway` | 启动消息网关（Telegram、Discord 等） |
-| `hermes setup` | 一次性完整配置向导 |
-| `hermes doctor` | 诊断问题 |
+| 命令                        | 作用                                 |
+| --------------------------- | ------------------------------------ |
+| `hermes model`              | 选择 LLM provider 与模型             |
+| `hermes tools`              | 配置启用的工具                       |
+| `hermes config set` / `get` | 设置 / 读取单个配置项                |
+| `hermes gateway`            | 启动消息网关（Telegram、Discord 等） |
+| `hermes setup`              | 一次性完整配置向导                   |
+| `hermes doctor`             | 诊断问题                             |
 
 <Quiz
   id="install-1"
@@ -1200,6 +1226,7 @@ git commit -m "content(m0): add 认识 Hermes and 安装与第一次对话 lesso
 ## Task 10: Docker local deployment
 
 **Files:**
+
 - Create: `Dockerfile`
 - Create: `nginx.conf`
 - Create: `docker-compose.yml`
@@ -1251,12 +1278,13 @@ services:
     build: .
     image: hermes-tutorial
     ports:
-      - "8080:8080"
+      - '8080:8080'
 ```
 
 - [ ] **Step 4: Add `docker-compose.yml` build artifacts to `.dockerignore`**
 
 Create `.dockerignore`:
+
 ```
 node_modules
 dist
@@ -1281,6 +1309,7 @@ git commit -m "build: add Dockerfile, nginx config, docker-compose for local dep
 ## Task 11: CI workflow
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Create `.github/workflows/ci.yml`**
@@ -1327,6 +1356,7 @@ git commit -m "ci: add lint + test + build workflow"
 ## Task 12: README + final verification
 
 **Files:**
+
 - Create: `README.md`
 
 - [ ] **Step 1: Create `README.md`**
@@ -1375,12 +1405,12 @@ docker compose up --build
 
 ## 其他命令
 
-| 命令 | 作用 |
-| --- | --- |
-| `npm test` | 运行 Vitest 单测 |
-| `npm run lint` | ESLint 检查 |
-| `npm run format` | Prettier 格式化 |
-| `npm run check` | Astro 类型检查 |
+| 命令             | 作用             |
+| ---------------- | ---------------- |
+| `npm test`       | 运行 Vitest 单测 |
+| `npm run lint`   | ESLint 检查      |
+| `npm run format` | Prettier 格式化  |
+| `npm run check`  | Astro 类型检查   |
 
 ## 设计文档
 
