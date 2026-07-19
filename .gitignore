@@ -1,6 +1,6 @@
 # build output
-dist/
-.output/
+out/
+.next/
 
 # dependencies
 node_modules/
@@ -24,5 +24,9 @@ pnpm-debug.log*
 !.vscode/extensions.json
 .idea/
 
-# astro
-.astro/
+# next
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# pyodide vendored runtime（postinstall 自动重建）
+public/pyodide/

@@ -5,10 +5,12 @@ export default [
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['dist', '.astro', 'node_modules', 'public'],
+    ignores: ['out', '.next', 'node_modules', 'public', 'next-env.d.ts'],
   },
   {
-    files: ['**/*.d.ts'],
-    rules: { '@typescript-eslint/triple-slash-reference': 'off' },
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly', URL: 'readonly' },
+    },
   },
 ];

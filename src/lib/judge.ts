@@ -1,5 +1,14 @@
 export type QuizOption = { key: string; text: string };
 
+export interface QuizItem {
+  id: string;
+  question: string;
+  options: QuizOption[];
+  correct: string[];
+  explanation: string;
+  multiple?: boolean;
+}
+
 export function judge(selected: string[], correct: string[], multiple: boolean): boolean {
   if (selected.length === 0) return false;
   if (!multiple) return selected.length === 1 && selected[0] === correct[0];
