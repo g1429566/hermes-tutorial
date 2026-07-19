@@ -1,7 +1,7 @@
 # Hermes Agent 交互式学习教程 —— 重设计方案（v2）
 
 - **日期**：2026-07-19
-- **状态**：待确认
+- **状态**：已实施（2026-07-19：阶段 1–3 全部完成，28 章上线；同日增补 M5「Agent 核心补全」四章 + Pyodide 沙箱，共 32 章）
 - **项目位置**：`/Users/gcz/Projects/my_hermes/hermes-tutorial/`（独立 git 仓库）
 - **语言**：中文为主，技术术语保留英文
 
@@ -314,8 +314,27 @@ interface ProgressState {
 
 ---
 
-## 10. 未决
+## 10. 未决 → 已决（实施时拍板）
 
-- 真实源码片段是手动摘录还是自动从 hermes-agent 仓库生成快照（参考 pi-learning TODO.md 的 Python 等价版源码集成方案）——阶段 2 决定
-- 是否引入暗色/亮色切换（pi-learning 通过交替章节底色实现，无需全局 toggle）——沿用此模式
-- 代码执行沙箱（Pyodide/WebContainers）——M2 构建章节可能需要，M2 阶段定
+- 真实源码片段：**手动摘录**。在数据文件中以注释标明出处（文件 + AGENTS.md 行号），阶段 2 起各章均按此执行；未来如需自动快照再单独立项。
+- 暗色/亮色切换：**不做全局 toggle**。沿用交替暗色区块模式——Hero 章（00）整章暗色，各实验室内详情面板/代码块用深色终端风。
+- 代码执行沙箱（Pyodide/WebContainers）：**M2 阶段不引入**，构建器章节用「表单 + 实时代码预览 + 纯函数字段校验（如 skill-validate.ts）+ 模拟调用」教学；**M5 增补时引入 Pyodide**（vendored 离线方案，见 §11）。
+
+---
+
+## 11. 增补：M5 · Agent 核心补全（2026-07-19，已实施）
+
+范围原则（用户拍板）：只补与 agent 核心直接相关的内容；前端/运维向主题（Skin 引擎、Dashboard/Electron、测试体系、官方插件巡礼）明确不做。
+
+| # | 标题 | 核心交互 | 源码依据 |
+|---|---|---|---|
+| 29 | 上下文压缩与 Checkpoint | 压缩流程步进器 + checkpoint 影子仓库揭秘 | `agent/context_compressor.py`、`agent/conversation_compression.py`、`tools/checkpoint_manager.py` |
+| 30 | 模型路由与凭据池 | 三层降级面板 + 辅助任务 auto 解析链（文本/视觉） | `agent/credential_pool.py`、`agent/auxiliary_client.py` |
+| 31 | 多模态工具 | 模态浏览器（vision/image_gen/video_gen/TTS/STT）+ image_generate 统一接口路由演示 | `tools/vision_tools.py`、`agent/image_gen_provider.py` |
+| 32 | 批处理与 Agent 评测 | batch_runner 五步流水线 + 轨迹格式 + 评测生态 | `batch_runner.py`、`mini_swe_runner.py`、`trajectory_compressor.py` |
+
+### Pyodide 沙箱（最终决策）
+
+- 运行时从 npm 包 `pyodide` vendor 到 `public/pyodide/`（`scripts/setup-pyodide.mjs`，postinstall 自动执行，已 gitignore），dev / 静态导出 / nginx 全链路离线可用，不依赖 CDN。
+- `src/components/PyRunner.tsx`：按需加载（首次约 15MB，之后常驻内存），捕获 stdout/stderr。
+- 集成点：第 19 章工具构建器「真实运行」——stub 最小 `tools.registry`，真跑用户生成的工具文件并执行一次 handler 分发。
