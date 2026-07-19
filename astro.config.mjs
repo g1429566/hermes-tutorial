@@ -12,6 +12,7 @@ export default defineConfig({
       components: {
         Header: './src/components/overrides/Header.astro',
       },
+      customCss: ['./src/styles/custom.css'],
       sidebar: [
         { label: '认识 Hermes', items: [{ autogenerate: { directory: 'm0-overview' } }] },
         { label: '组件演示', items: [{ autogenerate: { directory: 'demo' } }] },

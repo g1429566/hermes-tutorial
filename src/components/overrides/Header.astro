@@ -1,5 +1,7 @@
 ---
 import Default from '@astrojs/starlight/components/Header.astro';
+import ProgressBar from '../ProgressBar.tsx';
 ---
 
 <Default {...Astro.props} />
+<ProgressBar client:idle />
