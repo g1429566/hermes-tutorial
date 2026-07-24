@@ -30,3 +30,6 @@ tsconfig.tsbuildinfo
 
 # pyodide vendored runtime（postinstall 自动重建）
 public/pyodide/
+
+# 设计文档（仅本地保留）
+docs/
