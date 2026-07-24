@@ -90,15 +90,6 @@ scripts/           # serve.mjs（静态服务器）/ setup-pyodide.mjs（vendor 
 tests/             # Vitest 单元测试
 ```
 
-## 常用命令
-
-| 命令                 | 作用             |
-| -------------------- | ---------------- |
-| `npm test`           | 运行 Vitest 单测 |
-| `npm run test:watch` | Vitest 监听模式  |
-| `npm run lint`       | ESLint 检查      |
-| `npm run format`     | Prettier 格式化  |
-
 ## License
 
 [MIT](LICENSE)
