@@ -4,18 +4,34 @@ import { useState } from 'react';
 import {
   AUX_CONFIG_EXAMPLE,
   AUX_TASKS,
+  AUX_TASKS_EN,
   CODEX_CALLOUT,
+  CODEX_CALLOUT_EN,
   FAILOVER_LAYERS,
+  FAILOVER_LAYERS_EN,
   ROUTING_INTRO,
+  ROUTING_INTRO_EN,
+  ROUTING_UI,
   TEXT_CHAIN,
+  TEXT_CHAIN_EN,
   VISION_CHAIN,
+  VISION_CHAIN_EN,
 } from '@/data/routing';
 import { CodeBlock, SectionHeading } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick } from '@/lib/i18n';
 
 // Chapter 30「模型路由与凭据池」：三层降级 + 辅助任务解析链。
 export default function RoutingLab() {
+  const { lang } = useLang();
+  const failoverLayers = lang === 'en' ? FAILOVER_LAYERS_EN : FAILOVER_LAYERS;
+  const auxTasks = lang === 'en' ? AUX_TASKS_EN : AUX_TASKS;
+  const textChain = lang === 'en' ? TEXT_CHAIN_EN : TEXT_CHAIN;
+  const visionChain = lang === 'en' ? VISION_CHAIN_EN : VISION_CHAIN;
+  const codexCallout = lang === 'en' ? CODEX_CALLOUT_EN : CODEX_CALLOUT;
+  const intro = lang === 'en' ? ROUTING_INTRO_EN : ROUTING_INTRO;
+
   const progress = useProgress();
   const saved = progress.labResults['lab:routing'];
   const [taskId, setTaskId] = useState(
@@ -24,8 +40,8 @@ export default function RoutingLab() {
       : AUX_TASKS[0].id,
   );
 
-  const task = AUX_TASKS.find((t) => t.id === taskId) ?? AUX_TASKS[0];
-  const chain = task.kind === 'vision' ? VISION_CHAIN : TEXT_CHAIN;
+  const task = auxTasks.find((t) => t.id === taskId) ?? auxTasks[0];
+  const chain = task.kind === 'vision' ? visionChain : textChain;
 
   function select(id: string) {
     setTaskId(id);
@@ -34,15 +50,21 @@ export default function RoutingLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{ROUTING_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
-      <SectionHeading kicker="三层降级" title="主模型挂了，谁来接盘" />
+      <SectionHeading
+        kicker={pick(lang, ROUTING_UI.failoverKicker)}
+        title={pick(lang, ROUTING_UI.failoverTitle)}
+      />
       <div className="mt-5 space-y-3">
-        {FAILOVER_LAYERS.map((l) => (
+        {failoverLayers.map((l) => (
           <div key={l.id} className="rounded-lg border border-line bg-white p-5">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <p className="font-medium">{l.name}</p>
-              <p className="font-mono text-xs text-ember">触发：{l.trigger}</p>
+              <p className="font-mono text-xs text-ember">
+                {pick(lang, ROUTING_UI.triggerPrefix)}
+                {l.trigger}
+              </p>
             </div>
             <p className="mt-2 text-sm leading-relaxed text-ink/75">{l.body}</p>
             <p className="mt-2 font-mono text-xs text-blue">{l.sourceRef}</p>
@@ -50,9 +72,12 @@ export default function RoutingLab() {
         ))}
       </div>
 
-      <SectionHeading kicker="辅助任务路由" title="侧边 LLM 调用派给谁" />
+      <SectionHeading
+        kicker={pick(lang, ROUTING_UI.auxKicker)}
+        title={pick(lang, ROUTING_UI.auxTitle)}
+      />
       <div className="mt-5 flex flex-wrap gap-2">
-        {AUX_TASKS.map((t) => (
+        {auxTasks.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -70,7 +95,10 @@ export default function RoutingLab() {
       <div className="mt-4 grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-lg border border-ink/20 bg-code-bg p-5 text-white">
           <p className="font-mono text-[11px] tracking-[0.15em] text-acid">
-            AUTO 解析链 · {task.kind === 'vision' ? '视觉任务' : '文本任务'}
+            {pick(lang, ROUTING_UI.chainPrefix)}
+            {task.kind === 'vision'
+              ? pick(lang, ROUTING_UI.visionTask)
+              : pick(lang, ROUTING_UI.textTask)}
           </p>
           <p className="mt-1 text-xs text-white/55">{task.desc}</p>
           <ol className="mt-4 space-y-2.5">
@@ -94,8 +122,8 @@ export default function RoutingLab() {
         <div className="space-y-4">
           <CodeBlock file="config.yaml" code={AUX_CONFIG_EXAMPLE} />
           <div className="rounded-lg border border-ember/40 bg-ember/5 p-4">
-            <p className="font-mono text-sm text-ember">⚠ {CODEX_CALLOUT.title}</p>
-            <p className="mt-2 text-sm leading-relaxed text-ink/80">{CODEX_CALLOUT.body}</p>
+            <p className="font-mono text-sm text-ember">⚠ {codexCallout.title}</p>
+            <p className="mt-2 text-sm leading-relaxed text-ink/80">{codexCallout.body}</p>
           </div>
         </div>
       </div>

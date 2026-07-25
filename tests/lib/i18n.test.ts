@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { pick } from '@/lib/i18n';
 import { UI_STRINGS } from '@/data/ui-strings';
-import { CHAPTERS, CHAPTERS_EN, MODULES, MODULE_ORDER, MODULES_EN, chapterText } from '@/data/chapters';
+import {
+  CHAPTERS,
+  CHAPTERS_EN,
+  MODULES,
+  MODULE_ORDER,
+  MODULES_EN,
+  chapterText,
+} from '@/data/chapters';
 
 describe('ui-strings 词典', () => {
   it('每条文案都有 zh 和 en', () => {

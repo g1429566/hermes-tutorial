@@ -3,19 +3,33 @@
 import { useState } from 'react';
 import {
   KEY_SURFACES,
+  KEY_SURFACES_EN,
   SLASH_FLOW_STEPS,
+  SLASH_FLOW_STEPS_EN,
   TUI_INTRO,
+  TUI_INTRO_EN,
+  TUI_LAB_UI,
   TUI_PROCESS_NODES,
+  TUI_PROCESS_NODES_EN,
   WIDTH_DEMO,
+  WIDTH_DEMO_EN,
   wrapTerminalLines,
 } from '@/data/tui';
 import { CodeBlock, DetailPanel, SectionHeading, Stepper } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { pick, useLang } from '@/lib/i18n';
+import { t } from '@/data/ui-strings';
 
 // Chapter 14「TUI 架构」：终端组件实验。
 // 进程模型图 → Key Surfaces 表 → 斜杠命令流 Stepper → render(width) 迷你演示。
 export default function TUILab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? TUI_INTRO_EN : TUI_INTRO;
+  const processNodes = lang === 'en' ? TUI_PROCESS_NODES_EN : TUI_PROCESS_NODES;
+  const keySurfaces = lang === 'en' ? KEY_SURFACES_EN : KEY_SURFACES;
+  const slashSteps = lang === 'en' ? SLASH_FLOW_STEPS_EN : SLASH_FLOW_STEPS;
+  const widthDemo = lang === 'en' ? WIDTH_DEMO_EN : WIDTH_DEMO;
   const progress = useProgress();
   const saved = progress.labResults['lab:tui'];
   const s = saved && typeof saved === 'object' ? (saved as Record<string, unknown>) : {};
@@ -35,10 +49,10 @@ export default function TUILab() {
       : WIDTH_DEMO.defaultWidth,
   );
 
-  const node = TUI_PROCESS_NODES.find((n) => n.id === nodeId) ?? TUI_PROCESS_NODES[0];
-  const surface = KEY_SURFACES.find((k) => k.id === surfaceId) ?? KEY_SURFACES[0];
-  const step = SLASH_FLOW_STEPS.find((f) => f.id === stepId) ?? SLASH_FLOW_STEPS[0];
-  const lines = wrapTerminalLines(WIDTH_DEMO.text, width);
+  const node = processNodes.find((n) => n.id === nodeId) ?? processNodes[0];
+  const surface = keySurfaces.find((k) => k.id === surfaceId) ?? keySurfaces[0];
+  const step = slashSteps.find((f) => f.id === stepId) ?? slashSteps[0];
+  const lines = wrapTerminalLines(widthDemo.text, width);
 
   function save(next: { node?: string; surface?: string; step?: string; width?: number }) {
     setLabResult('lab:tui', {
@@ -52,12 +66,15 @@ export default function TUILab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{TUI_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
       {/* ── ① 进程模型 ─────────────────────────────────────────── */}
-      <SectionHeading kicker="进程模型" title="两个进程，一份职责清单" />
+      <SectionHeading
+        kicker={pick(lang, TUI_LAB_UI.processKicker)}
+        title={pick(lang, TUI_LAB_UI.processTitle)}
+      />
       <div className="mt-6 flex flex-wrap items-stretch gap-y-3">
-        {TUI_PROCESS_NODES.map((n, i) => {
+        {processNodes.map((n, i) => {
           const active = n.id === node.id;
           return (
             <div key={n.id} className="flex items-center">
@@ -97,7 +114,9 @@ export default function TUILab() {
             ))}
           </ul>
           <div className="mt-5 border-t border-white/10 pt-4">
-            <p className="font-mono text-[11px] tracking-[0.15em] text-white/40">关键源码</p>
+            <p className="font-mono text-[11px] tracking-[0.15em] text-white/40">
+              {pick(lang, TUI_LAB_UI.keyFiles)}
+            </p>
             <ul className="mt-2 space-y-1.5">
               {node.files.map((f) => (
                 <li key={f.path} className="text-sm">
@@ -113,17 +132,20 @@ export default function TUILab() {
       </div>
 
       {/* ── ② Key Surfaces ─────────────────────────────────────── */}
-      <SectionHeading kicker="Key Surfaces" title="界面 ↔ RPC 对照表" />
+      <SectionHeading
+        kicker={pick(lang, TUI_LAB_UI.surfacesKicker)}
+        title={pick(lang, TUI_LAB_UI.surfacesTitle)}
+      />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink/70">
-        每一块界面能力都对应一组 Ink 组件与 gateway 方法。点击任意一行看它如何工作。
+        {pick(lang, TUI_LAB_UI.surfacesHint)}
       </p>
       <div className="mt-4 overflow-hidden rounded-lg border border-line bg-white">
         <div className="grid grid-cols-[1fr_1.1fr_1.4fr] gap-2 border-b border-line bg-paper-deep px-4 py-2 font-mono text-[11px] tracking-[0.1em] text-muted">
           <span>Surface</span>
-          <span>Ink 组件</span>
-          <span>Gateway 方法</span>
+          <span>{pick(lang, TUI_LAB_UI.colInk)}</span>
+          <span>{pick(lang, TUI_LAB_UI.colGateway)}</span>
         </div>
-        {KEY_SURFACES.map((k) => {
+        {keySurfaces.map((k) => {
           const active = k.id === surface.id;
           return (
             <button
@@ -154,10 +176,13 @@ export default function TUILab() {
       </p>
 
       {/* ── ③ 斜杠命令流 ───────────────────────────────────────── */}
-      <SectionHeading kicker="斜杠命令流" title="一条 /command 的三级路由" />
+      <SectionHeading
+        kicker={pick(lang, TUI_LAB_UI.slashKicker)}
+        title={pick(lang, TUI_LAB_UI.slashTitle)}
+      />
       <div className="mt-6">
         <Stepper
-          steps={SLASH_FLOW_STEPS.map((f) => ({ id: f.id, label: f.label }))}
+          steps={slashSteps.map((f) => ({ id: f.id, label: f.label }))}
           current={step.id}
           onChange={(id) => {
             setStepId(id);
@@ -174,7 +199,9 @@ export default function TUILab() {
           </div>
         </div>
         <div className="rounded-lg border border-line bg-white p-5">
-          <p className="font-mono text-[11px] tracking-[0.15em] text-muted">要点</p>
+          <p className="font-mono text-[11px] tracking-[0.15em] text-muted">
+            {t(lang, 'keyPoints')}
+          </p>
           <ul className="mt-3 space-y-2">
             {step.points.map((p) => (
               <li key={p} className="flex items-start gap-2.5 text-sm text-ink/80">
@@ -187,17 +214,20 @@ export default function TUILab() {
       </div>
 
       {/* ── ④ render(width) 演示 ───────────────────────────────── */}
-      <SectionHeading kicker="render(width)" title="宽度驱动的重渲染" />
+      <SectionHeading
+        kicker={pick(lang, TUI_LAB_UI.widthKicker)}
+        title={pick(lang, TUI_LAB_UI.widthTitle)}
+      />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink/70">
-        拖动滑杆改变「终端宽度」，下方文本会像真实终端一样按新宽度重排。
+        {pick(lang, TUI_LAB_UI.widthHint)}
       </p>
       <div className="mt-5 rounded-lg border border-line bg-white p-5">
         <div className="flex items-center gap-4">
           <input
             type="range"
-            min={WIDTH_DEMO.min}
-            max={WIDTH_DEMO.max}
-            step={WIDTH_DEMO.step}
+            min={widthDemo.min}
+            max={widthDemo.max}
+            step={widthDemo.step}
             value={width}
             onChange={(e) => {
               const w = Number(e.target.value);
@@ -205,13 +235,13 @@ export default function TUILab() {
               save({ width: w });
             }}
             className="w-full accent-ink"
-            aria-label="终端宽度"
+            aria-label={pick(lang, TUI_LAB_UI.widthAria)}
           />
           <span className="shrink-0 font-mono text-sm text-ink">width = {width}</span>
         </div>
         <div className="mt-4 overflow-x-auto rounded-lg bg-code-bg p-4">
           <p className="font-mono text-[11px] text-white/40">
-            render({width}) → {lines.length} 行
+            render({width}) {pick(lang, TUI_LAB_UI.renderLines)(lines.length)}
           </p>
           <div className="mt-2 space-y-0.5">
             {lines.map((line, i) => (
@@ -222,12 +252,11 @@ export default function TUILab() {
             ))}
           </div>
         </div>
-        <p className="mt-4 text-sm leading-relaxed text-ink/70">{WIDTH_DEMO.explain}</p>
+        <p className="mt-4 text-sm leading-relaxed text-ink/70">{widthDemo.explain}</p>
       </div>
 
       <p className="mt-10 max-w-3xl rounded-lg border border-acid bg-acid/10 p-5 font-mono text-sm leading-relaxed">
-        一句话记住 TUI：TypeScript 拥有屏幕，Python 拥有会话——中间只隔着换行分隔的
-        JSON-RPC。dashboard 里的聊天也不是重写，而是通过 PTY 嵌入真实的 hermes --tui。
+        {pick(lang, TUI_LAB_UI.footerNote)}
       </p>
     </section>
   );

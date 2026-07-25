@@ -3,19 +3,30 @@
 import { useState } from 'react';
 import {
   CRON_HARDENING,
+  CRON_HARDENING_EN,
   CRON_INTRO,
+  CRON_INTRO_EN,
+  CRON_LAB_UI,
   CRON_PRESETS,
   CRON_VERBS,
   SCHEDULE_FORMATS,
+  SCHEDULE_FORMATS_EN,
   TICK_STEPS,
+  TICK_STEPS_EN,
 } from '@/data/cron';
 import { explainCron } from '@/lib/cron-explain';
 import { SectionHeading, Stepper } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { pick, useLang } from '@/lib/i18n';
 
 // Chapter 12「Cron 定时调度」：cron 表达式实验室 + 四种调度格式 + tick 流程。
 export default function CronLab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? CRON_INTRO_EN : CRON_INTRO;
+  const formats = lang === 'en' ? SCHEDULE_FORMATS_EN : SCHEDULE_FORMATS;
+  const tickSteps = lang === 'en' ? TICK_STEPS_EN : TICK_STEPS;
+  const hardening = lang === 'en' ? CRON_HARDENING_EN : CRON_HARDENING;
   const progress = useProgress();
   const saved = progress.labResults['lab:cron'];
   const savedState =
@@ -27,8 +38,8 @@ export default function CronLab() {
     typeof savedState?.step === 'string' ? savedState.step : TICK_STEPS[0].id,
   );
 
-  const result = explainCron(expr);
-  const step = TICK_STEPS.find((s) => s.id === stepId) ?? TICK_STEPS[0];
+  const result = explainCron(expr, lang);
+  const step = tickSteps.find((s) => s.id === stepId) ?? tickSteps[0];
 
   function pickExpr(next: string) {
     setExpr(next);
@@ -41,9 +52,12 @@ export default function CronLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{CRON_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
-      <SectionHeading kicker="表达式实验室" title="把 cron 表达式拆开看" />
+      <SectionHeading
+        kicker={pick(lang, CRON_LAB_UI.exprKicker)}
+        title={pick(lang, CRON_LAB_UI.exprTitle)}
+      />
       <div className="mt-5 max-w-3xl">
         <div className="flex flex-wrap items-center gap-2">
           {CRON_PRESETS.map((p) => (
@@ -65,7 +79,7 @@ export default function CronLab() {
           type="text"
           value={expr}
           onChange={(e) => pickExpr(e.target.value)}
-          placeholder="分 时 日 月 周，如 0 9 * * *"
+          placeholder={pick(lang, CRON_LAB_UI.exprPlaceholder)}
           spellCheck={false}
           className="mt-3 w-full rounded-lg border border-line bg-white px-4 py-3 font-mono text-lg tracking-wider focus:border-ink focus:outline-none"
         />
@@ -86,9 +100,12 @@ export default function CronLab() {
         )}
       </div>
 
-      <SectionHeading kicker="四种格式" title="Hermes 接受的调度写法" />
+      <SectionHeading
+        kicker={pick(lang, CRON_LAB_UI.formatsKicker)}
+        title={pick(lang, CRON_LAB_UI.formatsTitle)}
+      />
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {SCHEDULE_FORMATS.map((f) => (
+        {formats.map((f) => (
           <div key={f.id} className="rounded-lg border border-line bg-white p-4">
             <p className="font-medium">{f.name}</p>
             <p className="mt-1 font-mono text-xs text-ember">{f.examples.join('　·　')}</p>
@@ -97,10 +114,13 @@ export default function CronLab() {
         ))}
       </div>
 
-      <SectionHeading kicker="tick 流程" title="调度器的一拍" />
+      <SectionHeading
+        kicker={pick(lang, CRON_LAB_UI.tickKicker)}
+        title={pick(lang, CRON_LAB_UI.tickTitle)}
+      />
       <div className="mt-5">
         <Stepper
-          steps={TICK_STEPS.map((s) => ({ id: s.id, label: s.label }))}
+          steps={tickSteps.map((s) => ({ id: s.id, label: s.label }))}
           current={step.id}
           onChange={pickStep}
         />
@@ -113,9 +133,12 @@ export default function CronLab() {
         </div>
       </div>
 
-      <SectionHeading kicker="加固不变量" title="调度器不允许发生的事" />
+      <SectionHeading
+        kicker={pick(lang, CRON_LAB_UI.hardeningKicker)}
+        title={pick(lang, CRON_LAB_UI.hardeningTitle)}
+      />
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {CRON_HARDENING.map((h) => (
+        {hardening.map((h) => (
           <div key={h.title} className="rounded-lg border border-line bg-white p-4">
             <p className="font-mono text-sm text-ink">✓ {h.title}</p>
             <p className="mt-1.5 text-sm leading-relaxed text-ink/70">{h.desc}</p>
@@ -124,8 +147,7 @@ export default function CronLab() {
       </div>
 
       <p className="mt-8 max-w-3xl rounded-lg border border-acid bg-acid/10 p-4 font-mono text-sm leading-relaxed">
-        管理入口：agent 用 cronjob 工具，用户用 hermes cron &lt;{CRON_VERBS.join(' | ')}&gt; 或
-        /cron 斜杠命令。
+        {pick(lang, CRON_LAB_UI.footerNote)(CRON_VERBS.join(' | '))}
       </p>
     </section>
   );

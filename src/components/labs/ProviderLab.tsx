@@ -4,15 +4,22 @@ import { useState } from 'react';
 import {
   DEFAULT_PROVIDER_FORM,
   DISCOVERY_ORDER,
+  DISCOVERY_ORDER_EN,
   DISCOVERY_POINTS,
+  DISCOVERY_POINTS_EN,
   PROVIDER_INTRO,
+  PROVIDER_INTRO_EN,
   PROVIDER_STEPS,
+  PROVIDER_STEPS_EN,
+  PROVIDER_UI,
   buildProviderCode,
   buildProviderYaml,
   type ProviderForm,
 } from '@/data/provider-builder';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick } from '@/lib/i18n';
+import { t } from '@/data/ui-strings';
 import { CodeBlock, SectionHeading, Stepper } from './primitives';
 
 const LAB_KEY = 'lab:provider';
@@ -54,12 +61,17 @@ const inputCls =
 // Chapter 20「加一个 Provider」：Provider 适配实验。
 // ① 统一接口四步步进器；② 表单生成 model-provider 插件骨架；③ 懒发现机制讲解。
 export default function ProviderLab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? PROVIDER_INTRO_EN : PROVIDER_INTRO;
+  const steps = lang === 'en' ? PROVIDER_STEPS_EN : PROVIDER_STEPS;
+  const discoveryOrder = lang === 'en' ? DISCOVERY_ORDER_EN : DISCOVERY_ORDER;
+  const discoveryPoints = lang === 'en' ? DISCOVERY_POINTS_EN : DISCOVERY_POINTS;
   const progress = useProgress();
   const [state, setState] = useState<ProviderLabState>(() => restore(progress.labResults[LAB_KEY]));
   const { step: stepId, form } = state;
 
-  const step = PROVIDER_STEPS.find((s) => s.id === stepId) ?? PROVIDER_STEPS[0];
-  const idx = PROVIDER_STEPS.findIndex((s) => s.id === step.id);
+  const step = steps.find((s) => s.id === stepId) ?? steps[0];
+  const idx = steps.findIndex((s) => s.id === step.id);
 
   function update(next: ProviderLabState) {
     setState(next);
@@ -76,12 +88,15 @@ export default function ProviderLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{PROVIDER_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
-      <SectionHeading kicker="统一接口" title="四个环节，一种形状" />
+      <SectionHeading
+        kicker={pick(lang, PROVIDER_UI.stepsKicker)}
+        title={pick(lang, PROVIDER_UI.stepsTitle)}
+      />
       <div className="mt-6">
         <Stepper
-          steps={PROVIDER_STEPS.map((s) => ({ id: s.id, label: s.label }))}
+          steps={steps.map((s) => ({ id: s.id, label: s.label }))}
           current={step.id}
           onChange={select}
         />
@@ -105,7 +120,9 @@ export default function ProviderLab() {
         </div>
         <div className="space-y-4">
           <div className="rounded-lg border border-line bg-white p-5">
-            <p className="font-mono text-[11px] tracking-[0.15em] text-muted">要点</p>
+            <p className="font-mono text-[11px] tracking-[0.15em] text-muted">
+              {t(lang, 'keyPoints')}
+            </p>
             <ul className="mt-3 space-y-2">
               {step.points.map((p) => (
                 <li key={p} className="flex items-start gap-2.5 text-sm text-ink/80">
@@ -119,30 +136,33 @@ export default function ProviderLab() {
             <button
               type="button"
               disabled={idx === 0}
-              onClick={() => select(PROVIDER_STEPS[idx - 1].id)}
+              onClick={() => select(steps[idx - 1].id)}
               className="rounded border border-line px-3 py-1.5 font-mono text-xs text-muted hover:border-ink hover:text-ink disabled:opacity-40"
             >
-              ‹ 上一步
+              {t(lang, 'prevStep')}
             </button>
             <button
               type="button"
-              disabled={idx === PROVIDER_STEPS.length - 1}
-              onClick={() => select(PROVIDER_STEPS[idx + 1].id)}
+              disabled={idx === steps.length - 1}
+              onClick={() => select(steps[idx + 1].id)}
               className="rounded border border-line px-3 py-1.5 font-mono text-xs text-muted hover:border-ink hover:text-ink disabled:opacity-40"
             >
-              下一步 ›
+              {t(lang, 'nextStep')}
             </button>
           </div>
         </div>
       </div>
 
-      <SectionHeading kicker="动手" title="生成你的 provider 插件骨架" />
+      <SectionHeading
+        kicker={pick(lang, PROVIDER_UI.formKicker)}
+        title={pick(lang, PROVIDER_UI.formTitle)}
+      />
       <div className="mt-6 grid gap-4 xl:grid-cols-2">
         <div className="space-y-5 rounded-lg border border-line bg-paper-deep p-6">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={labelCls} htmlFor="pv-name">
-                name · 规范名
+                {pick(lang, PROVIDER_UI.nameLabel)}
               </label>
               <input
                 id="pv-name"
@@ -169,7 +189,7 @@ export default function ProviderLab() {
           </div>
           <div>
             <label className={labelCls} htmlFor="pv-desc">
-              description · 选择器副标题
+              {pick(lang, PROVIDER_UI.descLabel)}
             </label>
             <input
               id="pv-desc"
@@ -196,7 +216,7 @@ export default function ProviderLab() {
             </div>
             <div>
               <label className={labelCls} htmlFor="pv-env">
-                env_vars · API key 变量名
+                {pick(lang, PROVIDER_UI.envLabel)}
               </label>
               <input
                 id="pv-env"
@@ -211,7 +231,7 @@ export default function ProviderLab() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <label className={labelCls} htmlFor="pv-signup">
-                signup_url · 可留空
+                {pick(lang, PROVIDER_UI.signupLabel)}
               </label>
               <input
                 id="pv-signup"
@@ -224,7 +244,7 @@ export default function ProviderLab() {
             </div>
             <div>
               <label className={labelCls} htmlFor="pv-aliases">
-                aliases · 逗号分隔，可留空
+                {pick(lang, PROVIDER_UI.aliasesLabel)}
               </label>
               <input
                 id="pv-aliases"
@@ -238,7 +258,7 @@ export default function ProviderLab() {
           </div>
           <div>
             <label className={labelCls} htmlFor="pv-models">
-              fallback_models · 逗号分隔，只放支持 tool calling 的模型
+              {pick(lang, PROVIDER_UI.modelsLabel)}
             </label>
             <input
               id="pv-models"
@@ -255,25 +275,25 @@ export default function ProviderLab() {
           <CodeBlock
             file={`plugins/model-providers/${form.name.trim() || 'acme'}/__init__.py`}
             code={buildProviderCode(form)}
-            note="import 即注册：模块加载时调用 register_provider(ProviderProfile(...))"
+            note={pick(lang, PROVIDER_UI.initNote)}
           />
           <CodeBlock
             file={`plugins/model-providers/${form.name.trim() || 'acme'}/plugin.yaml`}
             code={buildProviderYaml(form)}
-            note="kind: model-provider——通用 PluginManager 只记录 manifest，不 import"
+            note={pick(lang, PROVIDER_UI.yamlNote)}
           />
         </div>
       </div>
 
-      <SectionHeading kicker="发现机制" title="懒发现：第一次用到才扫描" />
+      <SectionHeading
+        kicker={pick(lang, PROVIDER_UI.discoveryKicker)}
+        title={pick(lang, PROVIDER_UI.discoveryTitle)}
+      />
       <p className="mt-3 max-w-3xl leading-relaxed text-ink/75">
-        <code className="font-mono text-ember">_discover_providers()</code> 不在启动时跑——第一次调用{' '}
-        <code className="font-mono text-ember">get_provider_profile()</code> 或{' '}
-        <code className="font-mono text-ember">list_providers()</code> 时才扫描三个位置并 import
-        每个插件，import 触发模块级的 register_provider()。
+        {pick(lang, PROVIDER_UI.discoveryBody)}
       </p>
       <ol className="mt-5 max-w-3xl space-y-2">
-        {DISCOVERY_ORDER.map((d) => (
+        {discoveryOrder.map((d) => (
           <li
             key={d.step}
             className="flex items-baseline gap-4 rounded-lg border border-line bg-white px-4 py-3"
@@ -287,7 +307,7 @@ export default function ProviderLab() {
         ))}
       </ol>
       <ul className="mt-5 max-w-3xl space-y-2.5">
-        {DISCOVERY_POINTS.map((p) => (
+        {discoveryPoints.map((p) => (
           <li key={p} className="flex items-start gap-2.5 text-sm text-ink/80">
             <span className="mt-0.5 text-acid">▸</span>
             <span>{p}</span>
@@ -295,10 +315,12 @@ export default function ProviderLab() {
         ))}
       </ul>
 
-      <SectionHeading kicker="记忆钩子" title="一句话记住 provider 插件" />
+      <SectionHeading
+        kicker={pick(lang, PROVIDER_UI.hookKicker)}
+        title={pick(lang, PROVIDER_UI.hookTitle)}
+      />
       <p className="mt-3 max-w-3xl rounded-lg border border-acid bg-acid/10 p-5 font-mono text-sm leading-relaxed">
-        一份声明式的 ProviderProfile + 一次 register_provider()——懒发现会找到你， 同名 user 覆盖
-        bundled，后写者胜。
+        {pick(lang, PROVIDER_UI.hookBody)}
       </p>
     </section>
   );

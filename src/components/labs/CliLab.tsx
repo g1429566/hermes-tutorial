@@ -3,19 +3,34 @@
 import { useState } from 'react';
 import {
   ADD_COMMAND_STEPS,
+  ADD_COMMAND_STEPS_EN,
   CLI_COMMANDS,
+  CLI_COMMANDS_EN,
   CLI_INTRO,
+  CLI_INTRO_EN,
+  CLI_UI,
   COMMAND_CATEGORIES,
   COMMAND_DEF_FIELDS,
+  COMMAND_DEF_FIELDS_EN,
   REGISTRY_CONSUMERS,
+  REGISTRY_CONSUMERS_EN,
   REGISTRY_NOTE,
+  REGISTRY_NOTE_EN,
 } from '@/data/cli';
 import { CodeBlock, CompareSelect, DetailPanel, SectionHeading, Stepper } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { pick, useLang } from '@/lib/i18n';
 
 // Chapter 15「CLI 架构」：CommandDef 字段 → 命令树 → 注册表消费者 → 添加命令四步。
 export default function CliLab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? CLI_INTRO_EN : CLI_INTRO;
+  const commandDefFields = lang === 'en' ? COMMAND_DEF_FIELDS_EN : COMMAND_DEF_FIELDS;
+  const cliCommands = lang === 'en' ? CLI_COMMANDS_EN : CLI_COMMANDS;
+  const registryConsumers = lang === 'en' ? REGISTRY_CONSUMERS_EN : REGISTRY_CONSUMERS;
+  const registryNote = lang === 'en' ? REGISTRY_NOTE_EN : REGISTRY_NOTE;
+  const addCommandSteps = lang === 'en' ? ADD_COMMAND_STEPS_EN : ADD_COMMAND_STEPS;
   const progress = useProgress();
   const saved = progress.labResults['lab:cli'];
   const s = saved && typeof saved === 'object' ? (saved as Record<string, unknown>) : {};
@@ -33,11 +48,11 @@ export default function CliLab() {
     typeof s.step === 'string' ? s.step : ADD_COMMAND_STEPS[0].id,
   );
 
-  const field = COMMAND_DEF_FIELDS.find((f) => f.id === fieldId) ?? COMMAND_DEF_FIELDS[0];
-  const allCommands = COMMAND_CATEGORIES.flatMap((c) => CLI_COMMANDS[c]);
+  const field = commandDefFields.find((f) => f.id === fieldId) ?? commandDefFields[0];
+  const allCommands = COMMAND_CATEGORIES.flatMap((c) => cliCommands[c]);
   const command = allCommands.find((c) => c.id === commandId) ?? allCommands[0];
-  const consumer = REGISTRY_CONSUMERS.find((c) => c.id === consumerId) ?? REGISTRY_CONSUMERS[0];
-  const step = ADD_COMMAND_STEPS.find((f) => f.id === stepId) ?? ADD_COMMAND_STEPS[0];
+  const consumer = registryConsumers.find((c) => c.id === consumerId) ?? registryConsumers[0];
+  const step = addCommandSteps.find((f) => f.id === stepId) ?? addCommandSteps[0];
 
   function save(next: { field?: string; command?: string; consumer?: string; step?: string }) {
     setLabResult('lab:cli', {
@@ -51,15 +66,18 @@ export default function CliLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{CLI_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
       {/* ── ① CommandDef 字段 ──────────────────────────────────── */}
-      <SectionHeading kicker="单一事实来源" title="CommandDef 的八个字段" />
+      <SectionHeading
+        kicker={pick(lang, CLI_UI.fieldsKicker)}
+        title={pick(lang, CLI_UI.fieldsTitle)}
+      />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink/70">
-        COMMAND_REGISTRY 是一个 frozen dataclass 列表。点击每个字段，看它的含义与真实示例。
+        {pick(lang, CLI_UI.fieldsDesc)}
       </p>
       <div className="mt-5 flex flex-wrap gap-2">
-        {COMMAND_DEF_FIELDS.map((f) => {
+        {commandDefFields.map((f) => {
           const active = f.id === field.id;
           return (
             <button
@@ -84,7 +102,9 @@ export default function CliLab() {
         <DetailPanel kicker={field.type} title={field.name}>
           <p className="mt-4 leading-relaxed text-white/80">{field.desc}</p>
           <p className="mt-4 border-t border-white/10 pt-4 text-sm">
-            <span className="mr-2 font-mono text-[11px] tracking-[0.15em] text-white/40">示例</span>
+            <span className="mr-2 font-mono text-[11px] tracking-[0.15em] text-white/40">
+              {pick(lang, CLI_UI.exampleLabel)}
+            </span>
             <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-xs text-ember">
               {field.example}
             </code>
@@ -93,14 +113,14 @@ export default function CliLab() {
       </div>
 
       {/* ── ② 命令树 ───────────────────────────────────────────── */}
-      <SectionHeading kicker="命令树" title="按 category 分组的命令浏览器" />
+      <SectionHeading kicker={pick(lang, CLI_UI.treeKicker)} title={pick(lang, CLI_UI.treeTitle)} />
       <div className="mt-6 grid gap-4 lg:grid-cols-[320px_1fr]">
         <div className="space-y-4">
           {COMMAND_CATEGORIES.map((cat) => (
             <div key={cat}>
               <p className="kicker">{cat}</p>
               <div className="mt-1.5 space-y-1.5">
-                {CLI_COMMANDS[cat].map((c) => {
+                {cliCommands[cat].map((c) => {
                   const active = c.id === command.id;
                   return (
                     <button
@@ -145,17 +165,19 @@ export default function CliLab() {
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
               {command.aliases && (
                 <span className="text-ink/70">
-                  别名 <code className="font-mono text-xs text-ember">{command.aliases}</code>
+                  {pick(lang, CLI_UI.aliasesLabel)}{' '}
+                  <code className="font-mono text-xs text-ember">{command.aliases}</code>
                 </span>
               )}
               {command.argsHint && (
                 <span className="text-ink/70">
-                  参数 <code className="font-mono text-xs text-ember">{command.argsHint}</code>
+                  {pick(lang, CLI_UI.argsLabel)}{' '}
+                  <code className="font-mono text-xs text-ember">{command.argsHint}</code>
                 </span>
               )}
               {command.flags.length > 0 && (
                 <span className="text-ink/70">
-                  标记{' '}
+                  {pick(lang, CLI_UI.flagsLabel)}{' '}
                   {command.flags.map((f) => (
                     <code
                       key={f}
@@ -173,17 +195,20 @@ export default function CliLab() {
               file="hermes_cli/commands.py"
               lines="COMMAND_REGISTRY"
               code={command.snippet}
-              note="逐字摘自真实注册表（长描述以 ... 截断）"
+              note={pick(lang, CLI_UI.snippetNote)}
             />
           </div>
         </div>
       </div>
 
       {/* ── ③ 注册表驱动一切 ───────────────────────────────────── */}
-      <SectionHeading kicker="派生" title="一处改动，七个消费者自动同步" />
+      <SectionHeading
+        kicker={pick(lang, CLI_UI.consumersKicker)}
+        title={pick(lang, CLI_UI.consumersTitle)}
+      />
       <div className="mt-6">
         <CompareSelect
-          options={REGISTRY_CONSUMERS.map((c) => ({ id: c.id, name: c.name, tagline: c.deriver }))}
+          options={registryConsumers.map((c) => ({ id: c.id, name: c.name, tagline: c.deriver }))}
           current={consumer.id}
           onChange={(id) => {
             setConsumerId(id);
@@ -196,14 +221,14 @@ export default function CliLab() {
         </CompareSelect>
       </div>
       <p className="mt-4 max-w-3xl rounded-lg border border-line bg-white p-4 text-sm leading-relaxed text-ink/75">
-        {REGISTRY_NOTE}
+        {registryNote}
       </p>
 
       {/* ── ④ 添加命令四步 ─────────────────────────────────────── */}
-      <SectionHeading kicker="动手" title="添加一条斜杠命令的四步" />
+      <SectionHeading kicker={pick(lang, CLI_UI.addKicker)} title={pick(lang, CLI_UI.addTitle)} />
       <div className="mt-6">
         <Stepper
-          steps={ADD_COMMAND_STEPS.map((f) => ({ id: f.id, label: f.label }))}
+          steps={addCommandSteps.map((f) => ({ id: f.id, label: f.label }))}
           current={step.id}
           onChange={(id) => {
             setStepId(id);
@@ -220,8 +245,7 @@ export default function CliLab() {
       </div>
 
       <p className="mt-10 max-w-3xl rounded-lg border border-acid bg-acid/10 p-5 font-mono text-sm leading-relaxed">
-        一句话记住 CLI 架构：COMMAND_REGISTRY 是单一事实来源——命令只定义一次， CLI
-        分发、网关、Telegram 菜单、Slack 子命令、补全与 help 全是它的下游。
+        {pick(lang, CLI_UI.takeaway)}
       </p>
     </section>
   );

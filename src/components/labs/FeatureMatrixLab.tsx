@@ -1,14 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { FEATURES, FEATURES_QUIZ, SCENARIOS } from '@/data/features';
+import {
+  FEATURES,
+  FEATURES_EN,
+  FEATURES_QUIZ,
+  FEATURES_QUIZ_EN,
+  FEATURES_UI,
+  SCENARIOS,
+  SCENARIOS_EN,
+} from '@/data/features';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick } from '@/lib/i18n';
 import Quiz from '../Quiz';
 
 // Chapter 02「功能全景」：能力矩阵 + 场景选择器 + 测验。
 // 选中场景会高亮该场景调动的能力行，场景选择持久化到 labResults。
 export default function FeatureMatrixLab() {
+  const { lang } = useLang();
+  const features = lang === 'en' ? FEATURES_EN : FEATURES;
+  const scenarios = lang === 'en' ? SCENARIOS_EN : SCENARIOS;
+  const quiz = lang === 'en' ? FEATURES_QUIZ_EN : FEATURES_QUIZ;
   const progress = useProgress();
   const saved = progress.labResults['lab:features'];
   const initialScenario =
@@ -17,7 +30,7 @@ export default function FeatureMatrixLab() {
       : null;
   const [scenarioId, setScenarioId] = useState<string | null>(initialScenario);
 
-  const scenario = SCENARIOS.find((s) => s.id === scenarioId) ?? null;
+  const scenario = scenarios.find((s) => s.id === scenarioId) ?? null;
 
   function select(id: string) {
     const next = id === scenarioId ? null : id;
@@ -29,16 +42,26 @@ export default function FeatureMatrixLab() {
     <section className="mt-10">
       <div className="max-w-3xl space-y-4 leading-relaxed text-ink/75">
         <p>
-          <strong className="text-ink">Hermes Agent</strong> 是 Nous Research 开发的自进化 AI
-          agent，用 Python 实现、开源（MIT）。它是目前唯一内置
-          <strong className="text-ink">学习循环</strong>的
-          agent：从经验中创建技能、在使用中改进技能、主动持久化知识、搜索自己的历史会话，
-          并跨会话逐步建立对你的深度理解。
+          {pick(lang, FEATURES_UI.introP1).map((seg, i) =>
+            seg.strong ? (
+              <strong key={i} className="text-ink">
+                {seg.text}
+              </strong>
+            ) : (
+              <span key={i}>{seg.text}</span>
+            ),
+          )}
         </p>
         <p>
-          大多数 AI agent 用完即弃、每次从零开始；Hermes 的核心差异在于它会
-          <strong className="text-ink">积累</strong>
-          。下面这张矩阵是它全部能力的地图——每一行都对应 M1 的一章。
+          {pick(lang, FEATURES_UI.introP2).map((seg, i) =>
+            seg.strong ? (
+              <strong key={i} className="text-ink">
+                {seg.text}
+              </strong>
+            ) : (
+              <span key={i}>{seg.text}</span>
+            ),
+          )}
         </p>
       </div>
 
@@ -46,13 +69,13 @@ export default function FeatureMatrixLab() {
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead>
             <tr className="border-b border-line font-mono text-[11px] tracking-[0.12em] text-muted">
-              <th className="px-4 py-3 font-normal">能力</th>
-              <th className="px-4 py-3 font-normal">说明</th>
-              <th className="px-4 py-3 font-normal">源码位置</th>
+              <th className="px-4 py-3 font-normal">{pick(lang, FEATURES_UI.thCapability)}</th>
+              <th className="px-4 py-3 font-normal">{pick(lang, FEATURES_UI.thDesc)}</th>
+              <th className="px-4 py-3 font-normal">{pick(lang, FEATURES_UI.thSource)}</th>
             </tr>
           </thead>
           <tbody>
-            {FEATURES.map((f) => {
+            {features.map((f) => {
               const active = scenario?.featureIds.includes(f.id) ?? false;
               return (
                 <tr
@@ -75,10 +98,10 @@ export default function FeatureMatrixLab() {
       </div>
 
       <div className="mt-12">
-        <p className="kicker">场景选择器</p>
-        <h3 className="mt-2 font-serif text-2xl">你的用法会调动哪些能力？</h3>
+        <p className="kicker">{pick(lang, FEATURES_UI.scenarioKicker)}</p>
+        <h3 className="mt-2 font-serif text-2xl">{pick(lang, FEATURES_UI.scenarioTitle)}</h3>
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {SCENARIOS.map((s) => (
+          {scenarios.map((s) => (
             <button
               key={s.id}
               type="button"
@@ -99,13 +122,13 @@ export default function FeatureMatrixLab() {
         {scenario && (
           <div className="mt-4 rounded-lg border border-ember/40 bg-ember/5 p-5">
             <p className="font-mono text-[11px] tracking-[0.15em] text-ember">
-              场景拆解 · {scenario.title}
+              {pick(lang, FEATURES_UI.scenarioBreakdown)} · {scenario.title}
             </p>
             <p className="mt-2 text-sm leading-relaxed text-ink/80">{scenario.explanation}</p>
             <p className="mt-3 font-mono text-xs text-muted">
-              主要调动：
+              {pick(lang, FEATURES_UI.mainlyUses)}
               {scenario.featureIds
-                .map((id) => FEATURES.find((f) => f.id === id)?.name)
+                .map((id) => features.find((f) => f.id === id)?.name)
                 .filter(Boolean)
                 .join(' / ')}
             </p>
@@ -114,7 +137,7 @@ export default function FeatureMatrixLab() {
       </div>
 
       <div className="mt-12 max-w-3xl">
-        <Quiz item={FEATURES_QUIZ} />
+        <Quiz item={quiz} />
       </div>
     </section>
   );

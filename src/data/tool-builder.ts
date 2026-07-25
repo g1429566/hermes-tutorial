@@ -152,3 +152,100 @@ export const CALL_STEPS = [
   '返回值必须是 JSON 字符串——registry 统一包装错误',
   '结果以 role="tool" 消息 append 进 messages，循环继续',
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const TOOL_BUILDER_INTRO_EN =
+  'A Hermes tool is one Python function plus one registry.register() call: the schema is what the model sees, ' +
+  'the handler is what the runtime invokes, and check_fn decides whether the tool can be installed in the current environment. ' +
+  'But the most common beginner mistake is not in the code — auto-discovery only imports your file; ' +
+  'unless the tool name goes into toolsets.py, the agent never sees it. Below, define the tool on the left, ' +
+  'watch tools/your_tool.py generate live on the right, then walk the JSON wrapping chain of handle_function_call with a simulated call.';
+
+export const DEFAULT_TOOL_FORM_EN: ToolBuilderForm = {
+  name: 'example_tool',
+  toolset: 'example',
+  description: 'Echoes the input text to demonstrate the registration chain.',
+  paramName: 'param',
+  paramType: 'string',
+  paramDescription: 'The input text to process.',
+  requiresEnv: 'EXAMPLE_API_KEY',
+};
+
+export const CALL_STEPS_EN: typeof CALL_STEPS = [
+  'registry looks up the schema and handler by name',
+  'check_fn (check_requirements) passes — the tool is available in this environment',
+  'The pre_tool_call plugin hook fires (can audit/intercept arguments)',
+  'handler(args, task_id=...) executes your Python function',
+  'The return value must be a JSON string — registry wraps errors uniformly',
+  'The result is appended to messages as a role="tool" message and the loop continues',
+];
+
+// 本章专属 UI 文案（表单标签、提醒段、PyRunner 标题等）
+export const TOOL_BUILDER_UI = {
+  nameLabel: { zh: '工具名 · snake_case', en: 'Tool name · snake_case' },
+  nameError: {
+    zh: '工具名必须是小写开头的 snake_case（如 web_extract）。',
+    en: 'Tool name must be snake_case starting with a lowercase letter (e.g. web_extract).',
+  },
+  envLabel: { zh: 'requires_env · 可留空', en: 'requires_env · optional' },
+  descLabel: {
+    zh: 'description · 模型靠它决定何时调用',
+    en: 'description · the model uses it to decide when to call',
+  },
+  descPlaceholder: { zh: '这个工具做什么。', en: 'What this tool does.' },
+  paramGroupLabel: { zh: '一个参数', en: 'One parameter' },
+  paramNameLabel: { zh: '参数名', en: 'Name' },
+  paramTypeLabel: { zh: '类型', en: 'Type' },
+  paramDescLabel: { zh: '参数描述', en: 'Description' },
+  paramDescPlaceholder: { zh: '这个参数是干什么的。', en: 'What this parameter is for.' },
+  previewNote: {
+    zh: '模板逐行对齐 AGENTS.md「Adding New Tools」；所有 handler 必须返回 JSON 字符串',
+    en: 'Template matches AGENTS.md "Adding New Tools" line by line; every handler must return a JSON string',
+  },
+  simulateButton: { zh: '▶ 模拟调用一次', en: '▶ Simulate one call' },
+  toolsetsKicker: { zh: '最容易漏的一步', en: 'The easiest step to miss' },
+  toolsetsBody: {
+    zh: '自动发现只负责 import 你的文件、把 schema 收进 registry；工具名不进 toolsets.py 的 TOOLSETS，agent 就永远看不见它。这一步没有自动 wiring——必须手动。',
+    en: 'Auto-discovery only imports your file and collects the schema into the registry; unless the tool name goes into TOOLSETS in toolsets.py, the agent never sees it. There is no automatic wiring for this step — it must be done manually.',
+  },
+  simKicker: { zh: '模拟调用', en: 'Simulated call' },
+  simTitle: {
+    zh: 'handle_function_call 的包装链路',
+    en: 'The wrapping chain of handle_function_call',
+  },
+  dispatchFile: { zh: 'model_tools.py · 分发入口', en: 'model_tools.py · dispatch entry' },
+  resultFileSuffix: { zh: '() 返回值', en: '() return value' },
+  resultNote: {
+    zh: 'handler 返回的是 JSON 字符串，不是 dict',
+    en: 'The handler returns a JSON string, not a dict',
+  },
+  toolMessageFile: {
+    zh: 'append 进 messages 的 tool 消息',
+    en: 'The tool message appended to messages',
+  },
+  toolMessageNote: {
+    zh: '追加不改写——prompt cache 因此保持有效',
+    en: 'Append, never rewrite — this keeps the prompt cache valid',
+  },
+  runKicker: { zh: '真实运行', en: 'Run for real' },
+  runTitle: {
+    zh: '不止模拟——在浏览器里真跑一次',
+    en: 'Beyond simulation — actually run it in the browser',
+  },
+  runBody: {
+    zh: '下面的沙箱代码 = 一个最小 registry stub（顶替真实的 tools/registry.py）+ 你刚写的工具文件 + 一次 handler 分发。点「运行」，在浏览器里的 CPython 中看注册信息和 handler 真实返回的 JSON 字符串——可以随手改代码再跑。',
+    en: 'The sandbox code below = a minimal registry stub (standing in for the real tools/registry.py) + the tool file you just wrote + one handler dispatch. Hit "Run" to see the registration info and the JSON string the handler actually returns, in CPython running in your browser — feel free to tweak the code and run again.',
+  },
+  pyRunnerTitleSuffix: { zh: ' · Pyodide 沙箱', en: ' · Pyodide sandbox' },
+  pyRunnerNote: {
+    zh: '运行时：Pyodide（CPython WebAssembly），本地 vendored，完全离线',
+    en: 'Runtime: Pyodide (CPython WebAssembly), vendored locally, fully offline',
+  },
+  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookTitle: { zh: '一句话记住加工具', en: 'Adding a tool in one sentence' },
+  hookBody: {
+    zh: 'import 即注册，toolset 才暴露；handler 永远返回 json.dumps。——文件会被自动发现， 但暴露给 agent 是你的手动决定。',
+    en: 'Import registers, toolsets expose; handlers always return json.dumps. — Files are auto-discovered, but exposing them to the agent is your manual decision.',
+  },
+};

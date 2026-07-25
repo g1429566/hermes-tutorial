@@ -98,3 +98,119 @@ export const CRON_HARDENING: { title: string; desc: string }[] = [
 ];
 
 export const CRON_VERBS = ['list', 'add', 'edit', 'pause', 'resume', 'run', 'remove'];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const CRON_INTRO_EN =
+  'Hermes cron is not a wrapper around the system crontab — it is an agent-aware scheduler: ' +
+  'cron/jobs.py owns job storage, cron/scheduler.py owns the tick loop. The agent schedules jobs ' +
+  'for itself via the cronjob tool; users manage them with hermes cron <verb> or the /cron slash ' +
+  'command. Get fluent with the four schedule formats in the lab below.';
+
+export const SCHEDULE_FORMATS_EN: ScheduleFormat[] = [
+  {
+    id: 'duration',
+    name: 'Duration',
+    examples: ['30m', '2h', '1d'],
+    desc: 'The most direct: run once per interval from now. Good for reminders and polling.',
+  },
+  {
+    id: 'every',
+    name: 'every phrase',
+    examples: ['every 2h', 'every monday 9am'],
+    desc: 'Natural-language periods — even weekday-qualified ones like "every monday 9am".',
+  },
+  {
+    id: 'cron',
+    name: '5-field cron expression',
+    examples: ['0 9 * * *', '*/5 * * * *', '0 9 * * 1-5'],
+    desc: 'Classic crontab format (minute hour day month weekday) — the most precise. Break it down with the explainer below.',
+  },
+  {
+    id: 'iso',
+    name: 'ISO one-shot timestamp',
+    examples: ['2026-06-01T09:00:00Z'],
+    desc: 'Run-once jobs: fire at the time, with a 120-second grace window if missed.',
+  },
+];
+
+export const TICK_STEPS_EN: TickStep[] = [
+  {
+    id: 'lock',
+    label: 'Lock',
+    title: 'File lock prevents duplicate ticks',
+    body: 'The scheduler first grabs the file lock at ~/.hermes/cron/.tick.lock — when multiple hermes processes (CLI, gateway) are online, only one executes this tick, so jobs never fire twice.',
+    sourceRef: 'cron/scheduler.py',
+  },
+  {
+    id: 'due',
+    label: 'Due',
+    title: 'Find jobs that are due',
+    body: "Scan the job store and compute due jobs per schedule format. Missed recurring jobs get a catchup window (half the job period, clamped between 120 seconds and 2 hours); one-shot jobs get a 120-second grace window — a machine waking from sleep won't silently drop jobs.",
+    sourceRef: 'cron/jobs.py',
+  },
+  {
+    id: 'fire',
+    label: 'Fire',
+    title: 'Run the agent in its own session',
+    body: "The job executes in its own cron session with skip_memory=True by default (memory providers deliberately skipped). Per-job fields can override model/provider, load specific skills, run a script first and inject its stdout into the prompt, chain in the previous job's output via context_from, and set a workdir.",
+    sourceRef: 'cron/jobs.py',
+  },
+  {
+    id: 'interrupt',
+    label: 'Backstop',
+    title: '3-minute hard interrupt',
+    body: 'Cron sessions have a 3-minute hard interrupt — even a runaway agent loop cannot stall the scheduler; the next tick arrives on schedule. This is a hardening invariant and cannot be disabled.',
+    sourceRef: 'cron/scheduler.py',
+  },
+  {
+    id: 'deliver',
+    label: 'Deliver',
+    title: 'Results land in their own session, not the main one',
+    body: "Cron deliveries are not mirrored into your gateway main session — they land in their own cron session with a header/footer frame, keeping the main conversation's message-role alternation intact (which matters for prompt caching and model behavior).",
+    sourceRef: 'cron/scheduler.py',
+  },
+];
+
+export const CRON_HARDENING_EN: { title: string; desc: string }[] = [
+  {
+    title: '3-minute hard interrupt',
+    desc: 'A runaway agent loop cannot monopolize the scheduler.',
+  },
+  {
+    title: 'catchup window',
+    desc: 'Half the period, clamped to 120s–2h: recurring jobs slept through get caught up.',
+  },
+  {
+    title: 'grace window',
+    desc: 'One-shot jobs still run within 120 seconds of a missed fire time.',
+  },
+  { title: '.tick.lock file lock', desc: 'Prevents duplicate ticks across processes.' },
+  { title: 'skip_memory=True', desc: 'Cron sessions deliberately skip memory providers.' },
+  {
+    title: 'Separate cron session',
+    desc: 'Deliveries stay out of the main session, preserving message-role alternation.',
+  },
+];
+
+// CronLab 组件专属 UI 文案（通用文案见 ui-strings.ts）。
+export const CRON_LAB_UI = {
+  exprKicker: { zh: '表达式实验室', en: 'Expression Lab' },
+  exprTitle: { zh: '把 cron 表达式拆开看', en: 'Take a cron expression apart' },
+  exprPlaceholder: {
+    zh: '分 时 日 月 周，如 0 9 * * *',
+    en: 'min hour day month weekday, e.g. 0 9 * * *',
+  },
+  formatsKicker: { zh: '四种格式', en: 'Four Formats' },
+  formatsTitle: { zh: 'Hermes 接受的调度写法', en: 'Schedule syntax Hermes accepts' },
+  tickKicker: { zh: 'tick 流程', en: 'Tick Flow' },
+  tickTitle: { zh: '调度器的一拍', en: 'One beat of the scheduler' },
+  hardeningKicker: { zh: '加固不变量', en: 'Hardening Invariants' },
+  hardeningTitle: { zh: '调度器不允许发生的事', en: 'What the scheduler must never allow' },
+  footerNote: {
+    zh: (verbs: string) =>
+      `管理入口：agent 用 cronjob 工具，用户用 hermes cron <${verbs}> 或 /cron 斜杠命令。`,
+    en: (verbs: string) =>
+      `Management entry points: the agent uses the cronjob tool; users use hermes cron <${verbs}> or the /cron slash command.`,
+  },
+} as const;

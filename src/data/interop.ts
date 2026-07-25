@@ -196,3 +196,218 @@ export const DECISION_FLOW: DecisionNode[] = [
     answer: '概念上选 A2A；都在 Hermes 内部则直接用 delegate_task，不需要开放协议。',
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const INTEROP_INTRO_EN =
+  '“Interoperability” is not one thing but four different ones: writing a frontend for Hermes, ' +
+  'adding tools to the agent, embedding the agent in an editor, and letting an agent hire other ' +
+  'agents. Each maps to a different protocol / mechanism, with entirely different parties, ' +
+  'transports, and boundaries. Open each protocol card and read “what it doesn’t cover” first — ' +
+  'a protocol is defined more by its boundary than by its features.';
+
+export const PROTOCOLS_EN: ProtocolCard[] = [
+  {
+    id: 'tui-rpc',
+    name: 'TUI JSON-RPC',
+    tagline: 'Hermes’s own frontend-backend protocol',
+    parties:
+      'Node (the Ink-rendered terminal UI) ↔ Python (the tui_gateway backend, holding AIAgent + ' +
+      'tools + sessions). The Electron desktop app and the Web dashboard reuse the same backend, ' +
+      'just over WebSocket transport.',
+    payload:
+      'Requests sent from Ink: prompt.submit, session.list/resume, approval.respond, slash.exec, ' +
+      'complete.slash…; events pushed back from Python: message.delta/complete, ' +
+      'tool.start/progress/complete, approval.request, gateway.ready.',
+    transport:
+      'Newline-delimited JSON-RPC over stdio; for desktop / browser scenarios, JsonRpcGatewayClient ' +
+      'in apps/shared switches it to WebSocket.',
+    boundary:
+      'Not a public ecosystem protocol — the method catalog evolves with Hermes versions (see ' +
+      'tui_gateway/server.py) with no cross-vendor stability promise; it also carries no “tool ' +
+      'capabilities” — it is only the UI’s remote control over the session.',
+    whenToUse:
+      'When you want to write your own terminal, desktop, or Web frontend for Hermes. The division ' +
+      'of labor is clear: TypeScript owns the screen, Python owns sessions, tools, and model calls.',
+    source: [
+      { path: 'tui_gateway/server.py', note: 'full method / event catalog' },
+      { path: 'apps/shared/src/json-rpc-gateway.ts', note: 'JsonRpcGatewayClient (WS transport)' },
+    ],
+  },
+  {
+    id: 'mcp',
+    name: 'MCP',
+    tagline: 'Model Context Protocol: an open socket for tools and resources',
+    parties:
+      'Any MCP client (Claude Code, Cursor, Codex… plus Hermes’s built-in MCP client) ↔ an MCP ' +
+      'server. Hermes stands on both sides: as a server it exposes its messaging channels to other ' +
+      'agents; as a client it consumes external MCP tools.',
+    payload:
+      'Tool calls and resource reads. hermes mcp serve exposes all-platform messaging sessions as ' +
+      '10 tools: conversations_list, conversation_get, messages_read, attachments_fetch, ' +
+      'events_poll, events_wait, messages_send, permissions_list_open, permissions_respond, plus ' +
+      'the Hermes-specific channels_list.',
+    transport:
+      'stdio (per the MCP spec, JSON-RPC messages); on the Hermes side the mcp SDK’s FastMCP hosts ' +
+      'the service, entry point hermes mcp serve.',
+    boundary:
+      'Only “capability exposure” — no agent loop, session rendering, or UI. There is no agent ' +
+      'inside an MCP server, only tools and resources.',
+    whenToUse:
+      'When adding a capability to the agent that any MCP host can reuse. AGENTS.md’s extension ' +
+      'ladder is explicit: new capabilities should first become an MCP server in the catalog, not ' +
+      'be stuffed into the core toolset (zero core schema bloat).',
+    source: [
+      { path: 'mcp_serve.py', note: 'hermes mcp serve: messaging channels → MCP tool bridge' },
+    ],
+  },
+  {
+    id: 'acp',
+    name: 'ACP',
+    tagline: 'Agent Client Protocol: editor ↔ agent',
+    parties:
+      'An editor client (VS Code / Zed / JetBrains) ↔ an agent process. acp_adapter wraps Hermes ' +
+      'as an ACP server, and the editor is the client.',
+    payload:
+      'Editor-side session primitives: prompt submission, streamed message / thought chunks ' +
+      '(AgentMessageChunk / AgentThoughtChunk), available commands (AvailableCommandsUpdate), ' +
+      'authentication and permission approvals (AuthenticateResponse, edit approval), etc.',
+    transport:
+      'JSON-RPC over stdio — entry.py deliberately writes logs to stderr, reserving all of stdout ' +
+      'for the ACP transport. Launch via hermes acp / hermes-acp / uvx "hermes-agent[acp]".',
+    boundary:
+      'The direction is opposite to MCP: ACP is “client calls agent,” MCP is “agent calls ' +
+      'capability.” ACP exposes no tools to other agents and is not an agent-to-agent protocol.',
+    whenToUse:
+      'When you want users to talk to Hermes directly inside an editor and let it read and write ' +
+      'code. acp_registry/agent.json is the distribution metadata submitted to the ACP registry.',
+    source: [
+      {
+        path: 'acp_adapter/',
+        note: 'server.py / session.py / entry.py… the ACP server implementation',
+      },
+      {
+        path: 'acp_registry/agent.json',
+        note: 'registry distribution metadata (id, version, uvx entry)',
+      },
+    ],
+  },
+  {
+    id: 'a2a',
+    name: 'A2A',
+    tagline: 'Agent-to-Agent: inter-agent interop (concept)',
+    parties:
+      'Two mutually independent agents — possibly owned by different organizations and running on ' +
+      'different vendors’ stacks. Capabilities are declared via an Agent Card, and collaboration is ' +
+      'by “task,” not “message.”',
+    payload:
+      'Task delegation and artifact exchange: one agent hands a well-defined task to another and ' +
+      'receives task status and artifacts back.',
+    transport:
+      'An open protocol over HTTP(S) (JSON-RPC-style messages) — cross-process, cross-network, cross-organization is the design premise.',
+    boundary:
+      'An honest disclaimer: Hermes does not implement A2A today. Hermes’s inter-agent collaboration ' +
+      'happens in-process — delegate_task spawns child agents (isolated context + terminal session, ' +
+      'with bounded concurrency and depth) over no open protocol. This card is a conceptual ' +
+      'comparison, not a feature preview.',
+    whenToUse:
+      'When the collaborator is “someone else’s agent” and you can’t share a process or codebase. ' +
+      'If both sides live inside Hermes, delegate_task is the simpler answer that already has ' +
+      'timeouts and isolation.',
+    source: [
+      {
+        path: '(no Hermes implementation)',
+        note: 'cf. tools/delegate_tool.py: in-process delegation',
+      },
+    ],
+  },
+];
+
+export const COMPARE_TABLE_EN: CompareRow[] = [
+  {
+    dimension: 'Parties',
+    cells: [
+      'Hermes frontend ↔ Hermes backend',
+      'MCP client ↔ MCP server',
+      'Editor ↔ agent process',
+      'Independent agent ↔ independent agent',
+    ],
+  },
+  {
+    dimension: 'Payload',
+    cells: [
+      'Session requests + UI event stream',
+      'Tool calls + resource reads',
+      'Editor session primitives + streamed chunks',
+      'Task delegation + artifacts',
+    ],
+  },
+  {
+    dimension: 'Transport',
+    cells: [
+      'stdio newline-delimited JSON-RPC (WS for desktop / Web)',
+      'stdio (MCP spec)',
+      'stdio JSON-RPC',
+      'Open protocol over HTTP(S)',
+    ],
+  },
+  {
+    dimension: 'Not included',
+    cells: [
+      'Tool capabilities, cross-vendor promises',
+      'Agent loop and UI',
+      'Tool exposure, inter-agent collaboration',
+      'Not implemented in Hermes (concept only)',
+    ],
+  },
+  {
+    dimension: 'When to use',
+    cells: [
+      'Writing your own frontend for Hermes',
+      'Adding reusable capabilities to an agent',
+      'Using Hermes inside an editor',
+      'Cross-org / cross-vendor agent collaboration',
+    ],
+  },
+];
+
+export const DECISION_FLOW_EN: DecisionNode[] = [
+  {
+    question: 'Adding tools or resources to an agent?',
+    answer:
+      'Choose MCP — new capabilities should first become an MCP server in the catalog, not bloat the core toolset.',
+  },
+  {
+    question: 'Embedding the agent in an editor (VS Code / Zed / JetBrains)?',
+    answer: 'Choose ACP — acp_adapter wraps Hermes as an ACP server and the editor is the client.',
+  },
+  {
+    question: 'Writing your own terminal / desktop UI for Hermes?',
+    answer:
+      'Choose TUI JSON-RPC — TypeScript owns the screen, Python owns sessions; the method catalog lives in tui_gateway/server.py.',
+  },
+  {
+    question: 'Making two mutually independent agents collaborate?',
+    answer:
+      'Conceptually choose A2A; if both are inside Hermes, just use delegate_task — no open protocol needed.',
+  },
+];
+
+// InteropLab 专属 UI 文案（中英对）。
+export const INTEROP_UI = {
+  parties: { zh: '参与方', en: 'Parties' },
+  payload: { zh: '传递内容', en: 'Payload' },
+  transport: { zh: '传输方式', en: 'Transport' },
+  boundary: { zh: '不包括什么（边界）', en: 'What’s not covered (boundary)' },
+  whenToUse: { zh: '什么时候用', en: 'When to use' },
+  sourceHeading: { zh: 'Hermes 中的源码位置', en: 'Source locations in Hermes' },
+  tableKicker: { zh: '总结', en: 'SUMMARY' },
+  tableTitle: { zh: '一张表看清四个协议', en: 'Four protocols, one table' },
+  dimension: { zh: '维度', en: 'Dimension' },
+  highlightNote: {
+    zh: '当前选中的协议列已高亮。',
+    en: 'The selected protocol’s column is highlighted.',
+  },
+  decisionKicker: { zh: '决策', en: 'DECISION' },
+  decisionTitle: { zh: '什么时候选哪个', en: 'Which one to pick, when' },
+};

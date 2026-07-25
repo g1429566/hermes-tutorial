@@ -1,5 +1,7 @@
 # Hermes Agent 学习教程
 
+**中文** | [English](README.en.md)
+
 [![CI](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml/badge.svg)](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
 ![React](https://img.shields.io/badge/React-19-149eca)
@@ -11,8 +13,8 @@
 
 ## 效果预览
 
-| 首页（M0 · 先建立直觉） | 交互实验室（M1 · Agent 主循环） |
-| --- | --- |
+| 首页（M0 · 先建立直觉）              | 交互实验室（M1 · Agent 主循环）           |
+| ------------------------------------ | ----------------------------------------- |
 | ![首页](.github/screenshot-home.png) | ![交互实验室](.github/screenshot-lab.png) |
 
 ## 简介
@@ -28,19 +30,20 @@
 
 ## 课程结构
 
-| 模块 | 主题 | 章数 |
-| ---- | ---------------- | ---- |
-| M0 | 认识 Hermes | 4 |
-| M1 | 深入原理 | 14 |
-| M2 | 基于原理构建 | 5 |
-| M3 | 面试冲刺 | 4 |
-| M4 | 扩展与前沿 | 2 |
-| M5 | Agent 核心补全 | 4 |
+| 模块 | 主题           | 章数 |
+| ---- | -------------- | ---- |
+| M0   | 认识 Hermes    | 4    |
+| M1   | 深入原理       | 14   |
+| M2   | 基于原理构建   | 5    |
+| M3   | 面试冲刺       | 4    |
+| M4   | 扩展与前沿     | 2    |
+| M5   | Agent 核心补全 | 4    |
 
 M5 覆盖上下文压缩与 checkpoint、模型路由与凭据池、多模态工具、批处理与评测。
 
 ## 特性
 
+- 中英双语界面与内容（默认英文），导航栏一键切换，选择持久化
 - 33 个交互实验室（lab），每章一个可动手操作的组件
 - 学习进度存 `localStorage`：版本化 key，支持导出 / 导入 / v1 迁移 / 重置
 - Hash 路由，纯静态部署到任意静态服务器即可使用
@@ -85,7 +88,7 @@ src/
   components/      # CourseNav / ChapterRenderer / Quiz / labs/ 各章交互实验室
   data/            # 33 章元数据 + 各章内容数据（类型化 TS）
   hooks/           # useChapter（hash 路由）/ useProgress（进度订阅）
-  lib/             # progress v1/v2、assessment、cron-explain、judge、skill-validate
+  lib/             # i18n、progress v1/v2、assessment、cron-explain、judge、skill-validate
 scripts/           # serve.mjs（静态服务器）/ setup-pyodide.mjs（vendor Pyodide）
 tests/             # Vitest 单元测试
 ```

@@ -93,3 +93,100 @@ export const CHECKPOINT_LAYOUT = `~/.hermes/checkpoints/
         indexes/<hash16>      # 每个项目一个 index
         projects/<hash16>.json  # {workdir, created_at, last_touch}
     .last_prune               # 自动清理幂等标记`;
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const COMPRESSION_INTRO_EN =
+  'Chapter 04 laid down an iron rule: never change past context mid-conversation — the sole ' +
+  'exception is context compression. This chapter takes that “sole exception” apart: when it ' +
+  'triggers, how it compresses, and why touching the context is safe here; plus its invisible ' +
+  'partner, the checkpoint — the snapshot quietly taken before the agent touches your files.';
+
+export const COMPRESSION_STEPS_EN: CompressionStep[] = [
+  {
+    id: 'probe',
+    label: 'Feasibility probe',
+    title: 'Verify the compression model is big enough at startup',
+    body: 'check_compression_model_feasibility probes the configured auxiliary compression model at startup: if its context window can’t hold the main model’s compression threshold, it warns and, where possible, automatically lowers the session threshold; an auxiliary model below MINIMUM_CONTEXT_LENGTH is hard-rejected. Compression is a backstop — you can’t discover the model is too small at the moment you need it.',
+    sourceRef: 'agent/conversation_compression.py',
+  },
+  {
+    id: 'prune',
+    label: 'Tool output pruning',
+    title: 'Cheap pre-cleaning first',
+    body: 'Before calling the LLM, run a token-free pre-cleaning pass: prune verbose tool outputs. Much of the context bulk is inflated by tool results anyway — reclaim the cheap wins first, and save the expensive summarization for the parts that truly need understanding.',
+    sourceRef: 'agent/context_compressor.py',
+  },
+  {
+    id: 'summarize',
+    label: 'Structured summary',
+    title: 'The auxiliary model compresses the middle, head and tail protected',
+    body: 'The compressor uses a cheap auxiliary model to summarize the “middle” of the conversation, protecting the head (system prompt / initial instructions) and tail (recent context) verbatim. The summary follows a structured template: it tracks Resolved / Pending issues, and historical sections get “for reference only” headings so they aren’t read as current instructions; successive compressions update the summary iteratively instead of starting over, and the summary budget scales with the proportion of content being compressed.',
+    sourceRef: 'agent/context_compressor.py',
+  },
+  {
+    id: 'split',
+    label: 'Session split',
+    title: 'SQLite session split, session_id rotation',
+    body: 'compress_context performs the actual compression: after the compressor runs, it splits the session in SQLite, rotates the session_id, and returns the compressed message list plus a rebuilt system prompt. This is also why compression is the “permitted exception” — it is a one-time, deliberate cache invalidation that buys back window space to keep the conversation going.',
+    sourceRef: 'agent/conversation_compression.py',
+  },
+  {
+    id: 'notify',
+    label: 'Notify the periphery',
+    title: 'Sync context engines and memory providers',
+    body: 'After compression completes, the plugin context engines (ContextEngine) and memory providers are notified — each maintains its own view of the session and must know “the message stream was swapped out,” or memory and retrieval would fall out of sync.',
+    sourceRef: 'agent/conversation_compression.py',
+  },
+];
+
+export const COMPRESSION_EXTRAS_EN: typeof COMPRESSION_EXTRAS = [
+  {
+    title: 'Oversized image self-rescue',
+    body: 'try_shrink_image_parts_in_messages: when a provider reports “image too large” (e.g. Anthropic’s 5 MB limit), re-encode the data:image/...;base64 parts in the messages to a smaller size and retry — the text history is untouched, only the images are slimmed down.',
+  },
+  {
+    title: 'Why it alone may change the context',
+    body: 'Prompt cache invalidates by prefix. Compression deliberately swaps out “the prefix itself” as a one-time invalidation: pay one full recompute, and get back a short context that stays cheap every turn after. Any other change (swapping tools, rewriting history) is pure loss.',
+  },
+];
+
+export const CHECKPOINT_INTRO_EN =
+  'A checkpoint is not a tool — the LLM never sees it. It is transparent infrastructure: every ' +
+  'time the agent is about to touch your files, the system quietly snapshots the working ' +
+  'directory, ready to roll back at any moment.';
+
+export const CHECKPOINT_FACTS_EN: typeof CHECKPOINT_FACTS = [
+  {
+    title: 'When it triggers',
+    body: 'Automatic snapshots before file-changing operations: write_file, patch, and terminal with destructive flags. At most once per conversation turn — no burst of snapshots within a single turn. Controlled by the checkpoints config option or the --checkpoints CLI flag.',
+  },
+  {
+    title: 'A single shared shadow store',
+    body: 'All projects share one git object store (~/.hermes/checkpoints/store): git’s content addressing dedupes naturally, so adding a worktree costs nearly zero. The early design used one shadow repo per project — a dozen worktrees would burn ~500 MB in duplicated objects.',
+  },
+  {
+    title: 'Never pollutes your project',
+    body: 'It operates via the GIT_DIR + GIT_WORK_TREE + GIT_INDEX_FILE trio, so no git state leaks into your project directory — your .git is completely unaware the snapshots exist.',
+  },
+  {
+    title: 'Automatic cleanup',
+    body: 'prune_checkpoints deletes refs whose working directory no longer exists (orphaned) or that exceed retention_days (expired), then runs git gc to reclaim objects; there’s also a capacity pass: when the store exceeds max_total_size_mb, projects are dropped oldest-first.',
+  },
+];
+
+// CompressionLab 专属 UI 文案（中英对）。
+export const COMPRESSION_UI = {
+  stepsKicker: { zh: '压缩流程', en: 'COMPRESSION FLOW' },
+  stepsTitle: { zh: '唯一被允许的上下文变更', en: 'The only context change that’s allowed' },
+  checkpointKicker: { zh: '隐形搭档', en: 'THE INVISIBLE PARTNER' },
+  checkpointTitle: {
+    zh: 'Checkpoint：改文件前的快照',
+    en: 'Checkpoint: a snapshot before touching files',
+  },
+  layoutLines: { zh: '存储布局', en: 'Storage layout' },
+  layoutNote: {
+    zh: '单一共享对象库：git 内容寻址跨项目去重；GIT_DIR/GIT_WORK_TREE 隔离，不污染你的 .git',
+    en: 'A single shared object store: git content addressing dedupes across projects; GIT_DIR/GIT_WORK_TREE isolation keeps your .git untouched',
+  },
+};

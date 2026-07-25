@@ -3,18 +3,26 @@
 import { useState } from 'react';
 import {
   CURATOR_HOOK,
+  CURATOR_HOOK_EN,
   CURATOR_INTRO,
+  CURATOR_INTRO_EN,
   CURATOR_IRON_RULES,
+  CURATOR_IRON_RULES_EN,
   CURATOR_SIM_CONFIG,
   CURATOR_SIM_SKILLS,
+  CURATOR_SIM_SKILLS_EN,
   CURATOR_STATES,
+  CURATOR_STATES_EN,
+  CURATOR_UI,
   CURATOR_USAGE_FIELDS,
+  CURATOR_USAGE_FIELDS_EN,
   type CuratorSimSkill,
   type CuratorStateId,
 } from '@/data/skills';
 import { CodeBlock, SectionHeading } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick, type Lang } from '@/lib/i18n';
 
 // Chapter 06「技能系统（下）· 策展器」：策展器状态机可视化。
 // 上：active → stale → archived 节点图（pinned 为正交豁免态），点击节点看逻辑与源码；
@@ -31,31 +39,31 @@ interface Decision {
 // 判定逻辑对齐 agent/curator.py 的自动状态流转：pinned / 非 agent 创建跳过 →
 // 锚点 ≤ archive 线归档 → ≤ stale 线标 stale → 重新活跃的 stale 技能 reactivate →
 // 从未使用且年幼的技能留宽限地板。
-function judge(skill: CuratorSimSkill): Decision {
+function judge(skill: CuratorSimSkill, lang: Lang): Decision {
   const { staleAfterDays, archiveAfterDays } = CURATOR_SIM_CONFIG;
   const anchor = skill.lastActivityDays;
 
   if (skill.createdBy !== 'agent') {
     return {
       after: skill.state,
-      reason: 'created_by ≠ "agent"——bundled / 用户技能策展器无权触碰',
+      reason: pick(lang, CURATOR_UI.reasonNotAgent),
       changed: false,
     };
   }
   if (skill.pinned) {
-    return { after: skill.state, reason: 'pinned——跳过一切自动流转与 LLM 评审', changed: false };
+    return { after: skill.state, reason: pick(lang, CURATOR_UI.reasonPinned), changed: false };
   }
   if (skill.useCount === 0 && anchor < staleAfterDays) {
     return {
       after: skill.state,
-      reason: `从未使用且创建仅 ${anchor} 天——宽限地板：没有使用证据 ≠ 该归档`,
+      reason: pick(lang, CURATOR_UI.reasonGrace)(anchor),
       changed: false,
     };
   }
   if (anchor >= archiveAfterDays) {
     return {
       after: 'archived',
-      reason: `${anchor} 天无活动 ≥ archive_after_days（${archiveAfterDays}）——归档到 .archive/（可恢复）`,
+      reason: pick(lang, CURATOR_UI.reasonArchive)(anchor, archiveAfterDays),
       changed: true, // 样本初始态仅 active|stale，归档必为变化
     };
   }
@@ -63,20 +71,24 @@ function judge(skill: CuratorSimSkill): Decision {
     if (skill.state === 'active') {
       return {
         after: 'stale',
-        reason: `${anchor} 天无活动 ≥ stale_after_days（${staleAfterDays}）——标记 stale`,
+        reason: pick(lang, CURATOR_UI.reasonMarkStale)(anchor, staleAfterDays),
         changed: true,
       };
     }
-    return { after: 'stale', reason: `${anchor} 天无活动——维持 stale，等待归档线`, changed: false };
+    return {
+      after: 'stale',
+      reason: pick(lang, CURATOR_UI.reasonStayStale)(anchor),
+      changed: false,
+    };
   }
   if (skill.state === 'stale') {
     return {
       after: 'active',
-      reason: `最近活动仅 ${anchor} 天前，新于 stale 线——reactivate 回 active`,
+      reason: pick(lang, CURATOR_UI.reasonReactivate)(anchor),
       changed: true,
     };
   }
-  return { after: 'active', reason: `最近活动仅 ${anchor} 天前——保持健康`, changed: false };
+  return { after: 'active', reason: pick(lang, CURATOR_UI.reasonHealthy)(anchor), changed: false };
 }
 
 const STATE_STYLE: Record<CuratorStateId, { badge: string; dot: string }> = {
@@ -97,6 +109,13 @@ function StateBadge({ state }: { state: CuratorStateId }) {
 }
 
 export default function SkillCuratorLab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? CURATOR_INTRO_EN : CURATOR_INTRO;
+  const states = lang === 'en' ? CURATOR_STATES_EN : CURATOR_STATES;
+  const usageFields = lang === 'en' ? CURATOR_USAGE_FIELDS_EN : CURATOR_USAGE_FIELDS;
+  const ironRules = lang === 'en' ? CURATOR_IRON_RULES_EN : CURATOR_IRON_RULES;
+  const simSkills = lang === 'en' ? CURATOR_SIM_SKILLS_EN : CURATOR_SIM_SKILLS;
+  const hook = lang === 'en' ? CURATOR_HOOK_EN : CURATOR_HOOK;
   const progress = useProgress();
   const saved = progress.labResults['lab:skill-curator'];
   const savedNode =
@@ -110,10 +129,10 @@ export default function SkillCuratorLab() {
   const [nodeId, setNodeId] = useState<CuratorStateId>(savedNode);
   const [simRun, setSimRun] = useState(savedSim);
 
-  const node = CURATOR_STATES.find((n) => n.id === nodeId) ?? CURATOR_STATES[0];
-  const flowNodes = CURATOR_STATES.filter((n) => n.id !== 'pinned');
-  const pinnedNode = CURATOR_STATES.find((n) => n.id === 'pinned') ?? CURATOR_STATES[0];
-  const decisions = CURATOR_SIM_SKILLS.map((s) => judge(s));
+  const node = states.find((n) => n.id === nodeId) ?? states[0];
+  const flowNodes = states.filter((n) => n.id !== 'pinned');
+  const pinnedNode = states.find((n) => n.id === 'pinned') ?? states[0];
+  const decisions = simSkills.map((s) => judge(s, lang));
   const changedCount = decisions.filter((d) => d.changed).length;
 
   function selectNode(id: CuratorStateId) {
@@ -126,7 +145,7 @@ export default function SkillCuratorLab() {
     setLabResult('lab:skill-curator', { node: nodeId, sim: run });
   }
 
-  function nodeButton(n: (typeof CURATOR_STATES)[number], dashed: boolean) {
+  function nodeButton(n: (typeof states)[number], dashed: boolean) {
     const active = n.id === node.id;
     return (
       <button
@@ -151,9 +170,12 @@ export default function SkillCuratorLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{CURATOR_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
-      <SectionHeading kicker="状态机" title="active → stale → archived（pinned 豁免）" />
+      <SectionHeading
+        kicker={pick(lang, CURATOR_UI.stateKicker)}
+        title={pick(lang, CURATOR_UI.stateTitle)}
+      />
 
       {/* 节点图：flex + 箭头字符自绘，不引库 */}
       <div className="mt-6 rounded-lg border border-line bg-paper-deep p-5">
@@ -165,8 +187,8 @@ export default function SkillCuratorLab() {
                   <span className="font-mono text-lg text-muted">→</span>
                   <span className="font-mono text-[10px] text-muted">
                     {i === 1
-                      ? `${CURATOR_SIM_CONFIG.staleAfterDays} 天无活动`
-                      : `${CURATOR_SIM_CONFIG.archiveAfterDays} 天无活动`}
+                      ? pick(lang, CURATOR_UI.daysIdle)(CURATOR_SIM_CONFIG.staleAfterDays)
+                      : pick(lang, CURATOR_UI.daysIdle)(CURATOR_SIM_CONFIG.archiveAfterDays)}
                   </span>
                 </div>
               )}
@@ -177,12 +199,12 @@ export default function SkillCuratorLab() {
         <div className="mt-3 flex items-center gap-3 pl-1">
           <span className="font-mono text-lg text-muted">↩</span>
           <span className="font-mono text-[10px] text-muted">
-            stale 期间重新使用 → reactivate 回 active
+            {pick(lang, CURATOR_UI.reactivateNote)}
           </span>
         </div>
         <div className="mt-4 border-t border-line pt-4">
           <p className="mb-2 font-mono text-[11px] tracking-[0.15em] text-muted">
-            豁免态（与 state 正交的布尔标记，不是第四个状态）
+            {pick(lang, CURATOR_UI.exemptHeading)}
           </p>
           {nodeButton(pinnedNode, true)}
         </div>
@@ -195,7 +217,9 @@ export default function SkillCuratorLab() {
         </p>
         <h3 className="mt-2 font-serif text-2xl md:text-3xl">{node.name}</h3>
         <p className="mt-4 leading-relaxed text-white/75">{node.body}</p>
-        <h4 className="mt-7 font-mono text-xs tracking-[0.15em] text-white/50">源码位置</h4>
+        <h4 className="mt-7 font-mono text-xs tracking-[0.15em] text-white/50">
+          {pick(lang, CURATOR_UI.sourcesHeading)}
+        </h4>
         <ul className="mt-2.5 space-y-2">
           {node.sources.map((s) => (
             <li key={s.path} className="text-sm">
@@ -208,14 +232,17 @@ export default function SkillCuratorLab() {
         </ul>
       </div>
 
-      <SectionHeading kicker="遥测" title=".usage.json：策展器的眼睛" />
+      <SectionHeading
+        kicker={pick(lang, CURATOR_UI.telemetryKicker)}
+        title={pick(lang, CURATOR_UI.telemetryTitle)}
+      />
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-line bg-white p-5">
           <p className="font-mono text-[11px] tracking-[0.15em] text-muted">
-            ~/.hermes/skills/.usage.json · 每技能一条记录（tools/skill_usage.py）
+            {pick(lang, CURATOR_UI.usageCaption)}
           </p>
           <ul className="mt-3 space-y-2">
-            {CURATOR_USAGE_FIELDS.map((f) => (
+            {usageFields.map((f) => (
               <li key={f.name} className="text-sm">
                 <code className="rounded bg-paper-deep px-1.5 py-0.5 font-mono text-xs text-ember">
                   {f.name}
@@ -238,16 +265,21 @@ export default function SkillCuratorLab() {
     "created_by": "agent"
   }
 }`}
-          note='state 取值 active / stale / archived；created_by == "agent" 才会被策展'
+          note={pick(lang, CURATOR_UI.usageNote)}
         />
       </div>
 
-      <SectionHeading kicker="模拟" title="触发一次策展检查" />
+      <SectionHeading
+        kicker={pick(lang, CURATOR_UI.simKicker)}
+        title={pick(lang, CURATOR_UI.simTitle)}
+      />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted">
-        按下按钮，对下面 7 个样本技能跑一轮自动流转判定（规则与 agent/curator.py
-        一致；配置取默认值： stale_after_days={CURATOR_SIM_CONFIG.staleAfterDays}
-        、archive_after_days=
-        {CURATOR_SIM_CONFIG.archiveAfterDays}、每 {CURATOR_SIM_CONFIG.intervalHours / 24} 天一轮）。
+        {pick(lang, CURATOR_UI.simDesc)(
+          simSkills.length,
+          CURATOR_SIM_CONFIG.staleAfterDays,
+          CURATOR_SIM_CONFIG.archiveAfterDays,
+          CURATOR_SIM_CONFIG.intervalHours / 24,
+        )}
       </p>
       <div className="mt-4 flex items-center gap-3">
         <button
@@ -255,7 +287,7 @@ export default function SkillCuratorLab() {
           onClick={() => runSim(true)}
           className="rounded-lg border border-ink bg-ink px-5 py-2.5 font-mono text-sm text-acid hover:opacity-90"
         >
-          ▶ 触发一次策展检查
+          {pick(lang, CURATOR_UI.runButton)}
         </button>
         {simRun && (
           <>
@@ -264,10 +296,10 @@ export default function SkillCuratorLab() {
               onClick={() => runSim(false)}
               className="rounded border border-line px-3 py-1.5 font-mono text-xs text-muted hover:border-ink hover:text-ink"
             >
-              重置
+              {pick(lang, CURATOR_UI.reset)}
             </button>
             <span className="font-mono text-xs text-muted">
-              检查 {CURATOR_SIM_SKILLS.length} 个技能 · {changedCount} 个发生流转
+              {pick(lang, CURATOR_UI.simSummary)(simSkills.length, changedCount)}
             </span>
           </>
         )}
@@ -277,17 +309,17 @@ export default function SkillCuratorLab() {
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead>
             <tr className="border-b border-line font-mono text-[11px] tracking-[0.1em] text-muted">
-              <th className="px-4 py-2.5">技能</th>
+              <th className="px-4 py-2.5">{pick(lang, CURATOR_UI.thSkill)}</th>
               <th className="px-4 py-2.5">created_by</th>
               <th className="px-4 py-2.5">pinned</th>
               <th className="px-4 py-2.5">use_count</th>
-              <th className="px-4 py-2.5">最近活动</th>
-              <th className="px-4 py-2.5">当前状态</th>
-              {simRun && <th className="px-4 py-2.5">判定结果</th>}
+              <th className="px-4 py-2.5">{pick(lang, CURATOR_UI.thLastActivity)}</th>
+              <th className="px-4 py-2.5">{pick(lang, CURATOR_UI.thState)}</th>
+              {simRun && <th className="px-4 py-2.5">{pick(lang, CURATOR_UI.thDecision)}</th>}
             </tr>
           </thead>
           <tbody>
-            {CURATOR_SIM_SKILLS.map((s, i) => {
+            {simSkills.map((s, i) => {
               const d = decisions[i];
               return (
                 <tr key={s.name} className="border-b border-line/60 last:border-0">
@@ -300,7 +332,9 @@ export default function SkillCuratorLab() {
                     {s.pinned ? '📌 true' : 'false'}
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs">{s.useCount}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs">{s.lastActivityDays} 天前</td>
+                  <td className="px-4 py-2.5 font-mono text-xs">
+                    {pick(lang, CURATOR_UI.daysAgo)(s.lastActivityDays)}
+                  </td>
                   <td className="px-4 py-2.5">
                     <StateBadge state={s.state} />
                   </td>
@@ -308,7 +342,11 @@ export default function SkillCuratorLab() {
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <StateBadge state={d.after} />
-                        {d.changed && <span className="font-mono text-xs text-ember">← 流转</span>}
+                        {d.changed && (
+                          <span className="font-mono text-xs text-ember">
+                            {pick(lang, CURATOR_UI.transitioned)}
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 max-w-sm text-xs leading-relaxed text-muted">{d.reason}</p>
                     </td>
@@ -320,20 +358,28 @@ export default function SkillCuratorLab() {
         </table>
       </div>
 
-      <SectionHeading kicker="铁律" title="curator 永远不做这三件事" />
+      <SectionHeading
+        kicker={pick(lang, CURATOR_UI.rulesKicker)}
+        title={pick(lang, CURATOR_UI.rulesTitle)}
+      />
       <div className="mt-6 grid gap-3 md:grid-cols-3">
-        {CURATOR_IRON_RULES.map((r, i) => (
+        {ironRules.map((r, i) => (
           <div key={r.title} className="rounded-lg border border-line bg-white p-5">
-            <p className="font-mono text-[11px] tracking-[0.15em] text-ember">铁律 {i + 1}</p>
+            <p className="font-mono text-[11px] tracking-[0.15em] text-ember">
+              {pick(lang, CURATOR_UI.ruleLabel)(i + 1)}
+            </p>
             <h4 className="mt-2 font-medium">{r.title}</h4>
             <p className="mt-2 text-sm leading-relaxed text-ink/70">{r.body}</p>
           </div>
         ))}
       </div>
 
-      <SectionHeading kicker="记忆钩子" title="一句话记住策展器" />
+      <SectionHeading
+        kicker={pick(lang, CURATOR_UI.hookKicker)}
+        title={pick(lang, CURATOR_UI.hookTitle)}
+      />
       <p className="mt-3 max-w-3xl rounded-lg border border-acid bg-acid/10 p-5 font-mono text-sm leading-relaxed">
-        {CURATOR_HOOK}
+        {hook}
       </p>
     </section>
   );

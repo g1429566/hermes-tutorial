@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { HERO, HERO_EN, TERMINAL_LINES, TERMINAL_LINES_EN, type TerminalLineKind } from '@/data/hero';
+import {
+  HERO,
+  HERO_EN,
+  TERMINAL_LINES,
+  TERMINAL_LINES_EN,
+  type TerminalLineKind,
+} from '@/data/hero';
 import { useLang } from '@/lib/i18n';
 
 interface HeroChapterProps {

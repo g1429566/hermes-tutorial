@@ -226,3 +226,240 @@ export function wrapTerminalLines(text: string, width: number): string[] {
   }
   return lines;
 }
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const TUI_INTRO_EN =
+  'hermes --tui (or HERMES_TUI=1) launches a terminal UI that fully replaces the classic ' +
+  'prompt_toolkit CLI. It is not one process but two: a Node Ink frontend owns the "screen", ' +
+  'a Python tui_gateway backend owns the "session". They communicate over newline-delimited ' +
+  'JSON-RPC on stdio — requests go out from Ink, events stream back from Python. ' +
+  'Click each node in the process diagram below to see who owns what.';
+
+/* ── ① 进程模型 ─────────────────────────────────────────────────── */
+export const TUI_PROCESS_NODES_EN: TuiProcessNode[] = [
+  {
+    id: 'ink',
+    name: 'Node (Ink) frontend',
+    role: 'TypeScript owns the screen',
+    owns: [
+      'Renders the transcript (conversation history), composer (input box), and prompts (approval/clarification overlays)',
+      'Renders the activity stream (tool activity) and theme skins',
+      'Handles built-in slash commands locally (/help, /quit, /clear, /resume, /copy, /paste, etc.)',
+      'Autocomplete for slash commands and paths (useCompletion hook)',
+    ],
+    files: [
+      { path: 'ui-tui/src/app.tsx', note: 'Frontend entry and local slash-command handling' },
+      { path: 'ui-tui/src/components/messageLine.tsx', note: 'Conversation line rendering' },
+      { path: 'ui-tui/src/components/prompts.tsx', note: 'Approval / clarification overlays' },
+      { path: 'ui-tui/src/theme.ts', note: 'Theme (where skin data lands)' },
+    ],
+  },
+  {
+    id: 'rpc',
+    name: 'stdio JSON-RPC',
+    role: 'Newline-delimited JSON-RPC over stdio',
+    owns: [
+      'Requests go out from Ink (e.g. prompt.submit, approval.respond)',
+      'Events stream back from Python (e.g. message.delta, tool.start, approval.request)',
+      'Full method / event catalog in tui_gateway/server.py',
+    ],
+    files: [
+      { path: 'tui_gateway/server.py', note: 'Full catalog of RPC methods and events' },
+      { path: 'tui_gateway/transport.py', note: 'Transport layer' },
+    ],
+  },
+  {
+    id: 'gateway',
+    name: 'Python (tui_gateway) backend',
+    role: 'Python owns sessions, tools, model calls, and slash-command logic',
+    owns: [
+      'Session lifecycle: session.list / session.resume',
+      'Slash command execution: slash.exec runs in a persistent _SlashWorker subprocess',
+      'Completion service: complete.slash / complete.path',
+      'Pushes skin data via the gateway.ready event at startup',
+    ],
+    files: [
+      { path: 'tui_gateway/server.py', note: 'Core logic including _SlashWorker' },
+      { path: 'tui_gateway/slash_worker.py', note: 'Slash-command subprocess entry' },
+    ],
+  },
+  {
+    id: 'agent',
+    name: 'AIAgent + tools + sessions',
+    role: 'The exact same agent core as the classic CLI',
+    owns: [
+      'agent loop: assemble messages → call the model → execute tools → append results (see Chapter 04)',
+      'Tool registration and execution, session persistence',
+      'The TUI is just a different "skin" — zero changes to the core',
+    ],
+    files: [
+      { path: 'run_agent.py', note: 'AIAgent main loop' },
+      { path: 'tools/', note: 'Toolset' },
+    ],
+  },
+];
+
+/* ── ② Key Surfaces（照 AGENTS.md 表格） ────────────────────────── */
+export const KEY_SURFACES_EN: KeySurface[] = [
+  {
+    id: 'chat',
+    surface: 'Chat streaming',
+    ink: 'app.tsx + messageLine.tsx',
+    gateway: 'prompt.submit → message.delta/complete',
+    note: 'The frontend submits prompt.submit; Python streams incremental text back via message.delta and closes with message.complete.',
+  },
+  {
+    id: 'tool',
+    surface: 'Tool activity',
+    ink: 'thinking.tsx',
+    gateway: 'tool.start/progress/complete',
+    note: 'Tool lifecycle events drive the "running" activity area: start, progress, complete.',
+  },
+  {
+    id: 'approval',
+    surface: 'Approvals',
+    ink: 'prompts.tsx',
+    gateway: 'approval.respond ← approval.request',
+    note: 'Dangerous-command approvals: the direction is reversed from chat — Python sends the approval.request event downstream, the frontend answers upstream with approval.respond.',
+  },
+  {
+    id: 'clarify',
+    surface: 'Clarify/sudo/secret',
+    ink: 'prompts.tsx, maskedPrompt.tsx',
+    gateway: 'clarify/sudo/secret.respond',
+    note: 'Clarifications, sudo, and secret input share one overlay family; maskedPrompt.tsx handles masked secret input.',
+  },
+  {
+    id: 'session',
+    surface: 'Session picker',
+    ink: 'sessionPicker.tsx',
+    gateway: 'session.list/resume',
+    note: 'Session picker: list past sessions and resume one.',
+  },
+  {
+    id: 'slash',
+    surface: 'Slash commands',
+    ink: 'Local handler + fallthrough',
+    gateway: 'slash.exec → _SlashWorker, command.dispatch',
+    note: 'Built-in commands are handled locally; everything else goes to Python — see "Slash Command Flow" below.',
+  },
+  {
+    id: 'completion',
+    surface: 'Completions',
+    ink: 'useCompletion hook',
+    gateway: 'complete.slash, complete.path',
+    note: 'Autocomplete as you type: slash commands via complete.slash, file paths via complete.path.',
+  },
+  {
+    id: 'theme',
+    surface: 'Theming',
+    ink: 'theme.ts + branding.tsx',
+    gateway: 'gateway.ready with skin data',
+    note: 'Skin data is pushed at startup with the gateway.ready event; the frontend renders theme and branding from it.',
+  },
+];
+
+/* ── ③ 斜杠命令流 ───────────────────────────────────────────────── */
+export const SLASH_FLOW_STEPS_EN: SlashFlowStep[] = [
+  {
+    id: 'local',
+    label: 'Local built-ins',
+    title: 'Step 1: handled locally in app.tsx',
+    body: 'Built-in commands like /help, /quit, /clear, /resume, /copy, /paste are handled entirely in the Ink frontend — no serialization, no process hop, no waiting on Python. These commands operate on the "screen" itself (clear, copy, quit), and the screen belongs to TypeScript, so the backend is simply not involved.',
+    code: {
+      file: 'ui-tui/src/app.tsx',
+      snippet: `// 内建命令：/help /quit /clear /resume /copy /paste ...
+// 在 app.tsx 本地处理，不发 RPC`,
+      note: "Commands that operate on the screen stay with the screen's owner",
+    },
+    points: [
+      'Zero RPC round-trips, instant response',
+      'Covers only commands with pure-UI semantics',
+    ],
+  },
+  {
+    id: 'worker',
+    label: 'slash.exec',
+    title: 'Step 2: executed in the _SlashWorker subprocess',
+    body: 'All other slash commands go to Python via slash.exec. tui_gateway does not run them in its own main process — it hands them to a persistent _SlashWorker subprocess (defined in tui_gateway/server.py, subprocess entry tui_gateway/slash_worker.py), so however slow a command is, it never blocks the gateway main loop.',
+    code: {
+      file: 'tui_gateway/server.py',
+      snippet: `# slash.exec → 持久 _SlashWorker 子进程
+# （子进程入口：tui_gateway/slash_worker.py）`,
+      note: 'The worker is persistent: no process startup cost between commands',
+    },
+    points: [
+      'The main gateway process is never stalled by command execution',
+      'The worker is created and reclaimed with the session',
+    ],
+  },
+  {
+    id: 'dispatch',
+    label: 'command.dispatch',
+    title: 'Step 3: command.dispatch as fallback',
+    body: 'Whatever slash.exec cannot handle falls back to command.dispatch — the gateway parses the command into a skill / alias / exec directive. Skill commands are resolved into an ordinary prompt submitted to the agent, which is why skill slash commands behave identically across all frontends (TUI, desktop).',
+    code: {
+      file: 'tui_gateway/server.py',
+      snippet: `# slash.exec 不成 → command.dispatch 兜底
+# 网关解析为 skill / alias / exec 指令`,
+      note: 'The same fallback logic also serves the desktop app (apps/desktop/)',
+    },
+    points: [
+      'Skill commands = injected as ordinary user messages',
+      'Parsing rules live centrally in the gateway, not duplicated per frontend',
+    ],
+  },
+];
+
+/* ── ④ render(width) 迷你演示 ───────────────────────────────────── */
+export const WIDTH_DEMO_EN: typeof WIDTH_DEMO = {
+  min: 24,
+  max: 72,
+  step: 4,
+  defaultWidth: 48,
+  text:
+    'TypeScript owns the screen. Python owns sessions, tools, model calls, ' +
+    'and slash command logic. The frontend owns the screen, the backend owns ' +
+    'the session — nothing between them but newline-delimited JSON-RPC.',
+  explain:
+    'Think of every terminal component as a pure function: render(width) → an array of lines. ' +
+    'Terminals have no concept of "words" — wrapping happens at display-cell boundaries, ' +
+    'which is why the text above is hard-wrapped per character. ' +
+    'When the terminal width changes (or any state changes), the laid-out line cache is ' +
+    'invalidated, the component requests a requestRender, and render(width) re-runs at the new width. ' +
+    'The ui-tui source applies the same idea: useVirtualHistory.ts invalidates the offset cache ' +
+    'with offsetVersion — change the width and every history line offset is recomputed.',
+};
+
+// TUILab 组件专属 UI 文案（通用文案见 ui-strings.ts）。
+export const TUI_LAB_UI = {
+  processKicker: { zh: '进程模型', en: 'Process Model' },
+  processTitle: { zh: '两个进程，一份职责清单', en: 'Two processes, one responsibility sheet' },
+  keyFiles: { zh: '关键源码', en: 'Key source files' },
+  surfacesKicker: { zh: 'Key Surfaces', en: 'Key Surfaces' },
+  surfacesTitle: { zh: '界面 ↔ RPC 对照表', en: 'UI ↔ RPC mapping table' },
+  surfacesHint: {
+    zh: '每一块界面能力都对应一组 Ink 组件与 gateway 方法。点击任意一行看它如何工作。',
+    en: 'Every UI capability maps to a set of Ink components and gateway methods. Click any row to see how it works.',
+  },
+  colInk: { zh: 'Ink 组件', en: 'Ink component' },
+  colGateway: { zh: 'Gateway 方法', en: 'Gateway methods' },
+  slashKicker: { zh: '斜杠命令流', en: 'Slash Command Flow' },
+  slashTitle: { zh: '一条 /command 的三级路由', en: 'The three-level routing of a /command' },
+  widthKicker: { zh: 'render(width)', en: 'render(width)' },
+  widthTitle: { zh: '宽度驱动的重渲染', en: 'Width-driven re-rendering' },
+  widthHint: {
+    zh: '拖动滑杆改变「终端宽度」，下方文本会像真实终端一样按新宽度重排。',
+    en: 'Drag the slider to change the "terminal width"; the text below reflows like a real terminal.',
+  },
+  widthAria: { zh: '终端宽度', en: 'Terminal width' },
+  renderLines: {
+    zh: (n: number) => `→ ${n} 行`,
+    en: (n: number) => `→ ${n} lines`,
+  },
+  footerNote: {
+    zh: '一句话记住 TUI：TypeScript 拥有屏幕，Python 拥有会话——中间只隔着换行分隔的 JSON-RPC。dashboard 里的聊天也不是重写，而是通过 PTY 嵌入真实的 hermes --tui。',
+    en: 'The TUI in one sentence: TypeScript owns the screen, Python owns the session — with nothing but newline-delimited JSON-RPC between them. The chat in the dashboard is not a rewrite either: it embeds the real hermes --tui via PTY.',
+  },
+} as const;

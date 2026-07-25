@@ -1,15 +1,28 @@
 'use client';
 
 import { useState } from 'react';
-import { TOPOLOGIES, TOPOLOGY_INTRO, TOPOLOGY_SCENARIOS } from '@/data/topologies';
+import {
+  TOPOLOGIES,
+  TOPOLOGIES_EN,
+  TOPOLOGY_INTRO,
+  TOPOLOGY_INTRO_EN,
+  TOPOLOGY_SCENARIOS,
+  TOPOLOGY_SCENARIOS_EN,
+  TOPOLOGY_UI,
+} from '@/data/topologies';
 import { CompareSelect, DetailPanel, SectionHeading } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick } from '@/lib/i18n';
 
 // Chapter 24「多 Agent 协作设计题」：拓扑选择器 + 场景题。
 // CompareSelect 对比五种拓扑（DetailPanel 展示六维详情 + Hermes 对应物）；
 // 场景题让用户先选拓扑再揭示推荐答案。选择与作答持久化到 labResults['lab:interview-topology']。
 export default function TopologyLab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? TOPOLOGY_INTRO_EN : TOPOLOGY_INTRO;
+  const topologies = lang === 'en' ? TOPOLOGIES_EN : TOPOLOGIES;
+  const scenarios = lang === 'en' ? TOPOLOGY_SCENARIOS_EN : TOPOLOGY_SCENARIOS;
   const progress = useProgress();
   const saved = progress.labResults['lab:interview-topology'];
   const savedTopology =
@@ -27,7 +40,7 @@ export default function TopologyLab() {
   const [topologyId, setTopologyId] = useState(savedTopology);
   const [answers, setAnswers] = useState<Record<string, string>>(savedScenarios);
 
-  const topology = TOPOLOGIES.find((t) => t.id === topologyId) ?? TOPOLOGIES[0];
+  const topology = topologies.find((t) => t.id === topologyId) ?? topologies[0];
 
   function selectTopology(id: string) {
     setTopologyId(id);
@@ -41,20 +54,20 @@ export default function TopologyLab() {
   }
 
   const rows: { label: string; value: string }[] = [
-    { label: '结构', value: topology.structure },
-    { label: '任务分发', value: topology.dispatch },
-    { label: '上下文共享', value: topology.contextSharing },
-    { label: '故障隔离', value: topology.faultIsolation },
-    { label: '适用场景', value: topology.useCases },
+    { label: pick(lang, TOPOLOGY_UI.structureLabel), value: topology.structure },
+    { label: pick(lang, TOPOLOGY_UI.dispatchLabel), value: topology.dispatch },
+    { label: pick(lang, TOPOLOGY_UI.contextLabel), value: topology.contextSharing },
+    { label: pick(lang, TOPOLOGY_UI.faultLabel), value: topology.faultIsolation },
+    { label: pick(lang, TOPOLOGY_UI.useCasesLabel), value: topology.useCases },
   ];
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{TOPOLOGY_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
       <div className="mt-8">
         <CompareSelect
-          options={TOPOLOGIES.map((t) => ({ id: t.id, name: t.name, tagline: t.tagline }))}
+          options={topologies.map((t) => ({ id: t.id, name: t.name, tagline: t.tagline }))}
           current={topology.id}
           onChange={selectTopology}
         >
@@ -81,22 +94,24 @@ export default function TopologyLab() {
         </CompareSelect>
       </div>
 
-      <SectionHeading kicker="场景题" title="轮到你了：为场景选拓扑" />
+      <SectionHeading
+        kicker={pick(lang, TOPOLOGY_UI.scenariosKicker)}
+        title={pick(lang, TOPOLOGY_UI.scenariosTitle)}
+      />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink/75">
-        先读场景，点选你认为最合适的拓扑——选完立即揭示推荐答案与理由。没有唯一正确的拓扑，
-        但每个场景都有「最省力」的那个。
+        {pick(lang, TOPOLOGY_UI.scenariosBody)}
       </p>
 
       <div className="mt-6 space-y-5">
-        {TOPOLOGY_SCENARIOS.map((s) => {
+        {scenarios.map((s) => {
           const choice = answers[s.id] ?? null;
-          const recommended = TOPOLOGIES.find((t) => t.id === s.recommended);
+          const recommended = topologies.find((t) => t.id === s.recommended);
           return (
             <div key={s.id} className="rounded-lg border border-line bg-white p-6">
               <h4 className="font-serif text-xl">{s.title}</h4>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-ink/75">{s.description}</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {TOPOLOGIES.map((t) => {
+                {topologies.map((t) => {
                   const active = choice === t.id;
                   return (
                     <button
@@ -123,7 +138,10 @@ export default function TopologyLab() {
                   }`}
                 >
                   <p className="font-mono text-[11px] tracking-[0.15em] text-muted">
-                    {choice === s.recommended ? '✓ 与推荐一致' : '推荐拓扑'} · {recommended.name}
+                    {choice === s.recommended
+                      ? pick(lang, TOPOLOGY_UI.matchRecommended)
+                      : pick(lang, TOPOLOGY_UI.recommendedLabel)}{' '}
+                    · {recommended.name}
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-ink/80">{s.reasoning}</p>
                 </div>

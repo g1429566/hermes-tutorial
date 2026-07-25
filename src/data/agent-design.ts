@@ -153,3 +153,167 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
     ],
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const AGENT_DESIGN_INTRO_EN =
+  'After M1 you have a complete parts diagram. This chapter turns it around: make a choice on each of five ' +
+  'design dimensions, and the design card on the right accumulates into an agent design document in real time — ' +
+  "every choice comes with commentary against Hermes' real trade-offs. " +
+  'There are no standard answers, only trade-offs matched to the scenario.';
+
+export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
+  {
+    id: 'loop',
+    title: 'Loop shape',
+    question: 'How does the agent loop turn?',
+    options: [
+      {
+        id: 'sync-while',
+        name: 'Synchronous while loop',
+        desc: 'One while wraps "call model → execute tools → append results" until the model returns plain text.',
+        tradeoff:
+          "Hermes' choice. Simple, step-debuggable, and interruption is just a loop condition; the cost is that concurrency requires spinning up another loop via delegation, not async inside the loop.",
+        hermesChoice: true,
+      },
+      {
+        id: 'event-driven',
+        name: 'Event-driven state machine',
+        desc: 'Everything is an event: llm.response and tool.result go into a queue, and a state machine advances.',
+        tradeoff:
+          'Naturally supports concurrency and visual tracing, but state machine complexity explodes and prefix stability for prompt caching is harder to guarantee — Hermes uses events only at the gateway layer; the loop body stays synchronous.',
+      },
+    ],
+  },
+  {
+    id: 'tools',
+    title: 'Tool surface',
+    question: 'Do tool capabilities live in the core or at the edge?',
+    options: [
+      {
+        id: 'narrow-core',
+        name: 'Narrow core + plugin edge',
+        desc: 'Very few core tools with a high bar; new capabilities grow at the edge as plugins/skills/toolsets.',
+        tradeoff:
+          "Hermes' choice (narrow waist). Every core tool costs schema volume on every API call; plugin toolsets can be toggled, costing zero schema when off.",
+        hermesChoice: true,
+      },
+      {
+        id: 'big-core',
+        name: 'Batteries-included core',
+        desc: 'All tools built into the core, ready out of the box.',
+        tradeoff:
+          "Fast to get started, but schema cost grows linearly with tool count and the model's attention gets diluted — Hermes' Contribution Rubric rejects this path outright.",
+      },
+    ],
+  },
+  {
+    id: 'memory',
+    title: 'Memory scheme',
+    question: 'How is cross-session memory stored?',
+    options: [
+      {
+        id: 'sqlite-fts5',
+        name: 'Self-hosted SQLite + FTS5',
+        desc: 'Sessions land in local SQLite with an FTS5 full-text index; LLM summaries power cross-session recall.',
+        tradeoff:
+          "Hermes' choice (hermes_state.py SessionDB). Zero external dependencies, works offline; the cost is that semantic retrieval relies on summaries rather than vectors.",
+        hermesChoice: true,
+      },
+      {
+        id: 'hosted',
+        name: 'Hosted memory service',
+        desc: 'Plug into external services like Honcho / mem0, leaving user modeling to specialized systems.',
+        tradeoff:
+          'Hermes supports this via MemoryProvider plugins (honcho/mem0/supermemory, etc.). You gain dialectic user modeling at the cost of network dependency and data leaving your domain.',
+        hermesChoice: true,
+      },
+      {
+        id: 'none',
+        name: 'No memory',
+        desc: 'Every session starts from scratch.',
+        tradeoff:
+          'Simplest and most private, but the core differentiator of "accumulating" is gone — cron sessions are deliberately this shape with skip_memory=True.',
+      },
+    ],
+  },
+  {
+    id: 'skills',
+    title: 'Skill system',
+    question: 'Do you want self-evolving skills?',
+    options: [
+      {
+        id: 'self-evolving',
+        name: 'Self-creation + curation',
+        desc: 'The agent distills skills from experience while a background curator tracks usage and archives zombie skills.',
+        tradeoff:
+          "Hermes' choice. The skill library appreciates by itself, but it must come with a curator and pinned/archive invariants, or the skill list rots into noise.",
+        hermesChoice: true,
+      },
+      {
+        id: 'static',
+        name: 'Static skill library',
+        desc: 'Only load hand-written skills; no automatic creation.',
+        tradeoff:
+          "Controllable and reviewable, but the agent never gets smarter — that's half the learning loop cut off.",
+      },
+      {
+        id: 'none',
+        name: 'No skills',
+        desc: 'All domain knowledge goes into the system prompt.',
+        tradeoff:
+          'A bloated system prompt you pay for in full on every call; the value of skills is precisely on-demand loading, injected into user messages without breaking the cache.',
+      },
+    ],
+  },
+  {
+    id: 'deploy',
+    title: 'Deployment shape',
+    question: 'Where does the agent run, and how do you reach it?',
+    options: [
+      {
+        id: 'gateway',
+        name: 'Multi-platform gateway',
+        desc: 'A single gateway process fronts 20+ chat platforms; the agent runs on a cloud VM.',
+        tradeoff:
+          "Hermes' choice. Not tied to a laptop — one Telegram message gets work done in the cloud; the cost is an extra adaptation layer and the complexity of two message guards.",
+        hermesChoice: true,
+      },
+      {
+        id: 'local-cli',
+        name: 'Local CLI',
+        desc: 'A single-process command line; the agent is wherever you are.',
+        tradeoff:
+          'Simplest with the lowest latency, but you lose contact away from the terminal — fine for a personal tool, not for a "carry-everywhere agent".',
+      },
+      {
+        id: 'serverless',
+        name: 'Serverless backend',
+        desc: 'Execution environments on Modal/Daytona: dormant when idle, woken by tasks.',
+        tradeoff:
+          'Supported by Hermes (tools/environments/). Near-zero idle cost, at the price of cold-start latency and sleep/wake timing complexity.',
+        hermesChoice: true,
+      },
+    ],
+  },
+];
+
+// 本章专属 UI 文案（设计卡、选项徽标、收束段等）
+export const AGENT_DESIGN_UI = {
+  hermesChoiceBadge: { zh: '◆ Hermes 之选', en: "◆ Hermes' choice" },
+  cardTitle: { zh: '我的 Agent 设计', en: 'My Agent Design' },
+  cardEmpty: {
+    zh: '在左侧做出设计选择，这张卡会实时累成你的 agent 设计文档。',
+    en: 'Make design choices on the left, and this card accumulates into your agent design document in real time.',
+  },
+  cardComplete: {
+    zh: '✓ 五个维度都有决断了——这就是一份最小可行的 agent 设计文档。回到 M1 对照每个决策在 Hermes 里的实现，你就拥有了面试系统设计题的全套素材。',
+    en: '✓ All five dimensions decided — this is a minimum viable agent design document. Go back to M1 and match each decision against its implementation in Hermes, and you have the full material for system-design interview questions.',
+  },
+  closingKicker: { zh: '收束', en: 'Wrap-up' },
+  closingTitle: { zh: '设计即权衡', en: 'Design is trade-offs' },
+  closingBody: {
+    zh: '注意「◆ Hermes 之选」并不是唯一正确答案：本地 CLI 部署对单人工具完全合理，静态技能库对合规场景更合适。 面试中加分项从来不是背出 Hermes 的答案，而是说清每个维度的候选、代价与触发条件——这张设计卡就是你的答题骨架。',
+    en: 'Note that "◆ Hermes\' choice" is not the only correct answer: local CLI deployment is perfectly reasonable for a single-user tool, and a static skill library fits compliance-heavy scenarios better. What earns points in an interview is never reciting Hermes\' answers, but articulating the candidates, costs, and trigger conditions of each dimension — this design card is your answer skeleton.',
+  },
+};

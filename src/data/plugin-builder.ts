@@ -157,3 +157,72 @@ def _handle_cli(args):
 
   return chunks.join('\n\n\n');
 }
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const PLUGIN_INTRO_EN =
+  'Generic plugins are the most permissive extension surface in Hermes: a plugin.yaml manifest plus ' +
+  'an __init__.py with register(ctx) lets you attach callbacks to six lifecycle hooks, register new tools, ' +
+  'and mount CLI subcommands — all without touching core files. ' +
+  'Check the extension points your plugin needs below, and the two files on the right grow in real time.';
+
+export const LIFECYCLE_HOOKS_EN: typeof LIFECYCLE_HOOKS = [
+  {
+    id: 'pre_tool_call',
+    desc: 'Before a tool call: audit/intercept arguments (fires in model_tools.py)',
+  },
+  {
+    id: 'post_tool_call',
+    desc: 'After a tool call: result post-processing (fires in model_tools.py)',
+  },
+  { id: 'pre_llm_call', desc: 'Before a model call (fires in run_agent.py)' },
+  { id: 'post_llm_call', desc: 'After a model call (fires in run_agent.py)' },
+  { id: 'on_session_start', desc: 'Session start (fires in run_agent.py)' },
+  { id: 'on_session_end', desc: 'Session end: memory sync, cleanup, etc. (fires in run_agent.py)' },
+];
+
+export const CAPABILITY_POINTS_EN: typeof CAPABILITY_POINTS = [
+  {
+    id: 'register_tool',
+    label: 'ctx.register_tool(...)',
+    desc: 'Register a new tool — the plugin toolset is auto-discovered and can be toggled, without touching tools/ or toolsets.py',
+  },
+  {
+    id: 'register_cli_command',
+    label: 'ctx.register_cli_command(...)',
+    desc: 'Register a CLI subcommand — hermes <plugin> <subcmd> works out of the box, no changes to main.py',
+  },
+];
+
+export const PLUGIN_IRON_RULE_EN: typeof PLUGIN_IRON_RULE = {
+  title: 'Iron rule: plugins must not modify core files',
+  body:
+    'Plugins may not touch a single line of core files like run_agent.py, cli.py, gateway/run.py, or hermes_cli/main.py. ' +
+    'If a capability is missing, extend the generic plugin surface — new hooks, new ctx methods — and never hardcode plugin-specific logic into the core. ' +
+    'PR #5295 removed 95 lines of hardcoded honcho argparse from main.py for exactly this reason.',
+};
+
+export const PLUGIN_DISCOVERY_PITFALL_EN: typeof PLUGIN_DISCOVERY_PITFALL = {
+  title: 'Timing pitfall: discover_plugins() is an import side effect',
+  body:
+    'discover_plugins() runs only as a side effect of importing model_tools.py. ' +
+    'Any code path that reads plugin state without importing model_tools.py first must call discover_plugins() explicitly — ' +
+    'it is idempotent, so an explicit call costs nothing.',
+};
+
+// 本章专属 UI 文案（表单标签、错误提示、说明 note 等）
+export const PLUGIN_UI = {
+  nameLabel: { zh: '插件名', en: 'Plugin name' },
+  nameError: {
+    zh: '✗ 需为 kebab-case：小写字母/数字/中划线（如 disk-cleanup）',
+    en: '✗ Must be kebab-case: lowercase letters/digits/hyphens (e.g. disk-cleanup)',
+  },
+  hooksLabel: { zh: '生命周期钩子（Python 回调）', en: 'Lifecycle hooks (Python callbacks)' },
+  capsLabel: { zh: 'ctx 扩展能力', en: 'ctx extension capabilities' },
+  initNote: {
+    zh: 'PluginManager 从 ~/.hermes/plugins/、./.hermes/plugins/ 与 pip entry points 发现插件',
+    en: 'PluginManager discovers plugins from ~/.hermes/plugins/, ./.hermes/plugins/, and pip entry points',
+  },
+  rulesKicker: { zh: '两条红线', en: 'Two red lines' },
+  rulesTitle: { zh: '写插件前必须知道的事', en: 'What you must know before writing a plugin' },
+};

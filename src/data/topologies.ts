@@ -135,3 +135,150 @@ export const TOPOLOGY_SCENARIOS: TopologyScenario[] = [
       '任务可分解但子任务性质不同、还需要最终整合，Manager 的中心辐射最合身：orchestrator 拆解并派发，leaf worker 各自执行（leaf 不能再用 delegate_task，边界天然清晰），orchestrator 汇总。Hermes 里就是 delegate_task 的 role="orchestrator" + role="leaf"，配合 max_spawn_depth=2 锁住委派树深度，max_concurrent_children 控制并行。子任务全部同形时才是 Swarm 的战场，这里不是。',
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const TOPOLOGY_INTRO_EN =
+  '"We should go multi-agent" is not an answer — the topology is. Interviewers want to hear you pick a ' +
+  'structure based on the shape of the task: Can the task be decomposed? How strict is the quality gate? ' +
+  'Does failure need isolation? The five patterns below cover most design questions — first compare their ' +
+  'structure, dispatch, context sharing, and fault isolation one by one, then try the scenarios at the ' +
+  'bottom. Each pattern is annotated with its real counterpart in Hermes, ready to quote in your answer.';
+
+export const TOPOLOGIES_EN: Topology[] = [
+  {
+    id: 'manager',
+    name: 'Manager',
+    tagline: 'One manager splits tasks, dispatches workers, collects results',
+    structure:
+      'Hub-and-spoke: a manager agent holds the global goal, breaks the task down and dispatches it to several workers, and aggregates results when workers finish. Workers never talk to each other.',
+    dispatch:
+      'Central dispatch: the manager decides how to split, whom to assign, and when to collect. Workers are passive execution units.',
+    contextSharing:
+      'Minimal sharing: a worker sees only its own subtask plus whatever context the manager explicitly passes in; only the manager holds the global context.',
+    faultIsolation:
+      "Worker-level isolation: one failing worker doesn't drag down the others — the manager can reassign or degrade; the manager itself is a single point of failure.",
+    useCases:
+      'Cleanly decomposable parallel tasks: multi-file refactors, parallel research, batch generation followed by aggregation.',
+    hermes:
+      'delegate_task: workers with the default role="leaf" cannot delegate further; role="orchestrator" keeps delegate_task and can spawn its own workers (capped by delegation.max_spawn_depth=2); the batch tasks array runs in parallel with the concurrency cap delegation.max_concurrent_children (default 3).',
+  },
+  {
+    id: 'handoff',
+    name: 'Handoff',
+    tagline: "A relay pipeline: each leg's output is the next leg's input",
+    structure:
+      'Chained: agent A finishes stage one and hands its output to agent B for stage two, and so on. Each agent only cares about its own stage.',
+    dispatch: 'Stage relay: the pipeline is fixed; each node triggers the next upon completion.',
+    contextSharing:
+      "Pass-along sharing: the previous leg's output (usually a summary or an artifact path) becomes the next leg's input; the full upstream context is not carried forward.",
+    faultIsolation:
+      'Node-level isolation: a single failure breaks the chain — checkpoints are needed to resume from the breakpoint; errors amplify down the chain, so upstream quality caps downstream quality.',
+    useCases:
+      'Pipelines with clear stages: collect → clean → analyze → report; outline → draft → review → final.',
+    hermes:
+      "cron's context_from field: chains job A's last output into job B's prompt — a persistent relay across scheduling cycles.",
+  },
+  {
+    id: 'supervisor',
+    name: 'Supervisor',
+    tagline: 'The supervisor does no work — it reviews, rejects, and releases',
+    structure:
+      'Two layers: workers produce results, the supervisor reviews them against quality standards — unqualified work is rejected with feedback, qualified work is released. It is a review-reject loop, not a one-shot pass.',
+    dispatch:
+      'Workers execute autonomously + the supervisor gates quality; loop count depends on quality, not budget.',
+    contextSharing:
+      'Asymmetric sharing: the supervisor sees everything (task + output + feedback history); the worker only sees the task and the latest rejection reason.',
+    faultIsolation:
+      'Quality-oriented isolation: the review loop keeps low-quality output from leaving the system; the cost is throughput — the rejection loop itself needs a cap or it spins forever.',
+    useCases:
+      'Quality-sensitive tasks: content for external release, compliance review, code that may merge only after review.',
+    hermes:
+      "kanban dispatcher's failure_limit: a task that keeps failing (default 2 times) is blocked automatically, preventing the rejection loop from spinning; the curator's LLM review pass quality-reviews skills, with pinned skills exempt.",
+  },
+  {
+    id: 'group',
+    name: 'Group',
+    tagline: 'Peer agents share a blackboard and self-assign work',
+    structure:
+      'Peer network: multiple equal-role agents collaborate around a shared state (blackboard/task board) with no central coordinator, dividing work via protocols and claim mechanisms.',
+    dispatch:
+      'Self-assignment: agents claim suitable tasks from the shared board and post results back to it.',
+    contextSharing:
+      'Full sharing: the blackboard is visible to everyone and all collaboration happens through shared state; namespaces or partitions are needed to prevent agents from stepping on each other.',
+    faultIsolation:
+      'Weak isolation: shared state is both a single point of failure and a commons — needs hard boundaries (who can see which board) plus soft partitioning (tenant isolation within a board).',
+    useCases:
+      'Tasks with peer roles and hard-to-preplan division of labor: multi-expert consultation, cross-functional project collaboration.',
+    hermes:
+      'kanban board with multiple workers: the board is a hard boundary (HERMES_KANBAN_BOARD is pinned into the worker environment — workers cannot see other boards), and tenant is a soft namespace inside the board (workspace path + memory key isolation).',
+  },
+  {
+    id: 'swarm',
+    name: 'Swarm',
+    tagline: 'Masses of homogeneous workers grab tasks from a queue',
+    structure:
+      'Centerless queue: large numbers of homogeneous workers preemptively pull tasks from a task queue, finishing one and taking the next. Zero communication, zero sharing between workers.',
+    dispatch:
+      'Queue preemption: atomic claim prevents double-assignment; tasks from dead workers are reclaimed and reassigned.',
+    contextSharing:
+      "Zero sharing: each task carries its full context; workers neither need nor are allowed to depend on each other's state.",
+    faultIsolation:
+      'Strongest isolation: one crashing worker loses only one task; the key is the reclaim mechanism — stale claims must be reclaimable or tasks leak.',
+    useCases:
+      'Massive, homogeneous, independent tasks: migrating 100 repos in bulk, processing thousands of images, large-scale labeling.',
+    hermes:
+      'kanban dispatcher (default one round per 60s): reclaim stale claims → promote ready tasks → atomic claim → spawn assigned profiles; for lighter workloads, delegate_task batch tasks parallelism is enough.',
+  },
+];
+
+export const TOPOLOGY_SCENARIOS_EN: TopologyScenario[] = [
+  {
+    id: 'repo-migration',
+    title: 'Scenario 1: Migrating 100 repos in bulk',
+    description:
+      'You need to migrate 100 company repos from the old CI to a new platform: the operations are identical for each repo (edit config, run the migration script, verify, open a PR), repos are independent, and a single failure can be retried. Which topology do you choose?',
+    recommended: 'swarm',
+    reasoning:
+      "Massive + homogeneous + independent + retriable is the perfect shape for Swarm: tasks go into a queue, workers claim preemptively, atomic claim prevents duplicates, and dead claims get reclaimed and reassigned. In Hermes this maps to the kanban dispatcher's reclaim-promote-claim loop; at a smaller scale, delegate_task batch tasks (default concurrency cap 3) also works. Manager could do it too, but central dispatch is unnecessary coordination overhead for 100 identical tasks.",
+  },
+  {
+    id: 'long-form-writing',
+    title: 'Scenario 2: Long-form writing with multiple review rounds',
+    description:
+      'A client wants a technical white paper for external release: it must not ship below the quality bar, and it usually takes several rounds of "write → review → reject → rewrite". The pipeline itself (outline, draft, review, final) is fixed. Which topology do you choose?',
+    recommended: 'supervisor',
+    reasoning:
+      "The quality gate is the core constraint, and Supervisor's review-reject loop matches it exactly: the writer produces, the reviewer rejects against the standard with feedback, and only qualified work is released. The key is capping the rejection loop — Hermes' counterpart is kanban failure_limit (auto-block after 2 consecutive failures by default), which keeps the review loop from spinning. The fixed-pipeline part (outline → draft → review → final) can also stack Handoff on top, using cron's context_from to chain each leg's output into the next.",
+  },
+  {
+    id: 'feature-dev',
+    title: 'Scenario 3: One complex feature (research + code + tests)',
+    description:
+      'The user drops a one-line requirement: "add an export command to our CLI". Someone has to research the existing code, someone has to write the implementation, someone has to run tests and fix bugs, and finally someone has to integrate it all into one delivery. Which topology do you choose?',
+    recommended: 'manager',
+    reasoning:
+      'The task is decomposable but the subtasks differ in nature and the results need final integration — Manager hub-and-spoke fits best: the orchestrator decomposes and dispatches, leaf workers each execute (leaves cannot call delegate_task again, so the boundary is naturally clean), and the orchestrator aggregates. In Hermes this is exactly delegate_task with role="orchestrator" + role="leaf", with max_spawn_depth=2 locking the delegation tree depth and max_concurrent_children controlling parallelism. Swarm territory is only when all subtasks are identical — not the case here.',
+  },
+];
+
+// ── 实验室专属 UI 文案（TopologyLab） ─────────────────────────────
+
+export const TOPOLOGY_UI = {
+  structureLabel: { zh: '结构', en: 'Structure' },
+  dispatchLabel: { zh: '任务分发', en: 'Dispatch' },
+  contextLabel: { zh: '上下文共享', en: 'Context sharing' },
+  faultLabel: { zh: '故障隔离', en: 'Fault isolation' },
+  useCasesLabel: { zh: '适用场景', en: 'Use cases' },
+  scenariosKicker: { zh: '场景题', en: 'SCENARIOS' },
+  scenariosTitle: {
+    zh: '轮到你了：为场景选拓扑',
+    en: 'Your turn: pick a topology for each scenario',
+  },
+  scenariosBody: {
+    zh: '先读场景，点选你认为最合适的拓扑——选完立即揭示推荐答案与理由。没有唯一正确的拓扑， 但每个场景都有「最省力」的那个。',
+    en: 'Read each scenario and pick the topology you think fits best — the recommended answer and its reasoning are revealed immediately. There is no single correct topology, but every scenario has a "least-effort" one.',
+  },
+  matchRecommended: { zh: '✓ 与推荐一致', en: '✓ Matches recommendation' },
+  recommendedLabel: { zh: '推荐拓扑', en: 'Recommended' },
+};

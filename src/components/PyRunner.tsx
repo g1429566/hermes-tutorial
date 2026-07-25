@@ -83,7 +83,11 @@ export default function PyRunner({ title, initialCode, note }: PyRunnerProps) {
           disabled={busy}
           className="rounded bg-acid px-3 py-1 font-mono text-xs font-bold text-ink disabled:opacity-50"
         >
-          {status === 'loading' ? t(lang, 'pyLoading') : status === 'running' ? t(lang, 'pyRunning') : t(lang, 'pyRun')}
+          {status === 'loading'
+            ? t(lang, 'pyLoading')
+            : status === 'running'
+              ? t(lang, 'pyRunning')
+              : t(lang, 'pyRun')}
         </button>
       </div>
       <textarea

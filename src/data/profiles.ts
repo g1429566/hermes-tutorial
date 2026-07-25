@@ -146,3 +146,166 @@ export const RESOLVER_RESOURCES: ProfileResource[] = [
     note: '网关状态（gateway/status.py）',
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const PROFILES_INTRO_EN =
+  'Hermes supports profiles — multiple fully isolated instances, each with its own HERMES_HOME ' +
+  'directory: config, API keys, memory, sessions, skills, and gateway state are all independent. ' +
+  'The default instance lives in ~/.hermes; a named profile lives in ' +
+  '~/.hermes/profiles/<name>. There is exactly one core mechanism: _apply_profile_override() ' +
+  '(hermes_cli/main.py) sets the HERMES_HOME environment variable before any module import, ' +
+  'so every subsequent get_hermes_home() call is automatically scoped to the active profile.';
+
+export const ISOLATION_OWNED_EN = [
+  { label: 'config.yaml', note: 'All configuration: model / agent / gateway' },
+  { label: '.env', note: 'Secrets such as API keys' },
+  { label: 'state.db', note: 'Sessions (SessionDB, hermes_state.py)' },
+  { label: 'skills/', note: 'Skills directory' },
+  { label: 'plugins/', note: 'Plugin data such as memory' },
+  { label: 'gateway-starts.log', note: 'Gateway state' },
+];
+
+export const ISOLATION_MECHANISM_EN = [
+  { id: 'flag', label: 'hermes -p coder', desc: 'Pick the active profile on the command line' },
+  {
+    id: 'override',
+    label: '_apply_profile_override()',
+    desc: 'hermes_cli/main.py: sets HERMES_HOME before any module import',
+  },
+  {
+    id: 'env',
+    label: 'HERMES_HOME',
+    desc: 'Environment variable pointing at ~/.hermes/profiles/coder',
+  },
+  {
+    id: 'scoped',
+    label: 'get_hermes_home()',
+    desc: 'hermes_constants.py: every call is automatically scoped to the active profile',
+  },
+];
+
+export const PROFILE_RULES_EN: ProfileRule[] = [
+  {
+    id: 'paths',
+    title: 'Rule 1 · Paths always go through get_hermes_home()',
+    rule: 'In code that reads or writes state, hardcoding ~/.hermes or Path.home() / ".hermes" is never allowed.',
+    good: {
+      label: 'GOOD',
+      code: `from hermes_constants import get_hermes_home
+config_path = get_hermes_home() / "config.yaml"`,
+    },
+    bad: {
+      label: 'BAD — breaks profiles',
+      code: `config_path = Path.home() / ".hermes" / "config.yaml"`,
+    },
+    note: 'Hardcoded paths make every profile read and write the same file. AGENTS.md records that PR #3575 fixed 5 such bugs in one go.',
+  },
+  {
+    id: 'display',
+    title: 'Rule 2 · User-visible messages go through display_hermes_home()',
+    rule: 'For paths shown to the user in prints / logs, use display_hermes_home() — it returns ~/.hermes for default and ~/.hermes/profiles/<name> for a profile.',
+    good: {
+      label: 'GOOD',
+      code: `from hermes_constants import display_hermes_home
+print(f"Config saved to {display_hermes_home()}/config.yaml")`,
+    },
+    bad: {
+      label: 'BAD — points profile users to the wrong place',
+      code: `print("Config saved to ~/.hermes/config.yaml")`,
+    },
+    note: 'Code paths use get_hermes_home() (returns a Path); display paths use display_hermes_home() (returns a str). Clear division of labor.',
+  },
+  {
+    id: 'anchor',
+    title: 'Rule 6 · Profile operations anchor on HOME, not HERMES_HOME',
+    rule: '_get_profiles_root() (hermes_cli/profiles.py) returns Path.home() / ".hermes" / "profiles", not get_hermes_home() / "profiles".',
+    good: {
+      label: 'GOOD',
+      code: `def _get_profiles_root() -> Path:
+    return Path.home() / ".hermes" / "profiles"`,
+    },
+    bad: {
+      label: 'BAD — can only see the current profile',
+      code: `return get_hermes_home() / "profiles"`,
+    },
+    note: 'This is deliberate: hermes -p coder profile list must see all profiles no matter which one is active. The opposite direction of Rule 1 — state reads/writes anchor on HERMES_HOME, profile management anchors on HOME.',
+  },
+  {
+    id: 'lock',
+    title: 'Rule 5 · Gateway platform adapters use token locks',
+    rule: 'When an adapter connects with a unique credential (bot token, API key), call acquire_scoped_lock() in connect()/start() and release_scoped_lock() in disconnect()/stop() (gateway/status.py).',
+    good: {
+      label: 'GOOD (the plugins/platforms/irc/adapter.py pattern)',
+      code: `from gateway.status import acquire_scoped_lock
+if not acquire_scoped_lock("irc", lock_key):
+    ...  # credential already in use by another profile`,
+    },
+    bad: {
+      label: 'BAD — two profiles fighting over one credential',
+      code: `def connect(self):
+    ...  # goes online with the same bot token,
+    ...  # the two instances kick each other offline`,
+    },
+    note: 'The lock prevents two profiles from using the same credential at once — otherwise the two instances would kick each other offline under the same bot identity.',
+  },
+];
+
+export const EXTRA_RULES_NOTE_EN =
+  'Two more rules: module-level constants are safe — they cache get_hermes_home() at import ' +
+  'time, and imports happen after _apply_profile_override() (Rule 3); tests that mock ' +
+  'Path.home() must also patch the HERMES_HOME environment variable, because the code reads ' +
+  'the environment variable (Rule 4).';
+
+export const RESOLVER_RESOURCES_EN: ProfileResource[] = [
+  {
+    id: 'config',
+    label: 'Config',
+    suffix: 'config.yaml',
+    note: 'config / model / gateway settings',
+  },
+  { id: 'env', label: 'Secrets', suffix: '.env', note: 'API keys (secrets only)' },
+  { id: 'sessions', label: 'Sessions', suffix: 'state.db', note: 'SessionDB (hermes_state.py)' },
+  {
+    id: 'skills',
+    label: 'Skills',
+    suffix: 'skills/',
+    note: 'Directory scanned for skill slash commands',
+  },
+  { id: 'memory', label: 'Memory', suffix: 'plugins/', note: 'Plugin data such as memory' },
+  {
+    id: 'gateway',
+    label: 'Gateway',
+    suffix: 'gateway-starts.log',
+    note: 'Gateway state (gateway/status.py)',
+  },
+];
+
+/* ── 组件专属 UI 文案 ─────────────────────────────────────────── */
+export const PROFILES_UI = {
+  isolationKicker: { zh: '隔离模型', en: 'Isolation model' },
+  isolationTitle: {
+    zh: '两个实例，两套完整家当',
+    en: 'Two instances, two complete households',
+  },
+  defaultInstance: { zh: '默认实例', en: 'Default instance' },
+  namedProfile: { zh: '命名 profile', en: 'Named profile' },
+  mechanismLabel: { zh: '核心机制', en: 'Core mechanism' },
+  rulesKicker: { zh: 'profile-safe 规则', en: 'Profile-safe rules' },
+  rulesTitle: { zh: 'GOOD vs BAD 代码对照', en: 'GOOD vs BAD code comparison' },
+  rulesDesc: {
+    zh: 'AGENTS.md 给贡献者立了 6 条 profile-safe 规则。点击左侧规则，看右侧代码对照。',
+    en: 'AGENTS.md lays down 6 profile-safe rules for contributors. Click a rule on the left to see the code comparison on the right.',
+  },
+  badPrefix: { zh: '反例', en: 'Counter-example' },
+  resolverKicker: { zh: '动手试试', en: 'Try it' },
+  resolverTitle: { zh: '路径解析器', en: 'Path resolver' },
+  resolverDesc: {
+    zh: '选择一个 profile，看每类资源实际解析到哪个路径。',
+    en: 'Pick a profile and see which path each kind of resource actually resolves to.',
+  },
+  takeaway: {
+    zh: '一句话记住 profiles：_apply_profile_override() 抢在任何 import 之前设置 HERMES_HOME——之后每个 get_hermes_home() 都自动落在当前 profile 的目录里。',
+    en: "Profiles in one sentence: _apply_profile_override() sets HERMES_HOME before any import — every get_hermes_home() afterwards automatically lands inside the active profile's directory.",
+  },
+};

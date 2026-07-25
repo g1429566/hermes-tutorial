@@ -201,3 +201,241 @@ export const COMPARE_ROWS: CompareRow[] = [
     platform: 'Daytona 云',
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const BACKENDS_INTRO_EN =
+  "Hermes's terminal tool has more than one way to run: the same command can execute in a " +
+  'local process, a Docker container, a remote SSH host, a Singularity container on an HPC ' +
+  'cluster, or a Modal / Daytona cloud sandbox. They all implement the same BaseEnvironment ' +
+  'interface under tools/environments/; what differs is isolation level, cost model, and ' +
+  'startup speed. Select each card below to see how each backend really works.';
+
+export const BACKENDS_EN: Backend[] = [
+  {
+    id: 'local',
+    name: 'local',
+    tagline: 'Local process, zero isolation, zero dependencies',
+    isolation:
+      "No isolation — commands run directly on the local machine with the agent process's user permissions",
+    scenarios: [
+      'Personal dev machines, fully trusted environments',
+      'Debugging Hermes itself',
+      "Don't want to install any extra dependencies",
+    ],
+    source: 'tools/environments/local.py',
+    features: [
+      'spawn-per-call: every call starts a fresh process, carrying a session snapshot',
+      'Working directory = current directory of the process (os.getcwd(), CLI mode)',
+      'Built-in Windows path translation (Git Bash / MSYS style paths → native paths)',
+    ],
+    serverless: false,
+  },
+  {
+    id: 'docker',
+    name: 'Docker',
+    tagline: 'Local container, hardened isolation',
+    isolation: 'Container-level isolation: cap-drop ALL, no-new-privileges, PID limits',
+    scenarios: [
+      'Running untrusted code',
+      'Need a clean, controlled dependency environment',
+      'Limiting resource usage (CPU / memory / disk)',
+    ],
+    source: 'tools/environments/docker.py',
+    features: [
+      'Hardened: cap-drop ALL, no-new-privileges, PID limits',
+      'Configurable CPU / memory / disk resource limits',
+      'Optional filesystem persistence (bind mounts)',
+    ],
+    serverless: false,
+  },
+  {
+    id: 'ssh',
+    name: 'SSH',
+    tagline: 'Remote host, connection reuse',
+    isolation: 'Depends on the remote machine — all commands execute on the remote host',
+    scenarios: [
+      'Leveraging remote compute or specialized environments',
+      'Code and data live on another machine',
+      'Cross-machine workflows',
+    ],
+    source: 'tools/environments/ssh.py',
+    features: [
+      'ControlMaster connection persistence: many commands reuse one SSH connection',
+      'Avoids repeated handshake overhead on every execution',
+      'Hybrid shape: local agent + remote execution',
+    ],
+    serverless: false,
+  },
+  {
+    id: 'singularity',
+    name: 'Singularity',
+    tagline: 'Persistent containers for HPC clusters',
+    isolation: 'Container-level isolation: --containall, --no-home, capability dropping',
+    scenarios: [
+      'HPC / supercomputing clusters (no root, no Docker daemon)',
+      'Batch jobs that need the environment kept across sessions',
+    ],
+    source: 'tools/environments/singularity.py',
+    features: [
+      'Prefers apptainer, falls back to the singularity CLI',
+      'Hardened: --containall, --no-home, capability dropping',
+      'Writable overlay directory persists across sessions; resource limits configurable',
+    ],
+    serverless: false,
+  },
+  {
+    id: 'modal',
+    name: 'Modal',
+    tagline: 'Serverless cloud sandbox',
+    isolation: 'Cloud sandbox isolation — each task runs in a Modal cloud Sandbox',
+    scenarios: [
+      'Elastic cloud compute, pay per use',
+      "Local resources aren't enough, or you'd rather not occupy your machine",
+    ],
+    source: 'tools/environments/modal.py',
+    features: [
+      'Native Modal SDK: Sandbox.create() + Sandbox.exec()',
+      'snapshot_filesystem() takes a filesystem snapshot, persisted across sessions',
+      'Snapshot id recorded in modal_snapshots.json; restored from the snapshot next time',
+    ],
+    serverless: true,
+  },
+  {
+    id: 'daytona',
+    name: 'Daytona',
+    tagline: 'Serverless cloud sandbox',
+    isolation: 'Cloud sandbox isolation — each task runs in a Daytona cloud sandbox',
+    scenarios: [
+      'Cloud development environments',
+      'Long-running tasks',
+      'Elastic pay-per-use execution',
+    ],
+    source: 'tools/environments/daytona.py',
+    features: [
+      'Daytona Python SDK creates and manages cloud sandboxes',
+      'Persistent sandbox: stop() on cleanup, start() to resume on next creation',
+      'Filesystem retained across sessions (when persistence is enabled)',
+    ],
+    serverless: true,
+  },
+];
+
+export const SERVERLESS_STEPS_EN: ServerlessStep[] = [
+  {
+    id: 'idle',
+    label: 'Idle',
+    title: 'Sandbox idle',
+    body: 'The cloud sandbox has no task running. Idle compute is money burned — the core motivation of serverless backends is driving the cost of this period to near zero.',
+  },
+  {
+    id: 'sleep',
+    label: 'Sleep',
+    title: 'Sleep to save cost, filesystem kept',
+    body: 'Daytona stop()s the sandbox on cleanup; Modal takes a filesystem snapshot with snapshot_filesystem() and then terminate()s. Compute is released, but the filesystem is fully preserved — this is "sleep", not "destroy".',
+  },
+  {
+    id: 'arrive',
+    label: 'New task',
+    title: 'A new task arrives',
+    body: 'The agent needs to run another terminal command. To the upper layers this is just an ordinary call — the wake-up underneath is invisible.',
+  },
+  {
+    id: 'wake',
+    label: 'Cold start',
+    title: 'Cold-start wake-up',
+    body: 'Daytona calls start() on the same sandbox to resume it; Modal rebuilds from the snapshot id recorded in modal_snapshots.json. This step is slower than local execution — the cost advantage of serverless is bought with cold-start latency.',
+  },
+  {
+    id: 'resume',
+    label: 'Resume',
+    title: 'Same environment, keep executing',
+    body: 'The filesystem is exactly as it was before sleep: previously installed dependencies and written files are all still there. The command runs on, and the session continues seamlessly.',
+  },
+];
+
+export const COMPARE_ROWS_EN: CompareRow[] = [
+  {
+    id: 'local',
+    isolation: 'None (same machine, same permissions)',
+    cost: 'Zero extra cost',
+    startup: 'Instant (spawn-per-call)',
+    platform: 'Local machine (macOS / Linux / Windows)',
+  },
+  {
+    id: 'docker',
+    isolation: 'Container-level (hardened with cap-drop ALL)',
+    cost: 'Local resources',
+    startup: 'Seconds',
+    platform: 'Any machine with Docker',
+  },
+  {
+    id: 'ssh',
+    isolation: 'Depends on the remote machine',
+    cost: 'Remote machine cost',
+    startup: 'Reused after first connect (ControlMaster)',
+    platform: 'Any SSH-reachable remote host',
+  },
+  {
+    id: 'singularity',
+    isolation: 'Container-level (--containall)',
+    cost: 'Cluster resources',
+    startup: 'Seconds (persistent container)',
+    platform: 'HPC clusters (Apptainer / Singularity)',
+  },
+  {
+    id: 'modal',
+    isolation: 'Cloud sandbox',
+    cost: 'Pay per usage',
+    startup: 'Slow cold start (snapshot restore)',
+    platform: 'Modal cloud',
+  },
+  {
+    id: 'daytona',
+    isolation: 'Cloud sandbox',
+    cost: 'Pay per usage',
+    startup: 'Cold start (can resume the same sandbox)',
+    platform: 'Daytona cloud',
+  },
+];
+
+/* ── 组件专属 UI 文案 ─────────────────────────────────────────── */
+export const BACKENDS_UI = {
+  backendsKicker: { zh: '执行环境', en: 'Execution environments' },
+  backendsTitle: {
+    zh: '六种后端，同一套接口',
+    en: 'Six backends, one interface',
+  },
+  isolationLabel: { zh: '隔离级别', en: 'Isolation level' },
+  scenariosLabel: { zh: '适用场景', en: 'Best for' },
+  featuresLabel: { zh: '特点（源自源码）', en: 'Features (from the source)' },
+  serverlessKicker: { zh: 'serverless 时序', en: 'Serverless timeline' },
+  serverlessTitle: {
+    zh: '休眠 / 唤醒的五个阶段',
+    en: 'The five phases of sleep / wake',
+  },
+  serverlessDesc: {
+    zh: (name: string) =>
+      `${name} 是 serverless 后端：不用时休眠省成本，用时冷启动恢复。点击每个阶段看细节。`,
+    en: (name: string) =>
+      `${name} is a serverless backend: it sleeps to save cost when idle and cold-starts back when needed. Click each phase for details.`,
+  },
+  compareKicker: { zh: '横向对比', en: 'Side by side' },
+  compareTitle: {
+    zh: '一张表看懂六种后端',
+    en: 'Six backends in one table',
+  },
+  thBackend: { zh: '后端', en: 'Backend' },
+  thIsolation: { zh: '隔离性', en: 'Isolation' },
+  thCost: { zh: '成本', en: 'Cost' },
+  thStartup: { zh: '启动速度', en: 'Startup' },
+  thPlatform: { zh: '适用平台', en: 'Platform' },
+  compareNote: {
+    zh: '定性对比，依据各后端源码 docstring 与配置项；当前选中的后端以绿色高亮。',
+    en: "Qualitative comparison based on each backend's source docstrings and config options; the selected backend is highlighted in green.",
+  },
+  takeaway: {
+    zh: '一句话记住终端后端：同一套 BaseEnvironment 接口，六种「跑法」—— 本机求快、 容器求隔离、SSH 借算力、serverless 用冷启动换成本。',
+    en: 'Terminal backends in one sentence: one BaseEnvironment interface, six ways to run — local for speed, containers for isolation, SSH for borrowed compute, serverless trading cold starts for cost.',
+  },
+};

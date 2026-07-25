@@ -364,3 +364,366 @@ export const ADD_COMMAND_STEPS: AddCommandStep[] = [
     },
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const CLI_INTRO_EN =
+  'The classic CLI (cli.py) uses Rich for banners and panels, and prompt_toolkit for ' +
+  'autocompleted input. But the real protagonist is COMMAND_REGISTRY in hermes_cli/commands.py — ' +
+  'a list of CommandDef entries that is the single source of truth for every slash command: ' +
+  'CLI dispatch, gateway dispatch, the Telegram menu, Slack subcommands, autocomplete, and help ' +
+  'on both ends are all derived from it automatically. process_command() does one thing: ' +
+  'resolve aliases to canonical names with resolve_command(), then dispatch.';
+
+export const COMMAND_DEF_FIELDS_EN: CommandFieldDoc[] = [
+  {
+    id: 'name',
+    name: 'name',
+    type: 'str',
+    desc: 'Canonical name, without the slash. All dispatch resolves to this name via resolve_command() first.',
+    example: '"background"',
+  },
+  {
+    id: 'description',
+    name: 'description',
+    type: 'str',
+    desc: 'Human-readable description, shown in CLI help, gateway /help, and the Telegram menu.',
+    example: '"Run a prompt in the background"',
+  },
+  {
+    id: 'category',
+    name: 'category',
+    type: 'str',
+    desc: 'One of five categories; determines the grouping in help (COMMANDS_BY_CATEGORY).',
+    example: '"Session" | "Configuration" | "Tools & Skills" | "Info" | "Exit"',
+  },
+  {
+    id: 'aliases',
+    name: 'aliases',
+    type: 'tuple[str, ...]',
+    desc: 'Alias tuple. Adding an alias only requires editing here — dispatch, help, menus, and autocomplete all sync automatically.',
+    example: '("bg", "btw")',
+  },
+  {
+    id: 'args_hint',
+    name: 'args_hint',
+    type: 'str',
+    desc: 'Argument placeholder shown in help, hinting what arguments the command takes.',
+    example: '"<prompt>" or "[name]"',
+  },
+  {
+    id: 'cli_only',
+    name: 'cli_only',
+    type: 'bool = False',
+    desc: 'Available only in the interactive CLI (e.g. /clear — there is no "clear screen" semantics on messaging platforms).',
+    example: '/clear, /config, /quit',
+  },
+  {
+    id: 'gateway_only',
+    name: 'gateway_only',
+    type: 'bool = False',
+    desc: 'Available only on messaging platforms (gateway); does not appear in the CLI.',
+    example: '/approve (approve dangerous commands)',
+  },
+  {
+    id: 'gateway_config_gate',
+    name: 'gateway_config_gate',
+    type: 'str | None = None',
+    desc: 'A config dotpath. When set on a cli_only command, the command becomes available on the gateway while that config value is truthy. GATEWAY_KNOWN_COMMANDS always includes config-gated commands for dispatch; help and menus show them only while the gate is open.',
+    example: '/verbose → "display.tool_progress_command"',
+  },
+];
+
+export const CLI_COMMANDS_EN: Record<string, CliCommand[]> = {
+  Session: [
+    {
+      id: 'new',
+      desc: 'Start a new session (fresh session ID + history)',
+      aliases: 'reset',
+      argsHint: '[name]',
+      flags: [],
+      snippet: `CommandDef("new", "Start a new session (fresh session ID + history)", "Session",
+           aliases=("reset",), args_hint="[name]"),`,
+    },
+    {
+      id: 'clear',
+      desc: 'Clear the screen and start a new session',
+      flags: ['cli_only'],
+      snippet: `CommandDef("clear", "Clear screen and start a new session", "Session",
+           cli_only=True),`,
+    },
+    {
+      id: 'compress',
+      desc: 'Compress conversation context (here [N] keeps the last N turns)',
+      aliases: 'compact',
+      argsHint: '[here [N] | focus topic | --preview|--dry-run]',
+      flags: [],
+      snippet: `CommandDef("compress", "Compress conversation context (...)", "Session",
+           aliases=("compact",), args_hint="[here [N] | focus topic | --preview|--dry-run]"),`,
+    },
+    {
+      id: 'background',
+      desc: 'Run a prompt in the background',
+      aliases: 'bg, btw',
+      argsHint: '<prompt>',
+      flags: [],
+      snippet: `CommandDef("background", "Run a prompt in the background", "Session",
+           aliases=("bg", "btw"), args_hint="<prompt>"),`,
+    },
+    {
+      id: 'queue',
+      desc: "Queue a prompt for the next turn (doesn't interrupt the current one)",
+      aliases: 'q',
+      argsHint: '<prompt>',
+      flags: [],
+      snippet: `CommandDef("queue", "Queue a prompt for the next turn (doesn't interrupt)", "Session",
+           aliases=("q",), args_hint="<prompt>"),`,
+    },
+    {
+      id: 'status',
+      desc: 'Show session, model, token, and context info',
+      flags: [],
+      snippet: `CommandDef("status", "Show session, model, token, and context info", "Session"),`,
+    },
+  ],
+  Configuration: [
+    {
+      id: 'config',
+      desc: 'Show current configuration',
+      flags: ['cli_only'],
+      snippet: `CommandDef("config", "Show current configuration", "Configuration",
+           cli_only=True),`,
+    },
+    {
+      id: 'model',
+      desc: 'Switch model (persists by default)',
+      argsHint: '[model] [--provider name] [--global|--session] [--refresh]',
+      flags: [],
+      snippet: `CommandDef("model", "Switch model (persists by default)", "Configuration",
+           args_hint="[model] [--provider name] [--global|--session] [--refresh]"),`,
+    },
+    {
+      id: 'statusbar',
+      desc: 'Toggle the context/model status bar',
+      aliases: 'sb',
+      flags: ['cli_only'],
+      snippet: `CommandDef("statusbar", "Toggle the context/model status bar", "Configuration",
+           cli_only=True, aliases=("sb",)),`,
+    },
+    {
+      id: 'timestamps',
+      desc: 'Toggle [HH:MM] timestamps on messages and /history',
+      aliases: 'ts',
+      argsHint: '[on|off|status]',
+      flags: ['cli_only'],
+      snippet: `CommandDef("timestamps", "Toggle [HH:MM] timestamps on messages and /history",
+           "Configuration", cli_only=True, args_hint="[on|off|status]",
+           subcommands=("on", "off", "status"), aliases=("ts",)),`,
+    },
+    {
+      id: 'verbose',
+      desc: 'Cycle tool progress display: off → new → all → verbose → log',
+      flags: ['cli_only', 'gateway_config_gate="display.tool_progress_command"'],
+      snippet: `CommandDef("verbose", "Cycle tool progress display: off -> new -> all -> verbose -> log",
+           "Configuration", cli_only=True,
+           gateway_config_gate="display.tool_progress_command"),`,
+    },
+  ],
+  'Tools & Skills': [
+    {
+      id: 'tools',
+      desc: 'Manage tools: /tools [list|disable|enable] [name...]',
+      argsHint: '[list|disable|enable] [name...]',
+      flags: ['cli_only'],
+      snippet: `CommandDef("tools", "Manage tools: /tools [list|disable|enable] [name...]",
+           "Tools & Skills", args_hint="[list|disable|enable] [name...]", cli_only=True),`,
+    },
+    {
+      id: 'toolsets',
+      desc: 'List available toolsets',
+      flags: ['cli_only'],
+      snippet: `CommandDef("toolsets", "List available toolsets", "Tools & Skills",
+           cli_only=True),`,
+    },
+    {
+      id: 'skills',
+      desc: 'Search, install, inspect, or manage skills',
+      flags: ['cli_only', 'gateway_config_gate="skills.write_approval"'],
+      snippet: `CommandDef("skills", "Search, install, inspect, or manage skills",
+           "Tools & Skills", cli_only=True,
+           gateway_config_gate="skills.write_approval", ...),`,
+    },
+    {
+      id: 'learn',
+      desc: 'Learn a reusable skill from anything you describe (a directory, URL, the current conversation, notes)',
+      argsHint: '<what to learn from>',
+      flags: [],
+      snippet: `CommandDef("learn", "Learn a reusable skill from anything you describe (...)",
+           "Tools & Skills", args_hint="<what to learn from>"),`,
+    },
+    {
+      id: 'cron',
+      desc: 'Manage scheduled tasks',
+      argsHint: '[subcommand]',
+      flags: ['cli_only'],
+      snippet: `CommandDef("cron", "Manage scheduled tasks", "Tools & Skills",
+           cli_only=True, args_hint="[subcommand]", ...),`,
+    },
+  ],
+  Info: [
+    {
+      id: 'whoami',
+      desc: 'Show your slash command access (admin / user)',
+      flags: [],
+      snippet: `CommandDef("whoami", "Show your slash command access (admin / user)", "Info"),`,
+    },
+    {
+      id: 'profile',
+      desc: 'Show active profile name and home directory',
+      flags: [],
+      snippet: `CommandDef("profile", "Show active profile name and home directory", "Info"),`,
+    },
+  ],
+  Exit: [
+    {
+      id: 'quit',
+      desc: 'Exit the CLI (--delete also removes session history)',
+      aliases: 'exit',
+      argsHint: '[--delete]',
+      flags: ['cli_only'],
+      snippet: `CommandDef("quit", "Exit the CLI (use --delete to also remove session history)", "Exit",
+           cli_only=True, aliases=("exit",), args_hint="[--delete]"),`,
+    },
+  ],
+};
+
+export const REGISTRY_CONSUMERS_EN: RegistryConsumer[] = [
+  {
+    id: 'cli',
+    name: 'CLI dispatch',
+    deriver: 'process_command() + resolve_command()',
+    body: "cli.py's HermesCLI.process_command() resolves aliases to canonical names with resolve_command(), then dispatches to the matching handler by canonical name.",
+  },
+  {
+    id: 'gateway',
+    name: 'Gateway dispatch',
+    deriver: 'GATEWAY_KNOWN_COMMANDS + resolve_command()',
+    body: 'The GATEWAY_KNOWN_COMMANDS frozenset decides which commands trigger hook emission; dispatch likewise goes through resolve_command().',
+  },
+  {
+    id: 'gateway-help',
+    name: 'Gateway /help',
+    deriver: 'gateway_help_lines()',
+    body: 'The /help output on messaging platforms is generated from the registry by gateway_help_lines().',
+  },
+  {
+    id: 'telegram',
+    name: 'Telegram menu',
+    deriver: 'telegram_bot_commands()',
+    body: 'telegram_bot_commands() generates the BotCommand menu inside the Telegram client.',
+  },
+  {
+    id: 'slack',
+    name: 'Slack subcommands',
+    deriver: 'slack_subcommand_map()',
+    body: 'slack_subcommand_map() generates the subcommand routing for /hermes in Slack.',
+  },
+  {
+    id: 'autocomplete',
+    name: 'Autocomplete',
+    deriver: 'COMMANDS → SlashCommandCompleter',
+    body: "The COMMANDS flat dict feeds prompt_toolkit's SlashCommandCompleter, giving instant suggestions as you type /.",
+  },
+  {
+    id: 'cli-help',
+    name: 'CLI help',
+    deriver: 'COMMANDS_BY_CATEGORY → show_help()',
+    body: "The COMMANDS_BY_CATEGORY dict groups commands by category and feeds the CLI's show_help().",
+  },
+];
+
+export const REGISTRY_NOTE_EN =
+  'To add an alias, just append it to the aliases tuple of the existing CommandDef — dispatch, ' +
+  'help, the Telegram menu, the Slack mapping, and autocomplete all update automatically, ' +
+  'with no other file to touch.';
+
+export const ADD_COMMAND_STEPS_EN: AddCommandStep[] = [
+  {
+    id: 'def',
+    label: '① Register CommandDef',
+    title: 'Add a CommandDef to COMMAND_REGISTRY',
+    body: 'Everything starts in hermes_cli/commands.py. Declare the canonical name, description, category, and optionally aliases and an args hint. After this step, it already shows up in help, autocomplete, and menus — but has no behavior yet.',
+    code: {
+      file: 'hermes_cli/commands.py',
+      snippet: `CommandDef("mycommand", "Description of what it does", "Session",
+           aliases=("mc",), args_hint="[arg]"),`,
+    },
+  },
+  {
+    id: 'handler',
+    label: '② CLI handler',
+    title: 'Add a handler in HermesCLI.process_command()',
+    body: "cli.py's process_command() dispatches by the canonical name resolved by resolve_command(). Wire up your handling logic here.",
+    code: {
+      file: 'cli.py',
+      snippet: `elif canonical == "mycommand":
+    self._handle_mycommand(cmd_original)`,
+    },
+  },
+  {
+    id: 'gateway',
+    label: '③ Gateway handler',
+    title: 'If the command works on the gateway, add a gateway handler too',
+    body: 'If this command should also work on platforms like Telegram / Slack, add the corresponding async handler in gateway/run.py.',
+    code: {
+      file: 'gateway/run.py',
+      snippet: `if canonical == "mycommand":
+    return await self._handle_mycommand(event)`,
+    },
+  },
+  {
+    id: 'persist',
+    label: '④ Persist settings',
+    title: 'Use save_config_value() for settings worth remembering',
+    body: "If the command changes a persistent setting (e.g. the default model), write it into the user's config.yaml with cli.py's save_config_value(), instead of only taking effect in memory.",
+    code: {
+      file: 'cli.py',
+      snippet: `save_config_value(key_path, value)  # writes config.yaml`,
+      note: 'Transient state does not need this step',
+    },
+  },
+];
+
+/* ── 组件专属 UI 文案 ─────────────────────────────────────────── */
+export const CLI_UI = {
+  fieldsKicker: { zh: '单一事实来源', en: 'Single source of truth' },
+  fieldsTitle: { zh: 'CommandDef 的八个字段', en: 'The eight fields of CommandDef' },
+  fieldsDesc: {
+    zh: 'COMMAND_REGISTRY 是一个 frozen dataclass 列表。点击每个字段，看它的含义与真实示例。',
+    en: 'COMMAND_REGISTRY is a list of frozen dataclasses. Click each field to see what it means with a real example.',
+  },
+  exampleLabel: { zh: '示例', en: 'Example' },
+  treeKicker: { zh: '命令树', en: 'Command tree' },
+  treeTitle: {
+    zh: '按 category 分组的命令浏览器',
+    en: 'A command browser grouped by category',
+  },
+  aliasesLabel: { zh: '别名', en: 'Aliases' },
+  argsLabel: { zh: '参数', en: 'Args' },
+  flagsLabel: { zh: '标记', en: 'Flags' },
+  snippetNote: {
+    zh: '逐字摘自真实注册表（长描述以 ... 截断）',
+    en: 'Verbatim from the real registry (long descriptions truncated with ...)',
+  },
+  consumersKicker: { zh: '派生', en: 'Derived' },
+  consumersTitle: {
+    zh: '一处改动，七个消费者自动同步',
+    en: 'One change, seven consumers in sync',
+  },
+  addKicker: { zh: '动手', en: 'Hands-on' },
+  addTitle: { zh: '添加一条斜杠命令的四步', en: 'Four steps to add a slash command' },
+  takeaway: {
+    zh: '一句话记住 CLI 架构：COMMAND_REGISTRY 是单一事实来源——命令只定义一次， CLI 分发、网关、Telegram 菜单、Slack 子命令、补全与 help 全是它的下游。',
+    en: 'CLI architecture in one sentence: COMMAND_REGISTRY is the single source of truth — define each command once, and CLI dispatch, the gateway, the Telegram menu, Slack subcommands, autocomplete, and help are all downstream of it.',
+  },
+};

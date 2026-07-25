@@ -216,3 +216,161 @@ export const DISCOVERY_POINTS = [
   '通用 PluginManager 只记录 kind: model-provider 的 manifest，不 import——否则 ProviderProfile 会被实例化两次',
   '没写 kind: 的插件按源码启发式自动归类：__init__.py 里同时出现 register_provider + ProviderProfile',
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const PROVIDER_INTRO_EN =
+  'Every inference backend (openrouter / anthropic / gmi / deepseek …) is a model-provider plugin: ' +
+  'a single ProviderProfile declares auth, endpoint, model catalog, and request-level quirks in one place, ' +
+  'so the transport layer reads a profile instead of juggling 20 boolean flags. ' +
+  'Walk the four stages of the unified interface first, then use the form to generate your own provider plugin skeleton.';
+
+export const PROVIDER_STEPS_EN: ProviderStep[] = [
+  {
+    id: 'auth',
+    label: 'AUTH',
+    title: 'Auth: API keys and env-var metadata',
+    body: 'The profile declares which secrets it needs via env_vars; user-side entry goes through OPTIONAL_ENV_VARS — once registered with metadata (description / prompt / url / password / category), the hermes setup wizard lists it automatically. Iron rule: .env holds secrets only; non-secret config goes into config.yaml.',
+    code: {
+      file: 'hermes_cli/config.py',
+      lines: 'OPTIONAL_ENV_VARS',
+      snippet: `"ACME_API_KEY": {
+    "description": "What it's for",
+    "prompt": "Display name",
+    "url": "https://...",
+    "password": True,
+    "category": "provider",  # provider / tool / messaging / setting
+},`,
+      note: 'Metadata template from the AGENTS.md ".env variables (SECRETS ONLY)" section',
+    },
+    points: [
+      'env_vars is a tuple: ("ACME_API_KEY",) or ("ACME_API_KEY", "ACME_BASE_URL")',
+      'auth_type defaults to "api_key"; oauth_device_code / oauth_external / aws_sdk also exist',
+      'Non-secret config (timeouts, flags) belongs in config.yaml, not .env',
+    ],
+  },
+  {
+    id: 'models',
+    label: 'MODELS',
+    title: 'Model catalog: live fetch + fallback list',
+    body: "The picker prefers a live model catalog: when models_url is absent it falls back to {base_url}/models, and fetch_models sends a hermes-cli/<version> UA (some providers' WAFs 403 the default Python-urllib UA). If the fetch fails it falls back to fallback_models — agentic models with tool calling support only.",
+    code: {
+      file: 'providers/base.py',
+      lines: 'ProviderProfile · 模型目录',
+      snippet: `fallback_models: tuple = ()  # 实时拉取失败时 /model 选择器的兜底
+models_url: str = ""           # 缺省回退 {base_url}/models
+default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
+      note: 'hostname is derived from base_url by default, used for URL→provider reverse lookup',
+    },
+    points: [
+      'Only models with tool calling support belong in fallback_models',
+      'default_aux_model gives compression, vision, and other aux calls a cheap outlet',
+      'aliases let get_provider_profile("kimi") hit the canonical name too',
+    ],
+  },
+  {
+    id: 'call',
+    label: 'CALL',
+    title: 'Calling: unified into the chat.completions shape',
+    body: "The agent loop speaks exactly one shape: client.chat.completions.create(model, messages, tools). The provider adapter layer translates each vendor's API dialect into it — the declarative profile covers endpoints and default parameters, while hooks like prepare_messages / build_api_kwargs_extras handle request-level quirks, e.g. DeepSeek needs an explicit thinking switch in extra_body.",
+    code: {
+      file: 'run_agent.py',
+      lines: 'Agent Loop',
+      snippet: `response = client.chat.completions.create(
+    model=model, messages=messages, tools=tool_schemas)
+if response.tool_calls:
+    ...  # 执行工具，继续循环
+else:
+    return response.content`,
+      note: 'api_mode defaults to "chat_completions"; the profile is declarative and does not own client construction',
+    },
+    points: [
+      'The agent loop is fully synchronous — streaming deltas are handled only in the display layer',
+      'fixed_temperature / default_max_tokens handle request-level defaults',
+      "DeepSeek's build_api_kwargs_extras: extra_body.thinking + reasoning_effort",
+    ],
+  },
+  {
+    id: 'events',
+    label: 'EVENTS',
+    title: 'Unified event flow: plugin hooks and two outcomes',
+    body: 'No matter which provider sits underneath, the agent loop sees only two outcomes: tool_calls (loop continues) or content (return). A pair of plugin hooks flanks each call — pre_llm_call / post_llm_call fire at unified points, so plugins can audit, rewrite, and meter without knowing any specific provider.',
+    code: {
+      file: 'run_agent.py + model_tools.py',
+      lines: '生命周期钩子',
+      snippet: `# pre_llm_call   —— 调用前：插件可审计/改写
+# post_llm_call  —— 调用后：统一的结果后处理
+# 两种结局：
+#   response.tool_calls → handle_function_call → 循环继续
+#   response.content    → return，会话收尾`,
+      note: 'Hooks fire in run_agent.py; pre/post_tool_call fire in model_tools.py',
+    },
+    points: [
+      'Hooks are decoupled from providers: write one plugin, benefit every backend',
+      'fallback_model and the credential pool handle single points of failure',
+      'Reasoning content is uniformly stored in assistant_msg["reasoning"]',
+    ],
+  },
+];
+
+export const DISCOVERY_ORDER_EN: typeof DISCOVERY_ORDER = [
+  {
+    step: '1',
+    where: '<repo>/plugins/model-providers/<name>/',
+    what: 'bundled: profiles shipped with the repo',
+  },
+  {
+    step: '2',
+    where: '$HERMES_HOME/plugins/model-providers/<name>/',
+    what: 'user: same-name override of bundled (last-writer-wins)',
+  },
+  {
+    step: '3',
+    where: '<repo>/providers/<name>.py',
+    what: 'legacy: single-file profiles, kept for backward compatibility',
+  },
+];
+
+export const DISCOVERY_POINTS_EN: typeof DISCOVERY_POINTS = [
+  'Lazy discovery: scanning and importing happen on the first get_provider_profile() or list_providers() call — zero cost on the startup path',
+  'register_provider() is last-writer-wins: a same-named user plugin overrides the bundled one, so third parties can replace any built-in profile without patching the repo',
+  'The generic PluginManager only records manifests of kind: model-provider without importing them — otherwise the ProviderProfile would be instantiated twice',
+  'Plugins without a kind: field are auto-classified by source heuristic: register_provider + ProviderProfile both appear in __init__.py',
+];
+
+// 本章专属 UI 文案（步进器标题、表单标签、发现机制段落等）
+export const PROVIDER_UI = {
+  stepsKicker: { zh: '统一接口', en: 'Unified interface' },
+  stepsTitle: { zh: '四个环节，一种形状', en: 'Four stages, one shape' },
+  formKicker: { zh: '动手', en: 'Hands-on' },
+  formTitle: { zh: '生成你的 provider 插件骨架', en: 'Generate your provider plugin skeleton' },
+  nameLabel: { zh: 'name · 规范名', en: 'name · canonical name' },
+  descLabel: { zh: 'description · 选择器副标题', en: 'description · picker subtitle' },
+  envLabel: { zh: 'env_vars · API key 变量名', en: 'env_vars · API key variable name' },
+  signupLabel: { zh: 'signup_url · 可留空', en: 'signup_url · optional' },
+  aliasesLabel: { zh: 'aliases · 逗号分隔，可留空', en: 'aliases · comma-separated, optional' },
+  modelsLabel: {
+    zh: 'fallback_models · 逗号分隔，只放支持 tool calling 的模型',
+    en: 'fallback_models · comma-separated, tool-calling models only',
+  },
+  initNote: {
+    zh: 'import 即注册：模块加载时调用 register_provider(ProviderProfile(...))',
+    en: 'Import is registration: register_provider(ProviderProfile(...)) runs at module load',
+  },
+  yamlNote: {
+    zh: 'kind: model-provider——通用 PluginManager 只记录 manifest，不 import',
+    en: 'kind: model-provider — the generic PluginManager records the manifest only, no import',
+  },
+  discoveryKicker: { zh: '发现机制', en: 'Discovery' },
+  discoveryTitle: { zh: '懒发现：第一次用到才扫描', en: 'Lazy discovery: scanned on first use' },
+  discoveryBody: {
+    zh: '_discover_providers() 不在启动时跑——第一次调用 get_provider_profile() 或 list_providers() 时才扫描三个位置并 import 每个插件，import 触发模块级的 register_provider()。',
+    en: '_discover_providers() does not run at startup — on the first call to get_provider_profile() or list_providers() it scans three locations and imports each plugin, and the import triggers the module-level register_provider().',
+  },
+  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookTitle: { zh: '一句话记住 provider 插件', en: 'Provider plugins in one sentence' },
+  hookBody: {
+    zh: '一份声明式的 ProviderProfile + 一次 register_provider()——懒发现会找到你， 同名 user 覆盖 bundled，后写者胜。',
+    en: 'One declarative ProviderProfile + one register_provider() — lazy discovery will find you; same-named user overrides bundled, last writer wins.',
+  },
+};

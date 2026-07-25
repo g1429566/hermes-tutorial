@@ -274,3 +274,395 @@ export const SELF_ASSESSMENT_TOPICS: SelfAssessmentTopic[] = [
   { id: 'profiles', topic: 'Profiles 多实例', sourceRef: 'hermes_constants.py · §Profiles' },
   { id: 'plugins', topic: '插件系统', sourceRef: 'plugins/ + hermes_cli/plugins.py · §Plugins' },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const INTERVIEW_INTRO_EN =
+  'Interviewers probe the agent loop not to hear you recite concepts, but to see whether you can ' +
+  'reason about the trade-offs of a real system. Each card below is a real loop-design question: ' +
+  'read the question and the thinking hint first, organize your own answer (silently or in the ' +
+  "thinking zone), then flip to compare against a model answer grounded in Hermes' real design. " +
+  'Not being able to answer is fine — walk the follow-up chain too, and once you can explain it ' +
+  'clearly, mark "I can answer this".';
+
+export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
+  {
+    id: 'sync-while',
+    question:
+      "Why is Hermes' agent main loop a synchronous while loop instead of an event-driven or async architecture?",
+    hint: 'Think about dependencies within a single session, debugging cost, and which layer streaming output lives in.',
+    answer:
+      'The loop lives in run_conversation(); AGENTS.md states it is "entirely synchronous, with interrupt checks, ' +
+      'budget tracking, and a one-turn grace call". A synchronous while keeps control flow fully explicit: each ' +
+      'iteration is "check interrupt → call model → execute any tool_calls and append → count", and both budget ' +
+      'and interrupt are part of the loop condition. Within a single session every step strongly depends on the ' +
+      'previous one, so event-driven concurrency buys almost nothing while shattering this sequential chain into ' +
+      'a callback state machine. Perceptual complexity is pushed to the display layer (CLI spinner, TUI ' +
+      'message.delta events) and never pollutes the loop itself. Real concurrency happens outside the loop: ' +
+      "delegate_task batch tasks and the gateway's multi-platform ingress.",
+    followUps: [
+      'How are concurrency needs handled then? — Concurrency lives at the delegate_task tasks-array level (capped by delegation.max_concurrent_children, default 3); the main loop stays serial.',
+      'Where does human approval block? — It waits synchronously in a hook before tool execution; the loop itself is blocking, so no extra state machine is needed.',
+      'How do background delegate results return to the session? — Via the async-delegation completion queue, injected in a later turn instead of interrupting the current loop.',
+    ],
+    rubric: [
+      'Explains "synchronous ≠ no async boundaries" and can point out which layers are async',
+      'Knows streaming output is handled at the display layer, not in the main loop',
+      'Can analyze the real cost of event-driven design here (state-machine complexity vs zero concurrency gain)',
+    ],
+  },
+  {
+    id: 'append-only',
+    question:
+      'Why does Hermes only append to the message stream and never rewrite historical messages?',
+    hint: 'This is directly about money — think about what invalidates the prompt cache.',
+    answer:
+      'Hermes\' first design constraint is per-conversation prompt caching (AGENTS.md "Prompt Caching Must Not ' +
+      'Break"): every turn of a long conversation reuses the cached prefix. Any in-place modification of past ' +
+      'context — editing historical messages, swapping toolsets mid-session, rebuilding the system prompt — ' +
+      'invalidates the whole cache and forces full recompute on every later turn, at huge cost. So the message ' +
+      'stream only grows: tool results are appended as role="tool" messages, and even skill slash commands are ' +
+      'injected as user messages instead of rewriting the system prompt. The sole exception is context ' +
+      'compression: a deliberate, one-time invalidation that buys back context-window space. Every other change ' +
+      'defaults to deferred invalidation (takes effect next session); only --now invalidates immediately.',
+    followUps: [
+      'What if the user runs /skills install mid-session? — By default it writes config and takes effect next session; --now applies immediately and accepts the cache-invalidation cost.',
+      "Doesn't compression also rewrite history? — Yes, it is the only allowed exception: a dead context window costs more than a one-time cache miss, and the new compressed prefix gets re-cached from the next turn on.",
+      "What if the provider doesn't support caching? — The policy doesn't change; append-only also buys correctness and auditability.",
+    ],
+    rubric: [
+      'Clearly explains the causal link between append-only and cache hit rate',
+      'Knows the sole exception is context compression and why',
+      'Knows the --now / deferred invalidation pattern',
+    ],
+  },
+  {
+    id: 'budget',
+    question:
+      'How are max_iterations=90 and the iteration budget designed? Why not a simple for-loop counter?',
+    hint: 'Notice the loop condition has three parts, and why the grace call exists.',
+    answer:
+      'The loop condition is `(api_call_count < max_iterations and iteration_budget.remaining > 0) or _budget_grace_call`. ' +
+      'max_iterations defaults to 90 and is a global ceiling shared with subagents — subagents inherit the same ' +
+      'magnitude, and together with delegation.max_spawn_depth=2 it caps the total work of the whole delegation ' +
+      'tree. iteration_budget is a finer budget dimension; the loop also stops when the budget runs out first. ' +
+      'The one-turn grace call is the key detail: after the budget is exhausted the model still gets one final ' +
+      'turn to wrap its findings into a final answer, instead of a hard cut that leaves a dangling session. The ' +
+      'loop has three exits: the model returns plain text (normal completion), the cap is hit (forced wrap-up), ' +
+      'or the user interrupts.',
+    followUps: [
+      "Why do subagents share the same cap? — To prevent runaway recursion; delegation.max_iterations can override it, but by default they inherit the main agent's magnitude.",
+      'What does the user see when the budget runs out? — The wrap-up answer produced by the grace call, not a truncated tool result.',
+      "Why can't there be no cap? — The agent could spin in a tool-call loop forever; the cap is cost control and fault isolation.",
+    ],
+    rubric: [
+      'Can recite the three parts of the loop condition (iterations / budget / grace call)',
+      "Understands the grace call's motivation: a graceful wrap-up instead of a hard cut",
+      'Knows the cap is shared with subagents and works with spawn depth to lock the total',
+    ],
+  },
+  {
+    id: 'interrupt',
+    question:
+      'When a user presses Esc in the CLI to interrupt the agent, how does the loop handle it? Why not exceptions?',
+    hint: 'Where in the loop is the interrupt flag checked? What happens mid-tool-execution?',
+    answer:
+      'At the top of every iteration the loop checks `self._interrupt_requested` and breaks if set — it is the ' +
+      'first line of the loop pseudocode in AGENTS.md. Interrupt is designed as part of the loop condition: Esc ' +
+      'only sets a flag, and the agent exits at the next iteration boundary, a "safe point", instead of being ' +
+      'torn apart mid-tool by an exception. This guarantees the message stream stays consistent (no half-finished ' +
+      'tool_call left hanging) and the session can wrap up gracefully and persist normally. The same mechanism ' +
+      'serves system-level interrupts: cron sessions get a 3-minute hard interrupt, so a runaway agent loop ' +
+      'cannot drag down the scheduler.',
+    followUps: [
+      'Why not hard-interrupt mid-tool? — It would leave unpaired messages (a tool_call with no tool result), breaking message-stream consistency and the cache prefix.',
+      'Can the session continue after an interrupt? — The message stream is persisted intact (SessionDB), so it can be resumed.',
+      'An example of a system-level interrupt? — The cron 3-minute hard interrupt: same flag mechanism, but triggered by a watchdog instead of the user.',
+    ],
+    rubric: [
+      'Flag bit + iteration-boundary checkpoint, not exception-based interruption',
+      'Can contrast the state-consistency problem of the exception approach (half-finished tool_call)',
+      'Can cite the cron 3-minute hard interrupt as a system-level example',
+    ],
+  },
+  {
+    id: 'json-results',
+    question:
+      'Why must all tool handlers return JSON strings instead of Python objects or natural-language paragraphs?',
+    hint: "Think about what the registry must do without knowing each tool's internal types.",
+    answer:
+      'AGENTS.md states "All handlers MUST return a JSON string". The registry uniformly handles schema ' +
+      "collection, dispatch, availability checks, and error wrapping — it should not be aware of each tool's " +
+      'internal types; a uniform string boundary lets it generically truncate/summarize to protect the context ' +
+      'window. Results are wrapped by tool_result_message into an OpenAI role="tool" message and appended. ' +
+      'Structured JSON (success/data/error fields) lets the model reliably parse success vs failure: errors are ' +
+      'also wrapped as normal result messages instead of being raised, so the agent sees the failure and ' +
+      'self-corrects, and the loop never crashes because one tool threw.',
+    followUps: [
+      'What if a tool throws internally? — The registry wraps it into an error JSON; the agent sees it next turn and self-corrects.',
+      'How are large results handled? — Uniform truncation/summarization to protect the context window; a string boundary is what makes generic handling possible.',
+      "Why not let the model read a Python object's repr? — Unstable output schemas trip the model's parsing; JSON fields are a dependable contract.",
+    ],
+    rubric: [
+      "Uniform boundary: the registry is agnostic to tools' internal types",
+      'Errors-as-result-messages: the agent can self-correct and the loop never crashes',
+      'Friendly to context protection (truncation/summarization)',
+    ],
+  },
+  {
+    id: 'register-vs-expose',
+    question:
+      'Why is writing tools/your_tool.py not enough to add a new tool — why must you also register it in toolsets.py?',
+    hint: 'Distinguish "registered into the registry" from "exposed to the agent".',
+    answer:
+      'Auto-discovery only handles registration: any tools/*.py module that calls registry.register() at top ' +
+      'level registers its schema on import — no manual import list. But exposing a tool to the agent is a ' +
+      'separate, deliberate step — the tool name must appear in the TOOLSETS dict in toolsets.py. Benefits of ' +
+      'the split: a controllable schema footprint, e.g. a kanban worker has zero tool footprint outside kanban ' +
+      'tasks; per-platform tailoring, where Telegram uses the messaging toolset and every platform inherits ' +
+      '_HERMES_CORE_TOOLS by default; and check_fn / requires_env automatically hiding tools when the ' +
+      'environment doesn\'t qualify. Calling out "registration ≠ exposure" in an interview shows you have thought ' +
+      "about tool visibility as a cost — every schema consumes context and dilutes the model's attention.",
+    followUps: [
+      'Why control the schema footprint? — Every tool schema ships with the messages, costs tokens, dilutes attention, and raises the chance of wrong calls.',
+      'Must local custom tools touch core code? — No, use the plugin route: ctx.register_tool(...) in ~/.hermes/plugins/<name>/, leaving tools/ and toolsets.py untouched.',
+      'What does check_fn do? — Environment checks (e.g. whether an API key exists); the tool is hidden when they fail.',
+    ],
+    rubric: [
+      'Explains registration and exposure as two layers and what each does',
+      'Knows the role of _HERMES_CORE_TOOLS (the default bundle every platform inherits)',
+      'Understands the cost of schema footprint and per-platform/scenario tailoring',
+    ],
+  },
+  {
+    id: 'compression-exception',
+    question: 'Why is context compression the sole exception to the "cache iron rule"?',
+    hint: "Compression also rewrites history — why doesn't it break its own rule?",
+    answer:
+      'The iron rule forbids altering past context / changing toolsets / rebuilding the system prompt ' +
+      'mid-session, because any rewrite invalidates the prompt cache. Compression also rewrites history, but it ' +
+      'is a deliberate, one-time invalidation: when the message stream approaches the context-window limit, not ' +
+      'compressing means the session simply dies — a one-time cache miss costs far less than losing the session. ' +
+      'The new prefix formed by compression gets re-cached from the next turn on, and costs fall back. The key ' +
+      'word is "sole": every other change (installing skills, changing toolsets, reloading memory) goes through ' +
+      'deferred invalidation, taking effect next session by default and immediately only with --now. Converging ' +
+      'on exactly one exception is what makes the rule enforceable.',
+    followUps: [
+      'Who decides when to compress? — Context-window pressure drives it; it is the only permitted context-mutation point in the loop.',
+      'What about information lost in compression? — That is a compression-quality problem; engineering-wise, guaranteeing it happens once and the cache rebuilds afterwards is the cost-level backstop.',
+      'Why not allow "a few more exceptions"? — Once exceptions generalize, the cache hit rate becomes unpredictable and the cost model collapses.',
+    ],
+    rubric: [
+      'Admits compression also breaks the cache — no sophistry',
+      'Explains the trade-off: one-time invalidation vs session death',
+      'Knows the new prefix re-enters the cache afterwards, and all other changes go through deferred invalidation',
+    ],
+  },
+  {
+    id: 'skill-injection',
+    question:
+      'Why are skill slash commands injected as user messages instead of updating the system prompt?',
+    hint: 'Which position in the cache prefix is the most "untouchable"?',
+    answer:
+      'After scanning ~/.hermes/skills/, agent/skill_commands.py injects skill content as a user message — ' +
+      'AGENTS.md\'s own words: "injects as user message (not system prompt) to preserve prompt caching". The ' +
+      'system prompt sits at the very head of the cache prefix; touching it invalidates the entire prefix, while ' +
+      'a user message is appended at the tail and leaves the prefix untouched. The cost is that skill ' +
+      'instructions carry less authority than the system prompt — trading message role for cache hit rate is a ' +
+      "classic example of Hermes' cache-first design. The pattern is consistent across the repo: any operation " +
+      'that would change system-prompt state is deferred by default and takes effect next session.',
+    followUps: [
+      'Side effects of injecting as a user message? — Weaker authority than the system prompt; the model may not comply. That trade-off is deliberate.',
+      'Why is the head of the prefix most sensitive? — Prefix caching matches by prefix; once the head changes, everything after it is invalidated.',
+      'Where else does the same trade-off appear? — /tools and memory-related commands all default to deferred invalidation; only --now takes effect immediately.',
+    ],
+    rubric: [
+      'Knows the position sensitivity of prefix caching: touching the head = invalidating everything',
+      'Explains the trade-off between appending a user message and rewriting the system prompt',
+      'Can point out this is a repo-wide pattern (deferred invalidation)',
+    ],
+  },
+  {
+    id: 'parallel-tools',
+    question:
+      'In Hermes, who decides whether tools run in parallel or serially? Is there real parallelism in the main loop?',
+    hint: 'Look at the shape of the tool_calls array in a single response, then think about batch delegate.',
+    answer:
+      "The model's single response decides: however many calls sit in response.tool_calls, the loop executes " +
+      'that many in order, appends each result, then increments api_call_count and enters the next turn. In other ' +
+      'words, "multiple tool_calls in one turn" is parallelism expressed by the model; the execution layer ' +
+      'processes them in array order and there is no concurrent execution framework inside the main loop. Real ' +
+      'parallelism happens in delegate_task batch tasks: each element of tasks: [...] spawns an independent ' +
+      'subagent running concurrently, capped by delegation.max_concurrent_children (default 3). The division of ' +
+      'labor is clean: serial determinism inside the loop, concurrency pushed to the delegation layer with ' +
+      'isolation boundaries.',
+    followUps: [
+      "Does the result order of same-turn tool_calls matter? — They are appended in array order, so the message stream corresponds one-to-one with the model's calls.",
+      'Where is real parallelism, and with what isolation? — Batch delegate: each subagent has its own context and terminal session.',
+      'Why not run tools concurrently inside the main loop? — Tools may depend on each other (write a file, then read it); serial execution preserves determinism. For concurrency, delegate and get isolation.',
+    ],
+    rubric: [
+      "Parallel vs serial is determined by the shape of the model response's tool_calls",
+      'Serial execution inside the loop guarantees determinism and one-to-one message correspondence',
+      'Real parallelism lives in batch delegate, with a concurrency cap and isolation boundaries',
+    ],
+  },
+  {
+    id: 'after-loop',
+    question:
+      'What does Hermes do after the main loop ends? What does that imply for system design?',
+    hint: 'Where is the session persisted? Who works in the on_session_end hook?',
+    answer:
+      'After the three exits (normal return / cap hit / user interrupt): the session is written to SessionDB ' +
+      '(hermes_state.py, SQLite + FTS5, powering cross-session full-text search); the on_session_end plugin hook ' +
+      'fires, and memory providers run sync_turn there, syncing this turn to backends like honcho / mem0; only ' +
+      'then do background systems like the curator take the stage (tracking skill usage, auto-archiving). This ' +
+      'means the main loop is only responsible for "this turn\'s intelligence"; persistence and the learning ' +
+      'loop are decoupled past the session boundary. And the decoupling is configurable: cron sessions default ' +
+      'to skip_memory=True, deliberately skipping memory providers in scheduled jobs.',
+    followUps: [
+      "Why isn't memory sync inside the loop? — Anything appended to context inside the loop breaks the cache; the session boundary is the natural persistence checkpoint.",
+      'Why does cron skip memory? — Scheduled jobs are headless sessions; memory reads/writes are meaningless there and only add latency and uncertainty.',
+      'What capability does the FTS5 index bring? — Searching your own history across sessions (session_search) — the data foundation of "self-evolution".',
+    ],
+    rubric: [
+      'Knows sessions persist to SessionDB (SQLite + FTS5)',
+      'Knows the boundary between the on_session_end hook and memory sync_turn',
+      'Understands the decoupling of the main loop from background learning systems, and that it is configurable (skip_memory)',
+    ],
+  },
+];
+
+export const SELF_ASSESSMENT_TOPICS_EN: SelfAssessmentTopic[] = [
+  { id: 'loop', topic: 'Agent main loop', sourceRef: 'run_agent.py · AGENTS.md §AIAgent Class' },
+  {
+    id: 'caching',
+    topic: 'Prompt-caching iron rule',
+    sourceRef: 'AGENTS.md §Prompt Caching Must Not Break',
+  },
+  {
+    id: 'tools',
+    topic: 'Tool registration & toolsets',
+    sourceRef: 'tools/registry.py + toolsets.py · §Adding New Tools',
+  },
+  {
+    id: 'skills',
+    topic: 'Skills & curator',
+    sourceRef: 'skills/ + agent/curator.py · §Skills / §Curator',
+  },
+  {
+    id: 'memory',
+    topic: 'Memory architecture',
+    sourceRef: 'hermes_state.py + plugins/memory/ · §Memory-provider plugins',
+  },
+  {
+    id: 'delegation',
+    topic: 'Delegation system',
+    sourceRef: 'tools/delegate_tool.py · §Delegation',
+  },
+  { id: 'gateway', topic: 'Message gateway', sourceRef: 'gateway/run.py + gateway/platforms/' },
+  { id: 'cron', topic: 'Cron scheduling', sourceRef: 'cron/jobs.py + cron/scheduler.py · §Cron' },
+  { id: 'tui', topic: 'TUI architecture', sourceRef: 'ui-tui/ + tui_gateway/ · §TUI Architecture' },
+  {
+    id: 'cli',
+    topic: 'CLI architecture',
+    sourceRef: 'cli.py + hermes_cli/commands.py · §CLI Architecture',
+  },
+  {
+    id: 'profiles',
+    topic: 'Profiles (multi-instance)',
+    sourceRef: 'hermes_constants.py · §Profiles',
+  },
+  {
+    id: 'plugins',
+    topic: 'Plugin system',
+    sourceRef: 'plugins/ + hermes_cli/plugins.py · §Plugins',
+  },
+];
+
+// ── 实验室专属 UI 文案（InterviewLab / SelfAssessmentLab） ──────────
+
+export const INTERVIEW_UI = {
+  progressLabel: { zh: '攻克进度', en: 'Mastery progress' },
+  masteredSuffix: { zh: '题已攻克', en: 'mastered' },
+  allMastered: {
+    zh: '全部攻克——别忘了把追问链也过一遍，面试官真正拉开差距的地方在那里。',
+    en: "All mastered — don't forget to walk the follow-up chains too; that is where interviewers really separate candidates.",
+  },
+  isMastered: { zh: '✓ 能答上来了', en: '✓ I can answer this' },
+  markMastered: { zh: '标记：能答上来了', en: 'Mark: I can answer this' },
+  hintLabel: { zh: '思考提示', en: 'HINT' },
+  thinkFirst: { zh: '我先想想', en: 'Think first' },
+  thinkFirstBody: {
+    zh: '别急着翻。用 60 秒在脑子里组织一遍：先给结论，再给机制，最后给一个 Hermes 里的真实例子。',
+    en: "Don't flip yet. Take 60 seconds to organize your answer: conclusion first, then the mechanism, then a real Hermes example.",
+  },
+  modelAnswer: { zh: '模范思路', en: 'MODEL ANSWER' },
+  followUps: { zh: '追问链', en: 'FOLLOW-UPS' },
+  rubric: { zh: '评分维度', en: 'RUBRIC' },
+};
+
+// 自评档位定义：label/desc 按语言取值，level 数值与 AssessmentLevel 对齐。
+export const SELF_ASSESSMENT_LEVELS: {
+  level: 1 | 2 | 3;
+  label: { zh: string; en: string };
+  desc: { zh: string; en: string };
+}[] = [
+  {
+    level: 1,
+    label: { zh: '能讲清', en: 'Can explain' },
+    desc: {
+      zh: '能向外行讲明白它是什么、为什么存在',
+      en: 'Can explain to a layperson what it is and why it exists',
+    },
+  },
+  {
+    level: 2,
+    label: { zh: '能设计', en: 'Can design' },
+    desc: {
+      zh: '能复刻它的设计，并讲清关键取舍',
+      en: 'Can reproduce its design and explain the key trade-offs',
+    },
+  },
+  {
+    level: 3,
+    label: { zh: '能答追问', en: 'Survives follow-ups' },
+    desc: {
+      zh: '经得住追问链：边界、故障、替代方案',
+      en: 'Withstands the follow-up chain: boundaries, failures, alternatives',
+    },
+  },
+];
+
+export const SELF_ASSESSMENT_UI = {
+  introLead: {
+    zh: '面试前最后一道手续是诚实的自评。对着下面 12 个主题逐一点选你达到的最高档位：',
+    en: 'The last step before the interview is an honest self-assessment. For each of the 12 topics below, pick the highest level you have reached:',
+  },
+  introHint1: { zh: '（可以说给外行听）', en: '(can explain it to a layperson)' },
+  introHint2: {
+    zh: '（能复刻设计并讲清取舍）',
+    en: '(can reproduce the design and explain the trade-offs)',
+  },
+  introHint3: {
+    zh: '（经得住边界、故障与替代方案的连环问）',
+    en: '(withstands a chain of boundary, failure, and alternative questions)',
+  },
+  introTail: {
+    zh: '再点一次当前档位可以撤回。底部会汇总出你的薄弱项——每一条都附了回链， 面试前把档位 <2 的主题补齐。',
+    en: 'Click the current level again to undo. Your weak topics are summarized at the bottom — each with a link back to the source. Before the interview, bring every topic below level 2 up to par.',
+  },
+  topicHeader: { zh: '主题', en: 'Topic' },
+  overallProgress: { zh: '总进度', en: 'Overall progress' },
+  evaluated: { zh: '已评估', en: 'Evaluated' },
+  distByLevel: { zh: '按档位分布', en: 'Distribution by level' },
+  level0Name: { zh: '0 · 未评估 / 讲不清', en: "0 · Not assessed / can't explain" },
+  weakTitlePrefix: { zh: '薄弱项（档位 <2，', en: 'Weak topics (level <2, ' },
+  weakTitleSuffix: { zh: ' 个）', en: ')' },
+  noWeak: {
+    zh: '没有薄弱项——12 个主题全部达到「能设计」以上。去把第 23 章的追问链再过一遍， 然后放平心态去面试。',
+    en: 'No weak topics — all 12 are at "Can design" or above. Walk the follow-up chains in Chapter 23 once more, then go into the interview relaxed.',
+  },
+  currentLevel: { zh: '当前档位', en: 'Current level' },
+  reviewLink: { zh: '回炉 → ', en: 'Review → ' },
+};

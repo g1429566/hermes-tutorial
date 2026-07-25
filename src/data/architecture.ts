@@ -134,3 +134,150 @@ export const ARCH_COMPONENTS: ArchComponent[] = [
     dependsOn: ['core'],
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const ARCH_COMPONENTS_EN: ArchComponent[] = [
+  {
+    id: 'core',
+    name: 'Agent Core',
+    tagline: 'The agent loop and tool orchestration',
+    role: 'The heart of the system: receives input, assembles context, calls the model, executes tools, and loops until the task is done. Every frontend (CLI / TUI / gateway) ultimately drives the same agent core.',
+    responsibilities: [
+      'Maintains conversation state and the agent loop (AIAgent)',
+      'Discovers, validates, and executes tool calls',
+      'Manages toolsets: which tools enter the system prompt',
+      'Internal machinery: memory, caching, context compression',
+    ],
+    keyFiles: [
+      { path: 'run_agent.py', note: 'AIAgent class — the core conversation loop (~12k LOC)' },
+      {
+        path: 'model_tools.py',
+        note: 'Tool orchestration: discover_builtin_tools() / handle_function_call()',
+      },
+      { path: 'toolsets.py', note: 'Toolset definitions and the _HERMES_CORE_TOOLS list' },
+      {
+        path: 'agent/',
+        note: 'Internal implementations: provider adapters, memory, caching, compression',
+      },
+    ],
+    dependsOn: ['tools'],
+  },
+  {
+    id: 'frontends',
+    name: 'CLI / TUI Frontends',
+    tagline: 'The direct interaction layer between humans and the agent',
+    role: 'The CLI is a single-process interactive command line; the TUI is an Ink (React)-based terminal UI that talks to the Python backend over JSON-RPC. Neither contains business logic — they are just "remote controls" for the agent core.',
+    responsibilities: [
+      'Interactive chat, slash commands, streaming output rendering',
+      'CLI subcommands: model / tools / config / gateway / setup / doctor',
+      'TUI multi-line editing, history, interrupt-and-redirect',
+      'Setup wizard and diagnostics (hermes setup / hermes doctor)',
+    ],
+    keyFiles: [
+      { path: 'cli.py', note: 'HermesCLI class — interactive CLI orchestrator (~11k LOC)' },
+      { path: 'hermes_cli/', note: 'CLI subcommands, setup wizard, plugin loader' },
+      { path: 'ui-tui/src/', note: 'Ink terminal UI: entry.tsx / app.tsx / gatewayClient.ts' },
+      { path: 'tui_gateway/', note: "The TUI's Python JSON-RPC backend" },
+    ],
+    dependsOn: ['core'],
+  },
+  {
+    id: 'gateway',
+    name: 'Messaging Gateway',
+    tagline: 'Unified onboarding for 20+ platforms',
+    role: 'A single gateway process adapts messages from Telegram, Discord, Slack, WhatsApp, Signal, and other platforms into unified sessions, forwards them to the agent core, and routes replies back to the originating platform.',
+    responsibilities: [
+      'One adapter per platform (gateway/platforms/)',
+      'Session management: cross-platform continuity, message routing',
+      'Voice message transcription',
+      'Platform extension spec (ADDING_A_PLATFORM.md)',
+    ],
+    keyFiles: [
+      { path: 'gateway/run.py', note: 'Gateway entry point and main loop' },
+      { path: 'gateway/session.py', note: 'Session state and message flow' },
+      {
+        path: 'gateway/platforms/',
+        note: 'telegram / discord / slack / whatsapp / signal / feishu / …',
+      },
+      { path: 'gateway/ADDING_A_PLATFORM.md', note: 'Official guide to adding a platform adapter' },
+    ],
+    dependsOn: ['core'],
+  },
+  {
+    id: 'tools',
+    name: 'Tools & Execution Environments',
+    tagline: 'The agent\'s "hands"',
+    role: 'Tool implementations under tools/ are auto-discovered via registry.py; tools/environments/ provides 6 terminal backends, letting the same tool code run locally, in Docker, over SSH, or in serverless environments.',
+    responsibilities: [
+      'Tool implementations: file read/write, search, bash, etc.',
+      'Tool auto-discovery and registration (tools/registry.py, zero dependencies)',
+      'Terminal backends: local / Docker / SSH / Singularity / Modal / Daytona',
+      'Hibernation / wake-up for serverless backends',
+    ],
+    keyFiles: [
+      {
+        path: 'tools/registry.py',
+        note: 'Tool registry — imported by every tool file, itself dependency-free',
+      },
+      { path: 'tools/', note: 'Tool implementations: auto-discovered' },
+      { path: 'tools/environments/', note: '6 terminal backends' },
+    ],
+    dependsOn: [],
+  },
+  {
+    id: 'plugins',
+    name: 'Plugins & Skills',
+    tagline: 'Capabilities grow at the edges; the core stays a narrow waist',
+    role: 'New capabilities arrive mainly as plugins and skills rather than bloating the core. Plugins cover memory providers, model providers, kanban, observability, and more; skills are learnable, reusable task knowledge for the agent.',
+    responsibilities: [
+      'memory plugins: honcho / mem0 / supermemory',
+      'model-providers plugins: openrouter / anthropic / gmi',
+      'kanban: multi-agent board scheduling',
+      'Built-in and optional skills (agentskills.io open standard)',
+    ],
+    keyFiles: [
+      {
+        path: 'plugins/',
+        note: 'Plugin system: memory / context_engine / model-providers / kanban / …',
+      },
+      { path: 'skills/', note: 'Skills bundled with the repo' },
+      { path: 'optional-skills/', note: 'Heavier / niche skills, disabled by default' },
+    ],
+    dependsOn: ['core'],
+  },
+  {
+    id: 'infra',
+    name: 'Scheduling & State',
+    tagline: 'Cron jobs, session storage, and path conventions',
+    role: 'cron/ provides unattended scheduled execution; hermes_state.py persists sessions in SQLite (FTS5), powering cross-session search; hermes_constants.py unifies the location of configs and logs under ~/.hermes.',
+    responsibilities: [
+      'cron scheduler: scheduled jobs described in natural language',
+      'SessionDB: SQLite session storage + FTS5 full-text search',
+      'Profile-aware paths (multi-instance isolation)',
+      'Logging conventions: agent.log / errors.log / gateway.log',
+    ],
+    keyFiles: [
+      { path: 'cron/jobs.py', note: 'Scheduled job definitions' },
+      { path: 'cron/scheduler.py', note: 'Scheduler main loop' },
+      { path: 'hermes_state.py', note: 'SessionDB — SQLite + FTS5' },
+      { path: 'hermes_constants.py', note: 'get_hermes_home() — profile-aware paths' },
+    ],
+    dependsOn: ['core'],
+  },
+];
+
+// 本章实验室专属 UI 文案（组件里用 pick(lang, ARCH_UI.xxx) 取值）。
+export const ARCH_UI = {
+  intro: {
+    zh: 'hermes-agent 是一个单仓库 Python 项目，文件极多，但承重墙只有六块。点击左侧任一组成部分，右侧会展开它的角色、职责、关键源文件，以及它依赖谁。',
+    en: 'hermes-agent is a single-repo Python project with a huge number of files, but only six load-bearing walls. Click any component on the left to expand its role, responsibilities, key source files, and what it depends on.',
+  },
+  responsibilities: { zh: '职责', en: 'Responsibilities' },
+  keyFiles: { zh: '关键源文件', en: 'Key source files' },
+  dependencies: { zh: '依赖', en: 'Depends on' },
+  noDeps: {
+    zh: '无依赖 —— 它是地基（被所有人导入）。',
+    en: "No dependencies — it's the foundation (imported by everyone).",
+  },
+};

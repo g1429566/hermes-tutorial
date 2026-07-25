@@ -90,3 +90,105 @@ auxiliary:
   vision:
     provider: anthropic
     reasoning_effort: low`;
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const ROUTING_INTRO_EN =
+  'Chapter 27 mentioned “retry → circuit break → degrade” when covering reliability. This chapter ' +
+  'shows how degradation actually happens: who takes over when the main model dies? And who picks ' +
+  'up the side tasks (compression, summarization, vision)? Hermes’s answer has three layers: the ' +
+  'credential pool within a provider, fallback_model across providers, and a unified router for ' +
+  'auxiliary tasks.';
+
+export const FAILOVER_LAYERS_EN: FailoverLayer[] = [
+  {
+    id: 'pool',
+    name: '① Credential pool: rotate keys within one provider',
+    trigger: 'A single credential gets throttled / expires',
+    body: 'credential_pool persists multiple credentials for the same provider. When one key hits a rate limit or expires, the pool rotates to the next credential within the same provider — invisible to the user. Credential sourcing, redacting borrowed origins, and expiry refresh (such as the skew refresh for Codex tokens) are all handled inside the pool.',
+    sourceRef: 'agent/credential_pool.py',
+  },
+  {
+    id: 'fallback',
+    name: '② fallback_model: degrade across providers',
+    trigger: 'The entire provider is unavailable',
+    body: 'A credential pool can’t save you when the whole provider is down. fallback_model in the AIAgent constructor parameters is the cross-provider last resort: when the primary model is completely unreachable, switch to the backup model and keep the session going.',
+    sourceRef: 'run_agent.py (AIAgent constructor params)',
+  },
+  {
+    id: 'auxiliary',
+    name: '③ auxiliary: unified routing for side tasks',
+    trigger: 'Auxiliary LLM calls like compression / summarization / vision',
+    body: 'Outside the agent loop there is a lot of “side” LLM work: context compression, session_search, title generation, vision analysis, curator review. auxiliary_client gives them all one unified resolution chain instead of copying fallback logic per task; each task can also pin its own backend via auxiliary.<task>.provider/model.',
+    sourceRef: 'agent/auxiliary_client.py',
+  },
+];
+
+export const AUX_TASKS_EN: AuxTask[] = [
+  {
+    id: 'compression',
+    name: 'Context compression',
+    kind: 'text',
+    desc: 'Compression must be a cheap, fast model',
+  },
+  {
+    id: 'session_search',
+    name: 'Session search',
+    kind: 'text',
+    desc: 'Query understanding for cross-session recall',
+  },
+  { id: 'title', name: 'Title generation', kind: 'text', desc: 'Titling sessions' },
+  { id: 'curator', name: 'Curator review', kind: 'text', desc: 'LLM review pass on skill quality' },
+  {
+    id: 'vision',
+    name: 'Vision analysis',
+    kind: 'vision',
+    desc: 'Image understanding (Chapter 31)',
+  },
+];
+
+// 文本任务的 auto 解析顺序（agent/auxiliary_client.py docstring）
+export const TEXT_CHAIN_EN: typeof TEXT_CHAIN = [
+  {
+    step: 1,
+    backend: 'Primary provider + primary model',
+    note: 'Whatever the provider type, reuse what the user already configured first',
+  },
+  { step: 2, backend: 'OpenRouter', note: 'OPENROUTER_API_KEY' },
+  { step: 3, backend: 'Nous Portal', note: 'the active provider in ~/.hermes/auth.json' },
+  { step: 4, backend: 'Custom endpoint', note: 'config.yaml model.base_url + OPENAI_API_KEY' },
+  { step: 5, backend: 'Native Anthropic', note: 'direct key' },
+  { step: 6, backend: 'Direct-key family', note: 'z.ai/GLM, Kimi/Moonshot, MiniMax, etc.' },
+  { step: 7, backend: 'None', note: 'All unavailable — this auxiliary feature silently degrades' },
+];
+
+// 视觉任务的 auto 解析顺序（同一份 docstring）
+export const VISION_CHAIN_EN: typeof VISION_CHAIN = [
+  {
+    step: 1,
+    backend: 'Primary provider (must support vision)',
+    note: 'only if it’s on the supported vision backend list',
+  },
+  { step: 2, backend: 'OpenRouter', note: '' },
+  { step: 3, backend: 'Nous Portal', note: '' },
+  { step: 4, backend: 'Native Anthropic', note: '' },
+  { step: 5, backend: 'Custom endpoint', note: 'local vision models: Qwen-VL / LLaVA / Pixtral' },
+  { step: 6, backend: 'None', note: '' },
+];
+
+export const CODEX_CALLOUT_EN: typeof CODEX_CALLOUT = {
+  title: 'Why Codex OAuth is not in the fallback chain',
+  body: 'OpenAI put an undocumented, ever-changing model whitelist on the Codex endpoint — a fallback of “try Codex + a hardcoded model name” would rot on its own. So Codex is used only in two cases: the user’s primary provider is already openai-codex, or the caller explicitly sets auxiliary.<task>.provider + model. The fallback chain’s design principle: only include backends that are certain to work today and tomorrow.',
+};
+
+// RoutingLab 专属 UI 文案（中英对）。
+export const ROUTING_UI = {
+  failoverKicker: { zh: '三层降级', en: 'THREE-LAYER FAILOVER' },
+  failoverTitle: { zh: '主模型挂了，谁来接盘', en: 'When the main model dies, who takes over' },
+  triggerPrefix: { zh: '触发：', en: 'Trigger: ' },
+  auxKicker: { zh: '辅助任务路由', en: 'AUXILIARY ROUTING' },
+  auxTitle: { zh: '侧边 LLM 调用派给谁', en: 'Who gets the side LLM calls' },
+  chainPrefix: { zh: 'AUTO 解析链 · ', en: 'AUTO RESOLUTION CHAIN · ' },
+  visionTask: { zh: '视觉任务', en: 'vision task' },
+  textTask: { zh: '文本任务', en: 'text task' },
+};

@@ -5,9 +5,13 @@ import {
   DEFAULT_SKILL_FORM,
   PLATFORMS,
   SKILL_BUILDER_INTRO,
+  SKILL_BUILDER_INTRO_EN,
+  SKILL_BUILDER_UI,
   SKILL_CATEGORIES,
   SKILL_DIR_ENTRIES,
+  SKILL_DIR_ENTRIES_EN,
   SKILL_SECTION_ORDER,
+  SKILL_SECTION_ORDER_EN,
   buildSkillMarkdown,
   skillFilePath,
   type SkillBuilderForm,
@@ -15,6 +19,7 @@ import {
 import { DESCRIPTION_MAX_LENGTH, validateSkill } from '@/lib/skill-validate';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick } from '@/lib/i18n';
 import { CodeBlock, SectionHeading } from './primitives';
 
 const LAB_KEY = 'lab:skill-builder';
@@ -45,12 +50,16 @@ const inputCls =
 // Chapter 18「写一个新技能」：技能构建器。
 // 左：frontmatter 表单；右：实时 SKILL.md 预览 + 硬标准校验；下方：目录结构与章节顺序。
 export default function SkillBuilderLab() {
+  const { lang } = useLang();
+  const intro = lang === 'en' ? SKILL_BUILDER_INTRO_EN : SKILL_BUILDER_INTRO;
+  const dirEntries = lang === 'en' ? SKILL_DIR_ENTRIES_EN : SKILL_DIR_ENTRIES;
+  const sectionOrder = lang === 'en' ? SKILL_SECTION_ORDER_EN : SKILL_SECTION_ORDER;
   const progress = useProgress();
   const [form, setForm] = useState<SkillBuilderForm>(() =>
     restoreForm(progress.labResults[LAB_KEY]),
   );
 
-  const errors = validateSkill(form);
+  const errors = validateSkill(form, lang);
   const broken: Set<string> = new Set(errors.map((e) => e.field));
 
   function update(next: SkillBuilderForm) {
@@ -71,7 +80,7 @@ export default function SkillBuilderLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{SKILL_BUILDER_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
       <div className="mt-8 grid gap-4 xl:grid-cols-2">
         {/* ── 左：frontmatter 表单 ── */}
@@ -92,7 +101,10 @@ export default function SkillBuilderLab() {
 
           <div>
             <label className={labelCls} htmlFor="sb-desc">
-              description · 一句话，≤{DESCRIPTION_MAX_LENGTH} 字符，句号结尾
+              {pick(lang, SKILL_BUILDER_UI.descLabel).replace(
+                '{MAX}',
+                String(DESCRIPTION_MAX_LENGTH),
+              )}
             </label>
             <textarea
               id="sb-desc"
@@ -147,7 +159,7 @@ export default function SkillBuilderLab() {
 
           <div>
             <label className={labelCls} htmlFor="sb-author">
-              author · 人类贡献者在前（硬标准第 4 条）
+              {pick(lang, SKILL_BUILDER_UI.authorLabel)}
             </label>
             <input
               id="sb-author"
@@ -160,7 +172,7 @@ export default function SkillBuilderLab() {
           </div>
 
           <div>
-            <p className={labelCls}>platforms · OS 门控（硬标准第 3 条）</p>
+            <p className={labelCls}>{pick(lang, SKILL_BUILDER_UI.platformsLabel)}</p>
             <div className="mt-1.5 flex flex-wrap gap-2">
               {PLATFORMS.map((p) => {
                 const on = form.platforms.includes(p);
@@ -185,8 +197,7 @@ export default function SkillBuilderLab() {
               })}
             </div>
             <p className="mt-1.5 text-xs text-muted">
-              全不选 = 不声明门控；脚本里用了 fcntl / osascript / systemctl
-              这类平台绑定原语时才收窄。
+              {pick(lang, SKILL_BUILDER_UI.platformsNote)}
             </p>
           </div>
         </div>
@@ -196,15 +207,15 @@ export default function SkillBuilderLab() {
           <CodeBlock
             file={skillFilePath(form)}
             code={buildSkillMarkdown(form)}
-            note="实时生成的 YAML frontmatter——与仓库里真实技能同一形状"
+            note={pick(lang, SKILL_BUILDER_UI.previewNote)}
           />
           <div className="rounded-lg border border-line bg-white p-5">
             <p className="font-mono text-[11px] tracking-[0.15em] text-muted">
-              硬标准校验（AGENTS.md 第 1、3 条）
+              {pick(lang, SKILL_BUILDER_UI.validationTitle)}
             </p>
             {errors.length === 0 ? (
               <p className="mt-3 text-sm text-green">
-                ✓ 全部通过——这个 frontmatter 过了 reviewer 的第一关
+                {pick(lang, SKILL_BUILDER_UI.validationPass)}
               </p>
             ) : (
               <ul className="mt-3 space-y-2">
@@ -225,15 +236,15 @@ export default function SkillBuilderLab() {
         </div>
       </div>
 
-      <SectionHeading kicker="目录约定" title="一个技能就是一个目录" />
+      <SectionHeading
+        kicker={pick(lang, SKILL_BUILDER_UI.dirKicker)}
+        title={pick(lang, SKILL_BUILDER_UI.dirTitle)}
+      />
       <p className="mt-3 max-w-3xl leading-relaxed text-ink/75">
-        硬标准第 6 条：脚本进 <code className="font-mono text-ember">scripts/</code>、参考进{' '}
-        <code className="font-mono text-ember">references/</code>、模板进{' '}
-        <code className="font-mono text-ember">templates/</code>
-        ——别指望模型每次调用都现场重写解析逻辑，把帮手随技能一起发布，正文里用相对路径引用。
+        {pick(lang, SKILL_BUILDER_UI.dirBody)}
       </p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
-        {SKILL_DIR_ENTRIES.map((e) => (
+        {dirEntries.map((e) => (
           <div key={e.file} className="rounded-lg border border-line bg-white p-4">
             <p className="font-mono text-sm text-ember">
               {form.name.trim() || 'my-skill'}/{e.file}
@@ -243,13 +254,15 @@ export default function SkillBuilderLab() {
         ))}
       </div>
 
-      <SectionHeading kicker="正文结构" title="现代章节顺序（硬标准第 5 条）" />
+      <SectionHeading
+        kicker={pick(lang, SKILL_BUILDER_UI.sectionsKicker)}
+        title={pick(lang, SKILL_BUILDER_UI.sectionsTitle)}
+      />
       <p className="mt-3 max-w-3xl leading-relaxed text-ink/75">
-        复杂技能目标约 200 行、简单技能约 100 行；砍掉营销式引言和在 Prerequisites
-        里已经讲过的环境变量复读。
+        {pick(lang, SKILL_BUILDER_UI.sectionsBody)}
       </p>
       <ol className="mt-5 max-w-3xl space-y-2">
-        {SKILL_SECTION_ORDER.map((s, i) => (
+        {sectionOrder.map((s, i) => (
           <li
             key={s.name}
             className="flex items-baseline gap-4 rounded-lg border border-line bg-white px-4 py-3"
@@ -263,10 +276,12 @@ export default function SkillBuilderLab() {
         ))}
       </ol>
 
-      <SectionHeading kicker="记忆钩子" title="一句话记住技能 frontmatter" />
+      <SectionHeading
+        kicker={pick(lang, SKILL_BUILDER_UI.hookKicker)}
+        title={pick(lang, SKILL_BUILDER_UI.hookTitle)}
+      />
       <p className="mt-3 max-w-3xl rounded-lg border border-acid bg-acid/10 p-5 font-mono text-sm leading-relaxed">
-        60 字符、一句话、句号结尾、没有营销词、不重复技能名——description 是技能的脸，
-        也是模型注意力的税。
+        {pick(lang, SKILL_BUILDER_UI.hookBody)}
       </p>
     </section>
   );

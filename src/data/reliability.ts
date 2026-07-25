@@ -296,3 +296,323 @@ export const DEFENSE_OPTIONS: DefenseOption[] = [
     tradeoff: '处理不了的消息先收容不丢；代价是没有配套巡检时，队列会变成无人问津的故障坟墓。',
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const DEFENSE_LAYERS_EN: typeof DEFENSE_LAYERS = [
+  {
+    id: 'retry',
+    label: 'Retry',
+    desc: 'Try again after a failure. The cheapest first line of defense, but only works on transient faults.',
+  },
+  {
+    id: 'circuit',
+    label: 'Circuit break',
+    desc: 'Once a path is confirmed dead, close it: rotate credentials, cut timeouts, lock tasks — stop the failure from spreading.',
+  },
+  {
+    id: 'compensate',
+    label: 'Compensate',
+    desc: 'The failure already happened; win the loss back with degradation, compression, and graceful wrap-up.',
+  },
+  {
+    id: 'audit',
+    label: 'Audit',
+    desc: 'trajectories, SessionDB, and the observer keep full traces — they don’t prevent failures, but make every failure reviewable.',
+  },
+];
+
+export const RELIABILITY_INTRO_EN =
+  'Real agents don’t run in a world where nothing goes wrong: models get rate-limited, contexts overflow, ' +
+  'users hit Esc mid-loop, one tool call in a batch blows up, unattended cron jobs spin into infinite loops, ' +
+  'and delegated sub-agents vanish into the void. This chapter injects six typical failures straight into ' +
+  'the Hermes agent loop to see its real countermechanisms, then maps each one onto the four-layer defense: ' +
+  'retry → circuit break → compensate → audit. Click any failure card to start.';
+
+export const FAILURE_MODES_EN: FailureMode[] = [
+  {
+    id: 'rate-limit',
+    name: 'LLM API 429 / rate limit',
+    tagline: 'The provider starts rejecting requests',
+    symptom:
+      'The provider returns 429 (rate limit): the current API key’s quota is exhausted, and every ' +
+      'chat.completions.create may throw. Getting throttled halfway through a long session is the most ' +
+      'common “external” failure — there’s no bug in the code, but the road is blocked.',
+    response:
+      'Hermes doesn’t put all its eggs in one key: credential_pool maintains a set of credentials and ' +
+      'rotates to the next one when a limit is hit; if that still fails, fallback_model degrades the ' +
+      'request to a backup model. AGENTS.md also records a circuit-breaking discipline: the rate-limit ' +
+      'breaker only trips on account buckets confirmed empty — re-probing during the cooldown just ' +
+      'hammers a bucket already proven empty, and PRs for this kind of “retry optimization” get closed ' +
+      'on sight.',
+    mechanisms: [
+      {
+        name: 'credential_pool',
+        desc: 'run_agent.py (AIAgent.__init__ parameter): credential pool rotation — one throttled key doesn’t kill the session',
+      },
+      {
+        name: 'fallback_model',
+        desc: 'run_agent.py: degrade to a backup model when the primary stays unavailable, preserving availability',
+      },
+      {
+        name: 'breaker cooldown discipline',
+        desc: 'AGENTS.md §Wrong-Premise Patterns: trip only on confirmed-empty buckets; no re-probing during cooldown',
+      },
+    ],
+    layer: 'circuit',
+    layerNote:
+      'Rotating credentials, degrading the model, tripping into cooldown — all are “close the road once ' +
+      'it’s confirmed dead,” which is the circuit-break layer; retrying only happens after a fresh ' +
+      'credential is confirmed available.',
+    source: 'run_agent.py · AGENTS.md §Wrong-Premise Patterns',
+  },
+  {
+    id: 'context-overflow',
+    name: 'Context window overflow',
+    tagline: 'The conversation grows past what the model can take',
+    symptom:
+      'The messages array only grows: long sessions, big tool results, and delegation summaries pile up, ' +
+      'pushing total tokens toward the model’s context limit — sending the same request again just ' +
+      'overruns the limit, so retrying is pointless.',
+    response:
+      'Hermes’s first design constraint is per-conversation prompt caching: never rewrite history, swap ' +
+      'toolsets, or rebuild the system prompt mid-conversation — the sole exception is context ' +
+      'compression. Compression folds the conversation into a shorter form and the loop continues ' +
+      '(agent/context_compressor.py, agent/conversation_compression.py). Large tool results are also ' +
+      'truncated or summarized before being written back into the message stream, slowing the bloat at ' +
+      'the source.',
+    mechanisms: [
+      {
+        name: 'context compression',
+        desc: 'agent/context_compressor.py: the only moment allowed to change context mid-conversation (AGENTS.md §Prompt Caching Must Not Break)',
+      },
+      {
+        name: 'result truncation / summarization',
+        desc: 'run_agent.py: slim large results before writing them back, protecting the context window',
+      },
+      {
+        name: 'caching discipline',
+        desc: 'AGENTS.md: any mid-conversation rewrite other than compression busts the cache and doubles cost',
+      },
+    ],
+    layer: 'compensate',
+    layerNote:
+      'Overflow can’t be retried away — the same request will overrun again. Compression compensates for ' +
+      'bloat that already happened: it pays with lossy information to keep the conversation going.',
+    source: 'agent/context_compressor.py · agent/conversation_compression.py',
+  },
+  {
+    id: 'user-abort',
+    name: 'User aborts mid-run',
+    tagline: 'Esc is pressed; the loop must stop gracefully',
+    symptom:
+      'The agent is calling tools on iteration N when the user hits Esc demanding an immediate stop. ' +
+      'A hard kill leaves half-written files, unsaved sessions, and dangling tool calls behind.',
+    response:
+      'In Hermes, interruption is not an exception but part of the loop condition: the while loop in ' +
+      'run_conversation() checks _interrupt_requested at the top of every iteration and breaks when the ' +
+      'flag is set, rather than waiting for an exception to blow up. A running agent can receive the ' +
+      'interrupt via running_agent.interrupt(); when the budget runs out there’s also a one-turn grace ' +
+      'call — a final turn for the model to finish speaking and pack up state, then exit and persist ' +
+      'the session.',
+    mechanisms: [
+      {
+        name: '_interrupt_requested',
+        desc: 'run_agent.py: checked at the top of every iteration — interruption is a loop condition, not an exception',
+      },
+      {
+        name: 'running_agent.interrupt()',
+        desc: 'AGENTS.md: an external command sends the interrupt signal to the running runner',
+      },
+      {
+        name: 'one-turn grace call',
+        desc: 'run_agent.py (_budget_grace_call): a wrap-up chance — summarize, save, exit gracefully',
+      },
+    ],
+    layer: 'compensate',
+    layerNote:
+      'Abort is inevitable and needs no breaker — the user always has the right to stop. What’s needed ' +
+      'is compensation: turn the interrupt into a normal exit with wrap-up and persistence.',
+    source: 'run_agent.py',
+  },
+  {
+    id: 'partial-tool-failure',
+    name: 'Partial tool failure',
+    tagline: 'One tool_call in a batch blows up',
+    symptom:
+      'The model returns multiple tool_calls in one response, and one handler throws. If the exception ' +
+      'tears through the whole loop, the earlier successful tool results are lost too, and the agent ' +
+      'never learns what happened.',
+    response:
+      'handle_function_call() wraps each tool call in its own try/except: the handler’s exception is ' +
+      'caught, sanitized (_sanitize_tool_error), and serialized into a {"error": ...} JSON string as ' +
+      'that tool_call’s result. The loop appends the error back into the message stream as a normal ' +
+      'role="tool" message — next turn the model sees the error with its own eyes and decides whether ' +
+      'to fix the arguments and retry, switch tools, or confess to the user. The error is demoted to ' +
+      'information; the agent’s self-correction is the defense itself.',
+    mechanisms: [
+      {
+        name: 'error wrapping',
+        desc: 'model_tools.py (the except branch of handle_function_call): exception → {"error": ...} JSON, loop keeps running',
+      },
+      {
+        name: '_sanitize_tool_error',
+        desc: 'model_tools.py: tool exceptions can carry arbitrary text — sanitized before entering model context',
+      },
+      {
+        name: 'append, never rewrite',
+        desc: 'run_agent.py: error results are appended as tool messages too, leaving the prompt cache intact',
+      },
+    ],
+    layer: 'compensate',
+    layerNote:
+      'One failed tool doesn’t mean a failed task. Translating the exception into an agent-readable ' +
+      'result message is a compensating design that lets the model perform the “application-layer retry” ' +
+      'itself on the next turn.',
+    source: 'model_tools.py · run_agent.py',
+  },
+  {
+    id: 'cron-runaway',
+    name: 'Cron job runs away',
+    tagline: 'Nobody is around to press Esc',
+    symptom:
+      'At 3 a.m., the agent inside a scheduled job falls into an infinite loop: calling tools over and ' +
+      'over, iteration count skyrocketing. With no user to press Esc, it burns tokens forever and holds ' +
+      'the scheduler hostage while every other job starves.',
+    response:
+      'Cron sessions carry a set of hardcoded hardening invariants: a 3-minute hard interrupt — a ' +
+      'runaway agent loop can never monopolize the scheduler; the ~/.hermes/cron/.tick.lock file lock ' +
+      'prevents duplicate ticks across processes; jobs that miss their fire time get a bounded catch-up ' +
+      'via a catchup window (half the period, clamped to 120s–2h) and a 120s grace window (one-shot ' +
+      'jobs) instead of frantic replaying. Cron sessions also default to skip_memory=True — the memory ' +
+      'system deliberately stays out. The kanban side adds another gate: after kanban.failure_limit ' +
+      '(default 2) consecutive failures, the dispatcher automatically blocks the task to prevent spin ' +
+      'loops.',
+    mechanisms: [
+      {
+        name: '3-minute hard interrupt',
+        desc: 'cron/scheduler.py: a hardening invariant spelled out in AGENTS.md — power is cut when time is up',
+      },
+      {
+        name: 'file lock',
+        desc: '~/.hermes/cron/.tick.lock: prevents duplicate ticks across processes',
+      },
+      {
+        name: 'catchup / grace window',
+        desc: 'cron/scheduler.py: bounded catch-up — half a period (clamped to 120s–2h) / 120s for one-shot jobs',
+      },
+      {
+        name: 'failure_limit auto-block',
+        desc: 'kanban dispatcher: 2 consecutive failures (default) lock the task, preventing spin loops',
+      },
+    ],
+    layer: 'circuit',
+    layerNote:
+      'In unattended scenarios the breaker must be a mechanism, not a convention: cut power when time ' +
+      'is up, lock the task when failures hit the limit — don’t count on the loop waking itself up.',
+    source: 'cron/scheduler.py · cron/jobs.py',
+  },
+  {
+    id: 'subagent-timeout',
+    name: 'Sub-agent timeout',
+    tagline: 'The delegated task vanishes into the void',
+    symptom:
+      'The parent agent dispatches work to a child via delegate_task, but the child gets stuck in a slow ' +
+      'tool or its own runaway loop. The parent waits in place for the summary, and the whole delegation ' +
+      'tree freezes.',
+    response:
+      'Delegation isolation is not just context isolation — it’s fault isolation: the child runs in its ' +
+      'own context + terminal session, backstopped by delegation.child_timeout_seconds; ' +
+      'delegation.max_concurrent_children (default 3) and max_spawn_depth (default 2) confine the blast ' +
+      'radius to the delegation tree. When waiting isn’t an option there’s background=true: it returns ' +
+      'a delegation id immediately, the result comes back later through the async-delegation completion ' +
+      'queue, and the parent keeps running its own loop. Long jobs that must survive process restarts ' +
+      'should use cronjob or terminal(background=True) instead of background delegation.',
+    mechanisms: [
+      {
+        name: 'child_timeout_seconds',
+        desc: 'tools/delegate_tool.py (config: delegation.*): timeout backstop for child agents',
+      },
+      {
+        name: 'isolation model',
+        desc: 'delegate_task: separate context + terminal session, concurrency ≤3, nesting depth ≤2',
+      },
+      {
+        name: 'async completion queue',
+        desc: 'background=true: results flow back via the completion queue — the parent never blocks',
+      },
+    ],
+    layer: 'circuit',
+    layerNote:
+      'A timeout is a “waiting won’t help, cut it” circuit break; the async queue front-loads ' +
+      'compensation — it eliminates the “parent waits on child” failure mode by design.',
+    source: 'tools/delegate_tool.py',
+  },
+];
+
+export const DEFENSE_OPTIONS_INTRO_EN =
+  'There’s no free reliability. Check the defenses you’d put in your own agent system — each one is ' +
+  'labeled with its cost, and your choices are saved to local progress.';
+
+export const DEFENSE_OPTIONS_EN: DefenseOption[] = [
+  {
+    id: 'exponential-backoff',
+    name: 'Exponential backoff retry',
+    tradeoff:
+      'Trades latency for success rate; but retrying a confirmed-empty rate-limit bucket just spins, and a retry storm amplifies the failure.',
+  },
+  {
+    id: 'circuit-breaker',
+    name: 'Circuit breaker',
+    tradeoff:
+      'Fails fast to protect downstream; the cost is tricky thresholds — a false trip turns a blip into total unavailability.',
+  },
+  {
+    id: 'fallback-model',
+    name: 'Fallback model',
+    tradeoff:
+      'Preserves availability; the cost is quietly degraded answer quality that users may not notice.',
+  },
+  {
+    id: 'human-approval',
+    name: 'Human approval',
+    tradeoff:
+      'A human gate makes high-risk operations safe; the cost is throughput capped at human speed, and approval fatigue leads to rubber-stamping.',
+  },
+  {
+    id: 'audit-log',
+    name: 'Audit log',
+    tradeoff:
+      'Traceable and reviewable after the fact; the cost is that it blocks no failure, and tracing itself costs storage and attention.',
+  },
+  {
+    id: 'dead-letter-queue',
+    name: 'Dead-letter queue',
+    tradeoff:
+      'Unprocessable messages are held instead of lost; the cost is that without paired inspection, the queue becomes a graveyard of failures nobody visits.',
+  },
+];
+
+// ReliabilityLab 专属 UI 文案（中英对）。
+export const RELIABILITY_UI = {
+  symptom: { zh: '故障现象', en: 'Symptom' },
+  response: { zh: 'Hermes 的真实应对', en: 'How Hermes actually responds' },
+  mechanisms: { zh: '机制与源码', en: 'Mechanisms & source' },
+  layerPrefix: { zh: '防线归属 · ', en: 'Defense layer · ' },
+  sourcePrefix: { zh: '源码位置：', en: 'Source: ' },
+  layersKicker: { zh: '四层防线', en: 'FOUR LAYERS' },
+  layersTitle: {
+    zh: '重试 → 熔断 → 补偿 → 审计',
+    en: 'Retry → Circuit break → Compensate → Audit',
+  },
+  layersBody: {
+    zh: '四层防线按「故障发生前 → 故障扩散前 → 故障发生后 → 全程留痕」排列。当前选中的故障主层已高亮——注意「重试」与「审计」没有专属故障卡：重试在 Hermes 里更多是模型看到错误结果后的自发行为，审计则默认贯穿每一次循环。',
+    en: 'The four layers are ordered “before the failure → before it spreads → after it happens → traced throughout.” The selected failure’s primary layer is highlighted — note that “retry” and “audit” have no failure card of their own: in Hermes, retry is mostly the model’s spontaneous behavior after seeing an error result, and audit runs through every loop by default.',
+  },
+  handsOnKicker: { zh: '动手', en: 'HANDS-ON' },
+  handsOnTitle: { zh: '设计你自己的防线', en: 'Design your own defenses' },
+  countText: {
+    zh: '已选 {n}/{total} 道防线 · 选择已保存到本地进度',
+    en: '{n}/{total} defenses selected · saved to local progress',
+  },
+};

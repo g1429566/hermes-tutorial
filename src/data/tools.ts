@@ -342,3 +342,352 @@ export const EXEC_FLOW: ChainStep[] = [
 export const TOOL_ROUTING_HOOK =
   '想加一个工具？两个文件：tools/your_tool.py 里 registry.register()，toolsets.py 里把名字加进 TOOLSETS。' +
   '发现是自动的，收录是刻意的——这就是 Hermes 的工具哲学。';
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const TOOL_ROUTING_INTRO_EN =
+  'Every turn, the model gets a list of tool schemas — but a tool travels through four gates from ' +
+  '"a Python file in tools/" to "actually called by the model": register-on-import, auto-discovery, ' +
+  'toolset inclusion, and platform adapter selection. Pick a real tool on the left to see its schema, ' +
+  'registration site, and environment check on the right; below is the full breakdown of this pipeline.';
+
+export const TOOLS_EN: ToolDatum[] = [
+  {
+    id: 'read_file',
+    name: 'read_file',
+    tagline: 'Read a text file (with line numbers and pagination)',
+    toolset: 'file',
+    file: 'tools/file_tools.py',
+    registerLine: 'tools/file_tools.py:2104',
+    check:
+      'check_fn=_check_file_reqs (base environment check for file tools); max_result_size_chars=100_000, longer results are truncated',
+    schema: `{
+  "name": "read_file",
+  "description": "Read a text file with line numbers and pagination. Use this instead of cat/head/tail in terminal. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "path":   { "type": "string",  "description": "Path to the file to read (absolute, relative, or ~/path)" },
+      "offset": { "type": "integer", "description": "Line number to start reading from (1-indexed)", "default": 1 },
+      "limit":  { "type": "integer", "description": "Maximum number of lines to read (default: 500, max: 2000)" }
+    },
+    "required": ["path"]
+  }
+}`,
+    note: '.ipynb / .docx / .xlsx are auto-extracted into readable text; images and binaries are not — use vision_analyze',
+  },
+  {
+    id: 'patch',
+    name: 'patch',
+    tagline: 'Precise file editing (replace / patch dual modes)',
+    toolset: 'file',
+    file: 'tools/file_tools.py',
+    registerLine: 'tools/file_tools.py:2106',
+    check:
+      'check_fn=_check_file_reqs; registered in the same file as read_file / write_file / search_files (lines 2104–2107)',
+    schema: `{
+  "name": "patch",
+  "description": "Edit mode. 'replace' (default): requires path + old_string + new_string. 'patch': requires patch content only.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "mode":       { "type": "string", "enum": ["replace", "patch"], "default": "replace" },
+      "path":       { "type": "string" },
+      "old_string": { "type": "string" },
+      "new_string": { "type": "string" },
+      "patch":      { "type": "string" }
+    }
+  }
+}`,
+    note: 'Skill authoring standards require: file edits in skill bodies must name `patch`, never make the model assemble sed/awk',
+  },
+  {
+    id: 'search_files',
+    name: 'search_files',
+    tagline: 'Ripgrep-backed search (contents / file names)',
+    toolset: 'file',
+    file: 'tools/file_tools.py',
+    registerLine: 'tools/file_tools.py:2107',
+    check: 'check_fn=_check_file_reqs',
+    schema: `{
+  "name": "search_files",
+  "description": "Search file contents or find files by name. Use this instead of grep/rg/find/ls in terminal. Ripgrep-backed. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "pattern":     { "type": "string",  "description": "Regex for content search, or glob (e.g. '*.py') for file search" },
+      "target":      { "type": "string",  "enum": ["content", "files"], "default": "content" },
+      "path":        { "type": "string",  "default": "." },
+      "file_glob":   { "type": "string",  "description": "Filter files by pattern in grep mode" },
+      "limit":       { "type": "integer", "default": 50 },
+      "offset":      { "type": "integer", "default": 0 },
+      "output_mode": { "type": "string",  "enum": ["content", "files_only", "count"], "default": "content" }
+    }
+  }
+}`,
+  },
+  {
+    id: 'terminal',
+    name: 'terminal',
+    tagline: 'Execute commands in a shell (incl. background processes)',
+    toolset: 'terminal',
+    file: 'tools/terminal_tool.py',
+    registerLine: 'tools/terminal_tool.py:3133',
+    check:
+      'check_fn=check_terminal_requirements — exposed only when a terminal backend (local / docker / ssh / modal / daytona / singularity) is ready',
+    schema: `{
+  "name": "terminal",
+  "description": "Execute a command in the terminal. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "command":            { "type": "string" },
+      "background":         { "type": "boolean" },
+      "timeout":            { "type": "integer" },
+      "workdir":            { "type": "string" },
+      "pty":                { "type": "boolean" },
+      "notify_on_complete": { "type": "boolean" },
+      "watch_patterns":     { "type": "array", "items": { "type": "string" } }
+    },
+    "required": ["command"]
+  }
+}`,
+    note: 'background=true + notify_on_complete=true is process-level durability; for scheduled work that must survive process restarts, use cronjob',
+  },
+  {
+    id: 'browser_navigate',
+    name: 'browser_navigate',
+    tagline: 'Open a URL and initialize the browser session',
+    toolset: 'browser',
+    file: 'tools/browser_tool.py',
+    registerLine: 'tools/browser_tool.py:4864',
+    check:
+      'check_fn=check_browser_requirements — the whole browser_* group is hidden when the browser stack is unavailable (missing deps / no display)',
+    schema: `{
+  "name": "browser_navigate",
+  "description": "Navigate to a URL in the browser. Initializes the session and loads the page. Must be called before other browser tools. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "url": { "type": "string", "description": "The URL to navigate to (e.g., 'https://example.com')" }
+    },
+    "required": ["url"]
+  }
+}`,
+    note: 'The browser group has 12 tools (snapshot/click/type/scroll/back/press/…), registered contiguously at lines 4864–4935, all under the browser toolset',
+  },
+  {
+    id: 'delegate_task',
+    name: 'delegate_task',
+    tagline: 'Spawn a subagent (isolated context + terminal)',
+    toolset: 'delegation',
+    file: 'tools/delegate_tool.py',
+    registerLine: 'tools/delegate_tool.py:3574',
+    check:
+      'Subagents with role="leaf" do not get delegate_task / clarify / memory and similar tools — delegation capability is narrowed by role',
+    schema: `{
+  "name": "delegate_task",
+  "description": "Spawn a subagent with an isolated context + terminal session. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "goal":       { "type": "string" },
+      "context":    { "type": "string" },
+      "tasks":      { "type": "array",  "items": { "type": "object" } },
+      "role":       { "type": "string", "enum": ["leaf", "orchestrator"] },
+      "background": { "type": "boolean" }
+    }
+  }
+}`,
+    note: 'background=true returns a delegation id immediately; results come back to the conversation via an async queue; concurrency cap delegation.max_concurrent_children (default 3)',
+  },
+  {
+    id: 'cronjob',
+    name: 'cronjob',
+    tagline: 'Schedule cron jobs (CRUD in one tool)',
+    toolset: 'cronjob',
+    file: 'tools/cronjob_tools.py',
+    registerLine: 'tools/cronjob_tools.py:1120',
+    check:
+      'Jobs live in cron/jobs.py, fired by the tick loop in cron/scheduler.py; shares the same job store as the user-facing hermes cron <verb>',
+    schema: `{
+  "name": "cronjob",
+  "description": "Schedule and manage cron jobs. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action":   { "type": "string" },
+      "job_id":   { "type": "string" },
+      "prompt":   { "type": "string" },
+      "schedule": { "type": "string", "description": "'30m' / '2h' / '1d' 时长、cron 表达式等" },
+      "name":     { "type": "string" }
+    }
+  }
+}`,
+    note: 'Durability rule: work that must survive process restarts uses cronjob, not background delegate_task',
+  },
+  {
+    id: 'memory',
+    name: 'memory',
+    tagline: 'Long-term memory CRUD (agent-level tool)',
+    toolset: 'memory',
+    file: 'tools/memory_tool.py',
+    registerLine: 'tools/memory_tool.py:1136',
+    check:
+      'Agent-level tool: intercepted by run_agent.py before handle_function_call(), never dispatched through the registry',
+    schema: `{
+  "name": "memory",
+  "description": "Manage long-term memory entries. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "action":   { "type": "string", "enum": ["add", "replace", "remove"] },
+      "target":   { "type": "string", "enum": ["memory", "user"] },
+      "content":  { "type": "string" },
+      "old_text": { "type": "string" }
+    }
+  }
+}`,
+    note: 'Same "agent-level tools" family as todo — see the interception pattern in tools/todo_tool.py (end of AGENTS.md §Adding New Tools)',
+  },
+  {
+    id: 'web_search',
+    name: 'web_search',
+    tagline: 'Web search (requires a search API key)',
+    toolset: 'web',
+    file: 'tools/web_tools.py',
+    registerLine: 'tools/web_tools.py:1215',
+    check:
+      'check_fn=check_web_api_key + requires_env=_web_requires_env() — without a configured search key the tool simply does not appear',
+    schema: `{
+  "name": "web_search",
+  "description": "Search the web. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string" },
+      "limit": { "type": "integer" }
+    },
+    "required": ["query"]
+  }
+}`,
+  },
+  {
+    id: 'todo',
+    name: 'todo',
+    tagline: 'Task list (agent-level tool)',
+    toolset: 'todo',
+    file: 'tools/todo_tool.py',
+    registerLine: 'tools/todo_tool.py:323',
+    check:
+      'check_fn=check_todo_requirements; agent-level tool, intercepted by run_agent.py (there is a special case for the "todo" tool name in run_agent.py)',
+    schema: `{
+  "name": "todo",
+  "description": "Maintain the task list for this session. ...",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "todos": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id":      { "type": "string" },
+            "content": { "type": "string" },
+            "status":  { "type": "string", "enum": ["pending", "in_progress", "completed", "cancelled"] }
+          },
+          "required": ["id", "content", "status"]
+        }
+      }
+    }
+  }
+}`,
+  },
+];
+
+export const REGISTER_CHAIN_EN: ChainStep[] = [
+  {
+    id: 'register',
+    title: '① Register on import',
+    body: 'Every tools/*.py calls registry.register(name, toolset, schema, handler, check_fn, ...) at module top level. There is no explicit import manifest — once the file is imported, the tool is in the registry table.',
+    file: 'tools/registry.py · registry.register()',
+  },
+  {
+    id: 'discover',
+    title: '② Auto-discovery',
+    body: 'model_tools.py calls discover_builtin_tools() at module level: globs tools/*.py, picks modules with a top-level registry.register() call, and importlib.import_module()s each one — failures only warn, never break startup.',
+    file: 'model_tools.py · discover_builtin_tools()',
+  },
+  {
+    id: 'toolset',
+    title: '③ Toolset inclusion (manual)',
+    body: 'Registered ≠ visible to the model. The tool name must appear in the TOOLSETS dict in toolsets.py — either in _HERMES_CORE_TOOLS (the default package every platform inherits) or in a dedicated toolset. This step is deliberately manual wiring.',
+    file: 'toolsets.py · TOOLSETS / _HERMES_CORE_TOOLS',
+  },
+  {
+    id: 'platform',
+    title: '④ Platform adapter selection',
+    body: 'Each platform adapter picks a base toolset (e.g. Telegram uses "messaging"), then fine-tunes via tools.<platform>.enabled/disabled in config.yaml; hermes tools (curses UI) toggles them interactively.',
+    file: 'toolsets.py · AGENTS.md §Toolsets',
+  },
+];
+
+export const EXEC_FLOW_EN: ChainStep[] = [
+  {
+    id: 'pre',
+    title: '① pre_tool_call hook',
+    body: 'handle_function_call() first fires the plugin pre_tool_call hook: a fire-exactly-once-per-call contract that can audit arguments or intercept the call outright and return a blocking message.',
+    file: 'model_tools.py · handle_function_call()',
+  },
+  {
+    id: 'handler',
+    title: '② Handler execution',
+    body: 'The registry looks up the name and dispatches to the handler. A failed check_fn or a handler exception is wrapped into an error result — the agent sees the error and self-corrects instead of crashing the process.',
+    file: 'tools/registry.py · dispatch',
+  },
+  {
+    id: 'json',
+    title: '③ Return a JSON string',
+    body: 'Every handler must return a JSON string (hard contract), which tool_result_message() then wraps into a role="tool" message appended to the message stream — append only, never rewrite, keeping the prompt cache intact.',
+    file: 'AGENTS.md §Adding New Tools',
+  },
+  {
+    id: 'post',
+    title: '④ post_tool_call hook',
+    body: 'post_tool_call is an observational hook (non-blocking): it records latency, audits results, and lets plugins post-process. With no plugins registered it spins cheaply.',
+    file: 'model_tools.py · _emit_post_tool_call_hook()',
+  },
+];
+
+export const TOOL_ROUTING_HOOK_EN =
+  'Want to add a tool? Two files: registry.register() in tools/your_tool.py, and add the name to TOOLSETS in toolsets.py. ' +
+  'Discovery is automatic; inclusion is deliberate — that is the Hermes tool philosophy.';
+
+// ToolRoutingLab 专属 UI 文案。
+export const TOOL_ROUTING_UI = {
+  implFile: { zh: '实现文件', en: 'Source file' },
+  registerAt: { zh: '注册位置', en: 'Registered at' },
+  noteLabel: { zh: '备注', en: 'Note' },
+  schemaFile: {
+    zh: (toolset: string) => `schema · toolsets.py 的 "${toolset}" toolset 收录后模型可见`,
+    en: (toolset: string) =>
+      `schema · visible to the model once included in the "${toolset}" toolset in toolsets.py`,
+  },
+  schemaNote: {
+    zh: '所有 handler 必须返回 JSON 字符串（AGENTS.md 硬性约定）',
+    en: 'Every handler must return a JSON string (hard contract in AGENTS.md)',
+  },
+  chainKicker: { zh: '注册链路', en: 'Registration pipeline' },
+  chainTitle: {
+    zh: '从 tools/*.py 到模型可见：四道门',
+    en: 'From tools/*.py to model-visible: four gates',
+  },
+  depChain: {
+    zh: '依赖链方向：tools/registry.py（无依赖）← tools/*.py ← model_tools.py ← run_agent.py / cli.py / batch_runner.py（AGENTS.md §File Dependency Chain）',
+    en: 'Dependency chain: tools/registry.py (no deps) ← tools/*.py ← model_tools.py ← run_agent.py / cli.py / batch_runner.py (AGENTS.md §File Dependency Chain)',
+  },
+  execKicker: { zh: '执行流程', en: 'Execution flow' },
+  execTitle: { zh: '一次 tool_call 的旅程', en: 'The journey of one tool_call' },
+  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookTitle: { zh: '一句话记住工具路由', en: 'Tool routing in one sentence' },
+};

@@ -1,7 +1,7 @@
 'use client';
 
 // 轻量 i18n：站点只有 zh / en 两个静态语言，不引入外部库。
-// 语言选择持久化在 localStorage，初始值 = 已存选择 > 浏览器语言探测（zh* → zh，其余 → en）。
+// 默认英文；语言选择持久化在 localStorage，之后以已存选择为准。
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
@@ -14,18 +14,18 @@ interface LangContextValue {
   setLang: (lang: Lang) => void;
 }
 
-const LangContext = createContext<LangContextValue>({ lang: 'zh', setLang: () => {} });
+const LangContext = createContext<LangContextValue>({ lang: 'en', setLang: () => {} });
 
 function detectInitialLang(): Lang {
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (saved === 'zh' || saved === 'en') return saved;
-  return window.navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en';
+  return 'en';
 }
 
 export function LangProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>('zh');
+  const [lang, setLangState] = useState<Lang>('en');
 
-  // 挂载后再读取 localStorage / navigator，保证与静态导出的首屏 HTML 一致（无 hydration 闪烁风险）。
+  // 挂载后再读取 localStorage，保证与静态导出的首屏 HTML 一致（无 hydration 闪烁风险）。
   useEffect(() => {
     setLangState(detectInitialLang());
   }, []);

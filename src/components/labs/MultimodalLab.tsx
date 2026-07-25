@@ -1,13 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { MODALITIES, MULTIMODAL_INTRO, UNIFIED_SURFACE } from '@/data/multimodal';
+import {
+  MODALITIES,
+  MODALITIES_EN,
+  MULTIMODAL_INTRO,
+  MULTIMODAL_INTRO_EN,
+  MULTIMODAL_UI,
+  UNIFIED_SURFACE,
+  UNIFIED_SURFACE_EN,
+} from '@/data/multimodal';
 import { Explorer, SectionHeading } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, pick } from '@/lib/i18n';
 
 // Chapter 31「多模态工具」：模态浏览器 + image_generate 统一接口路由演示。
 export default function MultimodalLab() {
+  const { lang } = useLang();
+  const modalities = lang === 'en' ? MODALITIES_EN : MODALITIES;
+  const unifiedSurface = lang === 'en' ? UNIFIED_SURFACE_EN : UNIFIED_SURFACE;
+  const intro = lang === 'en' ? MULTIMODAL_INTRO_EN : MULTIMODAL_INTRO;
+
   const progress = useProgress();
   const saved = progress.labResults['lab:multimodal'];
   const savedState =
@@ -21,8 +35,8 @@ export default function MultimodalLab() {
     typeof savedState?.route === 'string' ? savedState.route : UNIFIED_SURFACE.routes[0].id,
   );
 
-  const modality = MODALITIES.find((m) => m.id === modalityId) ?? MODALITIES[0];
-  const route = UNIFIED_SURFACE.routes.find((r) => r.id === routeId) ?? UNIFIED_SURFACE.routes[0];
+  const modality = modalities.find((m) => m.id === modalityId) ?? modalities[0];
+  const route = unifiedSurface.routes.find((r) => r.id === routeId) ?? unifiedSurface.routes[0];
 
   function pickModality(id: string) {
     setModalityId(id);
@@ -35,11 +49,11 @@ export default function MultimodalLab() {
 
   return (
     <section className="mt-10">
-      <p className="max-w-3xl leading-relaxed text-ink/75">{MULTIMODAL_INTRO}</p>
+      <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
       <div className="mt-8">
         <Explorer
-          items={MODALITIES.map((m) => ({ id: m.id, name: m.name, tagline: m.tagline }))}
+          items={modalities.map((m) => ({ id: m.id, name: m.name, tagline: m.tagline }))}
           current={modality.id}
           onChange={pickModality}
         >
@@ -48,7 +62,10 @@ export default function MultimodalLab() {
               MODALITY · {modality.id.toUpperCase()}
             </p>
             <h3 className="mt-2 font-serif text-2xl md:text-3xl">{modality.name}</h3>
-            <p className="mt-1 font-mono text-sm text-ember">工具：{modality.tool}</p>
+            <p className="mt-1 font-mono text-sm text-ember">
+              {pick(lang, MULTIMODAL_UI.toolPrefix)}
+              {modality.tool}
+            </p>
             <p className="mt-4 leading-relaxed text-white/75">{modality.architecture}</p>
             <ul className="mt-5 space-y-1.5">
               {modality.notes.map((n) => (
@@ -60,25 +77,30 @@ export default function MultimodalLab() {
             </ul>
             <div className="mt-6 border-t border-white/10 pt-4 font-mono text-xs text-white/50">
               <p>
-                配置：<span className="text-ember">{modality.configKey}</span>
+                {pick(lang, MULTIMODAL_UI.configPrefix)}
+                <span className="text-ember">{modality.configKey}</span>
               </p>
               <p className="mt-1">
-                源码：<span className="text-blue">{modality.sourceRef}</span>
+                {pick(lang, MULTIMODAL_UI.sourcePrefix)}
+                <span className="text-blue">{modality.sourceRef}</span>
               </p>
             </div>
           </div>
         </Explorer>
       </div>
 
-      <SectionHeading kicker="统一接口" title="一个工具，两种路由" />
+      <SectionHeading
+        kicker={pick(lang, MULTIMODAL_UI.unifiedKicker)}
+        title={pick(lang, MULTIMODAL_UI.unifiedTitle)}
+      />
       <p className="mt-3 max-w-3xl text-sm leading-relaxed text-ink/75">
         <code className="rounded bg-paper-deep px-1.5 py-0.5 font-mono text-[13px] text-ember">
-          {UNIFIED_SURFACE.tool}
+          {unifiedSurface.tool}
         </code>{' '}
-        ——有没有源图决定一切。切换条件看看路由怎么变：
+        {pick(lang, MULTIMODAL_UI.unifiedNote)}
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
-        {UNIFIED_SURFACE.routes.map((r) => (
+        {unifiedSurface.routes.map((r) => (
           <button
             key={r.id}
             type="button"
@@ -95,7 +117,8 @@ export default function MultimodalLab() {
       </div>
       <div className="mt-4 max-w-3xl rounded-lg border border-line bg-white p-5">
         <p className="font-mono text-sm">
-          → 路由到 <span className="text-ember">{route.route}</span>
+          {pick(lang, MULTIMODAL_UI.routePrefix)}
+          <span className="text-ember">{route.route}</span>
         </p>
         <p className="mt-2 text-sm leading-relaxed text-ink/75">{route.desc}</p>
       </div>

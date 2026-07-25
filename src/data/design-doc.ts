@@ -111,3 +111,129 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
     placeholder: '定义你的指标与回流路径：用什么数据判断好坏，数据怎么驱动下一轮改进……',
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const DESIGN_DOC_INTRO_EN =
+  '"Design an AI agent system" is a system-design interview staple. Interviewers don\'t expect you to write ' +
+  'code on the spot — they want to see whether you can deliver a structurally complete design doc in 40 ' +
+  'minutes: clarify requirements first, then expand top-down, and finally show engineering maturity on ' +
+  'failures and evaluation. The six sections below are the skeleton of that document — each one first tells ' +
+  'you what the interviewer wants to hear and gives a real Hermes example, then opens an input area for your ' +
+  'own answer notes. What you write is saved automatically.';
+
+export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
+  {
+    id: 'requirements',
+    title: '① Requirements Clarification',
+    interviewerWants: [
+      'Ask before answering: who the users are, task types (conversational / batch / scheduled), scale and latency constraints',
+      'Cost and quotas: token budget, per-task iteration cap, acceptable caching strategy',
+      'Be explicit about non-goals: drawing boundaries scores higher than piling on features',
+    ],
+    hermesExample:
+      'Hermes uses the platform constructor parameter ("cli" / "telegram" / …) to distinguish integration ' +
+      'forms, and each platform picks its own base toolset; some 60 constructor parameters — ' +
+      'max_iterations=90, iteration_budget, quiet_mode, save_trajectories — are essentially requirements ' +
+      'turned into parameters: one agent kernel, assembled into different forms per scenario.',
+    placeholder:
+      'e.g. a CLI agent for developers, single-session interaction; budget-sensitive (needs prompt caching); no multi-tenant SaaS for now……',
+  },
+  {
+    id: 'architecture',
+    title: '② High-Level Architecture',
+    interviewerWants: [
+      'A diagram you can explain: input → context assembly → model → tools → result write-back → loop / return',
+      'Where the synchronous boundary sits: what is inside the loop, what is outside',
+      'What happens after the session ends: persistence, memory sync, background systems',
+    ],
+    hermesExample:
+      "Hermes' heart is a synchronous while loop in run_conversation() (AGENTS.md's own words: entirely " +
+      'synchronous), with streaming and animation all in the display layer; outside the loop sit the ' +
+      "gateway's multi-platform ingress, SessionDB persistence (SQLite + FTS5), memory sync triggered by " +
+      'the on_session_end hook, and background systems like curator / cron.',
+    placeholder:
+      'Sketch your architecture layers: main loop / display layer / persistence / background systems — mark the sync and async boundaries……',
+  },
+  {
+    id: 'components',
+    title: '③ Component Design',
+    interviewerWants: [
+      'Key abstractions and interfaces: what tools, providers, and memory look like, and whether they are replaceable',
+      'Whether registration and exposure are separated: a capability being registered does not mean it must be visible to the agent',
+      'Where the extension points are: can you add capabilities without touching core code (plugins, hooks)',
+    ],
+    hermesExample:
+      "Hermes' tools/registry.py auto-discovers (import registers), but a tool is only exposed to the agent " +
+      "once listed in toolsets.py's TOOLSETS — registration ≠ exposure, and schema footprint is a " +
+      'deliberately controlled cost. Providers are unified as plugins into a single chat.completions shape; ' +
+      'memory backends implement the MemoryProvider ABC (sync_turn / prefetch / shutdown); generic plugins ' +
+      'may only attach lifecycle hooks (pre_tool_call etc.) and may not modify core files.',
+    placeholder:
+      'List your core components: tool registry, provider adapter layer, memory interface… What is the replacement cost of each?',
+  },
+  {
+    id: 'data-state',
+    title: '④ Data & State',
+    interviewerWants: [
+      'How the message stream is organized: append or rewrite? What is the caching strategy?',
+      'Where state lives: storage and lifecycle of sessions, config, and telemetry',
+      'How multi-instance / multi-tenant isolation works',
+    ],
+    hermesExample:
+      "Hermes' message stream only appends, never rewrites — the prompt-cache iron rule forbids mid-session " +
+      'history edits / toolset swaps / system-prompt rebuilds, with context compression as the sole ' +
+      'exception. Sessions land in SessionDB (SQLite + FTS5, full-text searchable); skill telemetry is the ' +
+      '~/.hermes/skills/.usage.json sidecar; all state anchors at get_hermes_home(), with profiles fully ' +
+      'isolated from each other.',
+    placeholder:
+      'Write out your state inventory: message stream (append-only?), session store, config, telemetry — and the isolation boundary of each……',
+  },
+  {
+    id: 'failure',
+    title: '⑤ Failure & Boundaries',
+    interviewerWants: [
+      'Runaway protection: iteration caps, timeouts, how to break dead loops',
+      'Retry and circuit-breaking: how many failures mean stop, and what happens after stopping',
+      'Isolation levels: can a subtask failure drag down the main flow',
+    ],
+    hermesExample:
+      "Hermes' lines of defense are enumerable: max_iterations=90 shared with subagents against runaway; a " +
+      'one-turn grace call wraps up gracefully even after the budget runs out; cron sessions get a 3-minute ' +
+      "hard interrupt so runaway jobs can't kill the scheduler; kanban auto-blocks a task after consecutive " +
+      'failures (default 2) against spinning; delegation is process-level isolation — subagents get their ' +
+      'own context and terminal session, with child_timeout_seconds; fallback_model and credential_pool ' +
+      'handle provider single points of failure.',
+    placeholder:
+      'List your defenses one by one: iteration cap / timeout / retry & circuit-breaking / isolation / degradation — give a concrete number or mechanism for each……',
+  },
+  {
+    id: 'evaluation',
+    title: '⑥ Evaluation & Iteration',
+    interviewerWants: [
+      'How you know the system is improving: success metrics, quality metrics, cost metrics',
+      'How telemetry is designed: what to record, where, and who consumes it',
+      'Iteration mechanism: how data flows back into improvements',
+    ],
+    hermesExample:
+      "Hermes' curator is the model of a telemetry-driven lifecycle: .usage.json records each skill's " +
+      'use_count / view_count / last_activity_at, and stale_after_days / archive_after_days automatically ' +
+      'transition skills to stale / archive on expiry — archived, never deleted, with pinned exempt. ' +
+      'Sessions are full-text indexed via FTS5 to power session_search retrospectives; save_trajectories ' +
+      'keeps full trajectories for offline analysis.',
+    placeholder:
+      'Define your metrics and feedback loop: what data tells good from bad, and how data drives the next round of improvement……',
+  },
+];
+
+// ── 实验室专属 UI 文案（DesignDocLab） ────────────────────────────
+
+export const DESIGN_DOC_UI = {
+  completionLabel: { zh: '文档完成度', en: 'Doc completion' },
+  filledSuffix: { zh: '节已填写', en: 'sections filled' },
+  filled: { zh: '✓ 已填写', en: '✓ Filled' },
+  interviewerWants: { zh: '面试官想听什么', en: 'WHAT THE INTERVIEWER WANTS TO HEAR' },
+  hermesExample: { zh: 'HERMES 对应实例', en: 'HERMES EXAMPLE' },
+  expand: { zh: '▼ 展开，写下我的答案要点', en: '▼ Expand and write your answer notes' },
+  collapse: { zh: '▲ 收起（内容已自动保存）', en: '▲ Collapse (saved automatically)' },
+};

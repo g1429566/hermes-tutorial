@@ -445,8 +445,7 @@ export const CHAPTERS_EN: Record<string, ChapterText> = {
   'skills-2': {
     title: 'The Skill System (II) · Curator',
     kicker: 'Curator',
-    description:
-      'Curator state machine visualized: create→match→invoke→evaluate→improve/retire.',
+    description: 'Curator state machine visualized: create→match→invoke→evaluate→improve/retire.',
     meta: '15 min',
   },
   tools: {
@@ -472,8 +471,7 @@ export const CHAPTERS_EN: Record<string, ChapterText> = {
   'gateway-1': {
     title: 'Message Gateway (I)',
     kicker: 'Gateway topology',
-    description:
-      'Gateway topology: Telegram/Discord/Slack/WhatsApp/Signal → gateway → agent.',
+    description: 'Gateway topology: Telegram/Discord/Slack/WhatsApp/Signal → gateway → agent.',
     meta: '12 min',
   },
   'gateway-2': {

@@ -67,6 +67,12 @@ export const UI_STRINGS = {
   },
   pyExecuting: { zh: '执行中…', en: 'Executing…' },
 
+  // ── 实验室通用 ────────────────────────────────────────────────
+  keyPoints: { zh: '要点', en: 'Key takeaways' },
+  eventFlow: { zh: '事件流', en: 'Event flow' },
+  prevStep: { zh: '‹ 上一步', en: '‹ Prev' },
+  nextStep: { zh: '下一步 ›', en: 'Next ›' },
+
   // ── primitives（FlipCard） ────────────────────────────────────
   flipCollapse: { zh: '▲ 收起思路', en: '▲ Hide the answer' },
   flipExpand: { zh: '▼ 点击翻转，看模范思路', en: '▼ Flip to see a model answer' },

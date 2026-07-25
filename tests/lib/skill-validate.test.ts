@@ -142,4 +142,12 @@ describe('validateSkill', () => {
       'version',
     ]);
   });
+
+  it('returns English messages when lang is en', () => {
+    const errors = validateSkill({ name: '', description: '', version: '', platforms: [] }, 'en');
+    expect(errors.length).toBeGreaterThan(0);
+    for (const e of errors) {
+      expect(e.message).toMatch(/required/);
+    }
+  });
 });

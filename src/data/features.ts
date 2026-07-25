@@ -110,3 +110,162 @@ export const FEATURES_QUIZ: QuizItem = {
   explanation:
     'provider 多样、TUI、Docker 都是不错的特性，但核心差异化是「自进化学习循环」——技能自创建/自改进 + 跨会话记忆 + 用户建模。',
 };
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const FEATURES_EN: Feature[] = [
+  {
+    id: 'tui',
+    name: 'Full-featured TUI',
+    desc: 'Multi-line editing, slash-command autocomplete, history, interrupt-and-redirect, streaming tool output.',
+    sourceRef: 'ui-tui/src/',
+  },
+  {
+    id: 'gateway',
+    name: 'Multi-platform gateway',
+    desc: 'Telegram / Discord / Slack / WhatsApp / Signal and 20+ platforms, a single gateway process.',
+    sourceRef: 'gateway/platforms/',
+  },
+  {
+    id: 'skills',
+    name: 'Skill system',
+    desc: 'Self-evolving: creates skills from experience and improves them in use; compatible with the agentskills.io open standard.',
+    sourceRef: 'skills/',
+  },
+  {
+    id: 'cron',
+    name: 'Scheduled automation',
+    desc: 'Built-in cron: describe scheduled jobs in natural language, run them unattended.',
+    sourceRef: 'cron/',
+  },
+  {
+    id: 'delegation',
+    name: 'Delegation & parallelism',
+    desc: 'Spawn isolated sub-agents; compress multi-step pipelines with RPC scripts.',
+    sourceRef: 'run_agent.py',
+  },
+  {
+    id: 'backends',
+    name: 'Multiple terminal backends',
+    desc: 'local / Docker / SSH / Singularity / Modal / Daytona — the last two support serverless hibernation.',
+    sourceRef: 'tools/environments/',
+  },
+  {
+    id: 'models',
+    name: 'Switchable models',
+    desc: 'Nous Portal, OpenRouter, OpenAI, your own endpoint; switch with one `hermes model` command.',
+    sourceRef: 'providers/',
+  },
+];
+
+export const SCENARIOS_EN: Scenario[] = [
+  {
+    id: 'understand-repo',
+    title: 'Understand an unfamiliar repo',
+    description:
+      'Hand Hermes a codebase it has never seen and have it explain the architecture and key paths.',
+    featureIds: ['skills', 'delegation', 'models'],
+    explanation:
+      'Reading a repo relies mainly on file tools and search (M1 Chapter 07); the architectural conclusions it reaches get distilled into skills (Chapters 05/06), and large repos can be explored by delegated sub-agents in parallel (Chapter 09).',
+  },
+  {
+    id: 'modify-code',
+    title: 'Modify code directly',
+    description: 'Have Hermes fix bugs, write tests, and run builds — not just give advice.',
+    featureIds: ['backends', 'tui', 'delegation'],
+    explanation:
+      'Code changes run inside a terminal backend (Chapter 16): local, Docker, or serverless; in the TUI you can watch tool output live and interrupt-and-redirect at any time (Chapter 14).',
+  },
+  {
+    id: 'remote-control',
+    title: 'Remote control from your phone',
+    description: 'While away from your desk, use Telegram to keep Hermes working on a cloud VM.',
+    featureIds: ['gateway', 'backends', 'cron'],
+    explanation:
+      'The gateway adapts phone messages into unified sessions (Chapters 10/11), while the agent actually executes in a Docker / Modal backend in the cloud (Chapter 16) — the work is not tied to your laptop.',
+  },
+  {
+    id: 'scheduled',
+    title: 'Scheduled auto-inspection',
+    description:
+      'Every morning, automatically check service status and summarize logs; push a message when something is wrong.',
+    featureIds: ['cron', 'gateway', 'skills'],
+    explanation:
+      'The cron scheduler triggers jobs from natural-language descriptions (Chapter 12) and pushes results to your chat platform via the gateway (Chapter 10); the inspection routine can be codified as a skill and reused (Chapter 05).',
+  },
+];
+
+export const FEATURES_QUIZ_EN: QuizItem = {
+  id: 'what-is-hermes-1',
+  question: "What is Hermes Agent's most core differentiating capability?",
+  options: [
+    { key: 'a', text: 'It supports many LLM providers' },
+    {
+      key: 'b',
+      text: 'A built-in self-evolving learning loop: creates and improves skills from experience, remembers across sessions',
+    },
+    { key: 'c', text: 'It has a TUI' },
+    { key: 'd', text: 'It can run in Docker' },
+  ],
+  correct: ['b'],
+  explanation:
+    'Provider variety, the TUI, and Docker are all nice features, but the core differentiator is the "self-evolving learning loop" — self-created/self-improved skills + cross-session memory + user modeling.',
+};
+
+// 本章实验室专属 UI 文案（组件里用 pick(lang, FEATURES_UI.xxx) 取值）。
+// 两段引言里带 <strong> 强调，用片段数组表示，组件按 strong 渲染。
+export interface IntroSegment {
+  text: string;
+  strong?: boolean;
+}
+
+export const FEATURES_UI = {
+  introP1: {
+    zh: [
+      { text: 'Hermes Agent', strong: true },
+      {
+        text: ' 是 Nous Research 开发的自进化 AI agent，用 Python 实现、开源（MIT）。它是目前唯一内置',
+      },
+      { text: '学习循环', strong: true },
+      {
+        text: '的 agent：从经验中创建技能、在使用中改进技能、主动持久化知识、搜索自己的历史会话，并跨会话逐步建立对你的深度理解。',
+      },
+    ] as IntroSegment[],
+    en: [
+      { text: 'Hermes Agent', strong: true },
+      {
+        text: ' is a self-evolving AI agent developed by Nous Research, written in Python and open source (MIT). It is currently the only agent with a built-in ',
+      },
+      { text: 'learning loop', strong: true },
+      {
+        text: ': it creates skills from experience, improves them through use, proactively persists knowledge, searches its own session history, and builds a deep understanding of you across sessions.',
+      },
+    ] as IntroSegment[],
+  },
+  introP2: {
+    zh: [
+      { text: '大多数 AI agent 用完即弃、每次从零开始；Hermes 的核心差异在于它会' },
+      { text: '积累', strong: true },
+      { text: '。下面这张矩阵是它全部能力的地图——每一行都对应 M1 的一章。' },
+    ] as IntroSegment[],
+    en: [
+      {
+        text: 'Most AI agents are disposable, starting from scratch every time; the core difference of Hermes is that it ',
+      },
+      { text: 'accumulates', strong: true },
+      {
+        text: '. The matrix below is a map of all its capabilities — each row corresponds to a chapter in M1.',
+      },
+    ] as IntroSegment[],
+  },
+  thCapability: { zh: '能力', en: 'Capability' },
+  thDesc: { zh: '说明', en: 'Description' },
+  thSource: { zh: '源码位置', en: 'Source' },
+  scenarioKicker: { zh: '场景选择器', en: 'SCENARIO PICKER' },
+  scenarioTitle: {
+    zh: '你的用法会调动哪些能力？',
+    en: 'Which capabilities does your use case exercise?',
+  },
+  scenarioBreakdown: { zh: '场景拆解', en: 'Scenario breakdown' },
+  mainlyUses: { zh: '主要调动：', en: 'Mainly exercises: ' },
+};

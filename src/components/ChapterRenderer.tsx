@@ -1,7 +1,15 @@
 'use client';
 
 import type { ComponentType } from 'react';
-import { CHAPTER_BY_ID, nextChapter, prevChapter, MODULES, MODULES_EN, chapterText, type Chapter } from '@/data/chapters';
+import {
+  CHAPTER_BY_ID,
+  nextChapter,
+  prevChapter,
+  MODULES,
+  MODULES_EN,
+  chapterText,
+  type Chapter,
+} from '@/data/chapters';
 import { markChapterComplete, setChapterStatus } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
 import { useLang, type Lang } from '@/lib/i18n';
@@ -124,7 +132,15 @@ function ChapterHeader({ chapter, lang }: { chapter: Chapter; lang: Lang }) {
   );
 }
 
-function ChapterBody({ chapterId, chapter, lang }: { chapterId: string; chapter: Chapter; lang: Lang }) {
+function ChapterBody({
+  chapterId,
+  chapter,
+  lang,
+}: {
+  chapterId: string;
+  chapter: Chapter;
+  lang: Lang;
+}) {
   const Lab = LAB_COMPONENTS[chapterId];
   return Lab ? <Lab /> : <ComingSoon chapter={chapter} lang={lang} />;
 }

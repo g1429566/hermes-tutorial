@@ -172,3 +172,180 @@ api_call_count += 1`,
     ],
   },
 ];
+
+// ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
+
+export const AGENT_LOOP_INTRO_EN =
+  'The heart of Hermes is a synchronous while loop inside AIAgent.run_conversation() in run_agent.py: ' +
+  'assemble messages → call the model → execute any tool calls and append the results → call the model again, ' +
+  'until the model returns plain text or hits a budget limit. ' +
+  'Click the six steps below to see the real source code and event flow behind each one.';
+
+export const LOOP_STEPS_EN: LoopStep[] = [
+  {
+    id: 'input',
+    label: 'INPUT',
+    title: 'Input enters run_conversation()',
+    body: 'User messages enter the loop in OpenAI message format. There are two entry points: chat(message) returns only the final text; run_conversation() returns the full dict (final_response + messages). At the top of every iteration the loop checks the interrupt flag — pressing Esc in the CLI yanks the agent back out of the loop.',
+    code: {
+      file: 'run_agent.py',
+      lines: 'run_conversation()',
+      snippet: `def run_conversation(self, user_message, system_message=None,
+                     conversation_history=None, task_id=None) -> dict:
+    messages = self._build_messages(user_message, system_message,
+                                    conversation_history)
+    while (api_call_count < self.max_iterations
+           and self.iteration_budget.remaining > 0) \\
+           or self._budget_grace_call:
+        if self._interrupt_requested:
+            break`,
+      note: 'Messages follow the OpenAI format: {"role": "system/user/assistant/tool", ...}',
+    },
+    events: [
+      { name: 'user.message', desc: 'User input enters the session' },
+      {
+        name: 'interrupt.check',
+        desc: 'Checks _interrupt_requested at the top of every iteration',
+      },
+    ],
+    points: [
+      'max_iterations defaults to 90 (shared with subagents)',
+      'iteration_budget and the "one-turn grace call": one last chance even after the budget runs out',
+      'Interrupts are not exceptions — they are part of the loop condition',
+    ],
+  },
+  {
+    id: 'context',
+    label: 'CONTEXT',
+    title: 'Context assembly (the cache is sacred)',
+    body: "System prompt + tool schemas + history are assembled into the messages array. Hermes' first design constraint is per-conversation prompt caching: every turn of a long conversation reuses the cached prefix, so the loop never changes the toolset or rebuilds the system prompt mid-conversation — the only exception is context compression. Skill slash commands are injected as user messages rather than system prompts for the same reason: never break the cache.",
+    code: {
+      file: 'agent/skill_commands.py',
+      lines: 'AGENTS.md §CLI Architecture',
+      snippet: `# 技能命令以 user 消息注入，而不是改写 system prompt——
+# 任何中途改写 past context 的行为都会让缓存失效、成本翻倍。
+# 「Do NOT: alter past context / change toolsets /
+#  reload memories / rebuild system prompts mid-conversation」`,
+      note: 'The only allowed context change: context compression',
+    },
+    events: [
+      { name: 'context.build', desc: 'Assemble system + tools + history (only at session start)' },
+      { name: 'cache.hit', desc: 'Later turns reuse the cached prefix' },
+    ],
+    points: [
+      'Tool schemas are sent along with messages: tool_schemas',
+      'Reasoning content lives in assistant_msg["reasoning"]',
+      'Skill/tool changes take effect "next session" by default; --now busts the cache immediately',
+    ],
+  },
+  {
+    id: 'model',
+    label: 'MODEL',
+    title: 'Call the model',
+    body: 'A synchronous chat.completions.create call — no streaming complexity in the main loop (streaming is handled at the display layer). The model returns one of two things: tool_calls (keep looping) or plain text content (end the loop). The provider adapter layer unifies different backends into this single shape.',
+    code: {
+      file: 'run_agent.py',
+      lines: 'Agent Loop',
+      snippet: `response = client.chat.completions.create(
+    model=model, messages=messages, tools=tool_schemas)
+if response.tool_calls:
+    ...  # 执行工具，继续循环
+else:
+    return response.content  # 最终回答`,
+    },
+    events: [
+      { name: 'pre_llm_call', desc: 'Plugin hook: before the call (audit/rewrite allowed)' },
+      { name: 'post_llm_call', desc: 'Plugin hook: after the call' },
+    ],
+    points: [
+      'pre/post_llm_call are plugin lifecycle hooks',
+      'Provider plugins unify openrouter / anthropic / gmi etc. behind one interface',
+      'fallback_model and the credential pool handle single points of failure',
+    ],
+  },
+  {
+    id: 'tool',
+    label: 'TOOL',
+    title: 'Tool call dispatch',
+    body: 'Each tool_call goes to handle_function_call(name, args, task_id): registry lookup, beforeToolCall hook, handler execution, error wrapping, and a JSON string result. Agent-level tools like todo / memory are intercepted by run_agent.py before they ever reach handle_function_call. Whether a tool is available depends on the toolsets configuration and check_fn environment checks.',
+    code: {
+      file: 'model_tools.py',
+      lines: 'handle_function_call()',
+      snippet: `for tool_call in response.tool_calls:
+    result = handle_function_call(
+        tool_call.name, tool_call.args, task_id)
+    messages.append(tool_result_message(result))
+api_call_count += 1`,
+      note: 'Every handler must return a JSON string',
+    },
+    events: [
+      { name: 'pre_tool_call', desc: 'Plugin hook: argument audit/interception' },
+      { name: 'tool.execute', desc: 'Registry dispatches to the handler' },
+      { name: 'post_tool_call', desc: 'Plugin hook: result post-processing' },
+    ],
+    points: [
+      'Tools are auto-discovered via tools/registry.py (import registers them)',
+      'Schema descriptions must not hardcode references to tools from other toolsets',
+      'Parallel vs. serial is decided by how many tool_calls a single model response contains',
+    ],
+  },
+  {
+    id: 'result',
+    label: 'RESULT',
+    title: 'Results written back to the message stream',
+    body: 'Tool results are appended to messages as role="tool" messages — appended, never rewritten. This is the key to cache-friendliness: the message stream only grows. api_call_count increments and the next iteration begins.',
+    code: {
+      file: 'run_agent.py',
+      lines: 'Agent Loop',
+      snippet: `messages.append(tool_result_message(result))
+# 消息流只 append，从不修改历史——
+# 任何 in-place 修改都会让 prompt cache 整体失效`,
+    },
+    events: [
+      { name: 'message.append', desc: 'Tool result written into the message stream' },
+      { name: 'budget.tick', desc: 'Iteration counting and budget deduction' },
+    ],
+    points: [
+      'tool_result_message wraps the JSON string into an OpenAI tool message',
+      'Large results are truncated/summarized to protect the context window',
+      'Errors are also wrapped as result messages, so the agent can see them and self-correct',
+    ],
+  },
+  {
+    id: 'loop',
+    label: 'LOOP',
+    title: 'Loop or return',
+    body: 'Three exits: the model returns plain text (normal completion); max_iterations or the budget limit is hit (forced wrap-up); _interrupt_requested (user interrupt, wrapped up via the grace call). After the loop ends, the session is written to SQLite (searchable via FTS5), and only then do background systems like the curator and memory kick in.',
+    code: {
+      file: 'run_agent.py',
+      lines: 'Agent Loop',
+      snippet: `while (api_call_count < self.max_iterations
+       and self.iteration_budget.remaining > 0) \\
+       or self._budget_grace_call:
+    if self._interrupt_requested:
+        break
+    ...
+    else:
+        return response.content`,
+    },
+    events: [
+      { name: 'session.save', desc: 'Session written to SessionDB (FTS5)' },
+      { name: 'on_session_end', desc: 'Plugin hook: memory sync, etc.' },
+    ],
+    points: [
+      'The 90-iteration cap is shared with subagents to prevent runaway loops',
+      'Sessions persist via hermes_state.py (SessionDB), powering cross-session search',
+      'Cron sessions have a 3-minute hard interrupt — the scheduler never gets stuck on one task',
+    ],
+  },
+];
+
+// AgentLoopLab 专属 UI 文案。
+export const AGENT_LOOP_UI = {
+  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookTitle: { zh: '一句话记住主循环', en: 'The agent loop in one sentence' },
+  hookBody: {
+    zh: 'while 预算未耗尽：response = model(messages, tools)；有 tool_calls 就执行并 append 结果继续循环，没有就 return content。——追加不改写，缓存不失效。',
+    en: 'while budget remains: response = model(messages, tools); if there are tool_calls, execute them, append the results, and keep looping — otherwise return content. Append, never rewrite: the cache stays valid.',
+  },
+};
