@@ -11,6 +11,8 @@
 
 An **interactive tutorial site** built around [Hermes Agent](https://github.com/NousResearch/hermes-agent): a single-page immersive app, statically exported, backend-free, and fully offline-capable. Defaults to English; 中文 available via the in-site language switcher.
 
+**Live site: https://g1429566.github.io/hermes-tutorial/**
+
 ## Screenshots
 
 | Home (M0 · Build Intuition First)       | Interactive lab (M1 · The Agent Loop)             |

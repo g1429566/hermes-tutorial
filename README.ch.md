@@ -11,6 +11,8 @@
 
 围绕 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的**交互式学习教程网站**：单页沉浸式应用，纯静态导出、无后端、可完全离线运行。
 
+**在线访问：https://g1429566.github.io/hermes-tutorial/**
+
 ## 效果预览
 
 | 首页（M0 · 先建立直觉）              | 交互实验室（M1 · Agent 主循环）           |
