@@ -17,6 +17,9 @@ declare global {
 
 let pyodidePromise: Promise<PyodideInterface> | null = null;
 
+// Pyodide 运行时的 URL 前缀：GitHub Pages 部署在 /<repo>/ 子路径下时需要带上 basePath。
+const PYODIDE_URL = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/pyodide/`;
+
 function loadScript(src: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
@@ -30,9 +33,9 @@ function loadScript(src: string): Promise<void> {
 function getPyodide(): Promise<PyodideInterface> {
   if (!pyodidePromise) {
     pyodidePromise = (async () => {
-      await loadScript('/pyodide/pyodide.js');
+      await loadScript(`${PYODIDE_URL}pyodide.js`);
       if (!window.loadPyodide) throw new Error('pyodide.js 已加载但未暴露 loadPyodide');
-      return window.loadPyodide({ indexURL: '/pyodide/' });
+      return window.loadPyodide({ indexURL: PYODIDE_URL });
     })();
   }
   return pyodidePromise;
