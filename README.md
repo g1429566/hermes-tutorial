@@ -1,6 +1,6 @@
 # Hermes Agent Tutorial
 
-[中文](README.ch.md) | **English**
+**English** | [中文](README.ch.md)
 
 [![CI](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml/badge.svg)](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
