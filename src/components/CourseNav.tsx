@@ -1,9 +1,11 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { CHAPTERS, MODULE_ORDER, MODULES } from '@/data/chapters';
+import { CHAPTERS, MODULE_ORDER, MODULES, MODULES_EN, chapterText } from '@/data/chapters';
 import { exportProgress, importProgress, resetProgress } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang } from '@/lib/i18n';
+import { t } from '@/data/ui-strings';
 
 interface CourseNavProps {
   currentId: string;
@@ -22,6 +24,7 @@ function downloadProgress() {
 
 export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
   const progress = useProgress();
+  const { lang, setLang } = useLang();
   const [open, setOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -39,21 +42,31 @@ export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
     file
       .text()
       .then((text) => {
-        if (!importProgress(text)) window.alert('导入失败：文件不是有效的进度数据。');
+        if (!importProgress(text)) window.alert(t(lang, 'importInvalid'));
       })
-      .catch(() => window.alert('导入失败：无法读取文件。'));
+      .catch(() => window.alert(t(lang, 'importUnreadable')));
   }
 
   const navBody = (
     <>
       <div className="px-5 pt-6 pb-4">
-        <p className="font-mono text-xs tracking-[0.2em] text-acid">HERMES // 教程</p>
-        <h1 className="mt-2 font-serif text-xl leading-snug text-white">Hermes Agent 学习教程</h1>
+        <div className="flex items-center justify-between">
+          <p className="font-mono text-xs tracking-[0.2em] text-acid">{t(lang, 'siteKicker')}</p>
+          <button
+            type="button"
+            aria-label={t(lang, 'switchLangLabel')}
+            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+            className="rounded border border-white/20 px-2 py-0.5 font-mono text-[11px] text-white/70 hover:border-acid hover:text-acid"
+          >
+            {t(lang, 'switchLang')}
+          </button>
+        </div>
+        <h1 className="mt-2 font-serif text-xl leading-snug text-white">{t(lang, 'siteTitle')}</h1>
         <div className="mt-4">
           <div className="flex items-baseline justify-between font-mono text-[11px] text-white/60">
-            <span>进度</span>
+            <span>{t(lang, 'progress')}</span>
             <span>
-              {done}/{total} 章 · {pct}%
+              {done}/{total} {t(lang, 'chaptersCount')} · {pct}%
             </span>
           </div>
           <div className="mt-1.5 h-1.5 w-full rounded bg-white/15">
@@ -69,7 +82,7 @@ export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
         {MODULE_ORDER.map((mid) => (
           <div key={mid} className="mt-4 first:mt-1">
             <p className="px-2 pb-1.5 font-mono text-[11px] tracking-[0.15em] text-white/40">
-              {MODULES[mid].label} · {MODULES[mid].title}
+              {MODULES[mid].label} · {lang === 'en' ? MODULES_EN[mid] : MODULES[mid].title}
             </p>
             <ul>
               {CHAPTERS.filter((c) => c.module === mid).map((c) => {
@@ -89,7 +102,7 @@ export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
                       <span className="w-6 shrink-0 font-mono text-[11px] text-white/40">
                         {c.number}
                       </span>
-                      <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                      <span className="min-w-0 flex-1 truncate">{chapterText(c, lang).title}</span>
                       <span
                         className={`shrink-0 font-mono text-[11px] ${
                           status === 'complete'
@@ -100,10 +113,10 @@ export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
                         }`}
                         title={
                           status === 'complete'
-                            ? '已完成'
+                            ? t(lang, 'statusComplete')
                             : status === 'reading'
-                              ? '在读'
-                              : '未开始'
+                              ? t(lang, 'statusReading')
+                              : t(lang, 'statusNotStarted')
                         }
                       >
                         {status === 'complete' ? '✓' : status === 'reading' ? '●' : '○'}
@@ -124,23 +137,23 @@ export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
             onClick={downloadProgress}
             className="rounded border border-white/20 px-2 py-1 text-white/70 hover:border-acid hover:text-acid"
           >
-            导出
+            {t(lang, 'exportProgress')}
           </button>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             className="rounded border border-white/20 px-2 py-1 text-white/70 hover:border-acid hover:text-acid"
           >
-            导入
+            {t(lang, 'importProgress')}
           </button>
           <button
             type="button"
             onClick={() => {
-              if (window.confirm('确定要重置全部学习进度吗？此操作不可撤销。')) resetProgress();
+              if (window.confirm(t(lang, 'resetConfirm'))) resetProgress();
             }}
             className="rounded border border-white/20 px-2 py-1 text-white/70 hover:border-red hover:text-red"
           >
-            重置
+            {t(lang, 'resetProgress')}
           </button>
         </div>
         <input
@@ -163,14 +176,24 @@ export default function CourseNav({ currentId, onNavigate }: CourseNavProps) {
       <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-3 bg-ink px-4 py-2.5 lg:hidden">
         <button
           type="button"
-          aria-label="打开目录"
+          aria-label={t(lang, 'openMenu')}
           onClick={() => setOpen((v) => !v)}
           className="font-mono text-lg text-acid"
         >
           {open ? '✕' : '☰'}
         </button>
-        <span className="font-mono text-xs tracking-[0.2em] text-white/80">HERMES // 教程</span>
-        <span className="ml-auto font-mono text-[11px] text-white/50">
+        <span className="font-mono text-xs tracking-[0.2em] text-white/80">
+          {t(lang, 'siteKicker')}
+        </span>
+        <button
+          type="button"
+          aria-label={t(lang, 'switchLangLabel')}
+          onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+          className="ml-auto rounded border border-white/20 px-2 py-0.5 font-mono text-[11px] text-white/70 hover:border-acid hover:text-acid"
+        >
+          {t(lang, 'switchLang')}
+        </button>
+        <span className="font-mono text-[11px] text-white/50">
           {done}/{total}
         </span>
       </div>

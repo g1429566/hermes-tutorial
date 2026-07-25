@@ -1,9 +1,11 @@
 'use client';
 
 import type { ComponentType } from 'react';
-import { CHAPTER_BY_ID, nextChapter, prevChapter, MODULES, type Chapter } from '@/data/chapters';
+import { CHAPTER_BY_ID, nextChapter, prevChapter, MODULES, MODULES_EN, chapterText, type Chapter } from '@/data/chapters';
 import { markChapterComplete, setChapterStatus } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
+import { useLang, type Lang } from '@/lib/i18n';
+import { t } from '@/data/ui-strings';
 import HeroChapter from './labs/HeroChapter';
 import ArchitectureLab from './labs/ArchitectureLab';
 import FeatureMatrixLab from './labs/FeatureMatrixLab';
@@ -88,6 +90,7 @@ const LAB_COMPONENTS: Record<string, ComponentType> = {
 // 每章 = kicker + 讲解 + 交互实验室 + 要点 + 完成按钮。
 // 阶段 1 仅 M0 四章有完整内容，其余章节渲染建设占位。
 export default function ChapterRenderer({ chapterId, onNavigate }: ChapterRendererProps) {
+  const { lang } = useLang();
   const chapter = CHAPTER_BY_ID.get(chapterId);
   if (!chapter) return null;
 
@@ -96,43 +99,47 @@ export default function ChapterRenderer({ chapterId, onNavigate }: ChapterRender
 
   return (
     <article className="chapter">
-      <ChapterHeader chapter={chapter} />
-      <ChapterBody chapterId={chapterId} chapter={chapter} />
-      <ChapterFooter chapter={chapter} onNavigate={onNavigate} />
+      <ChapterHeader chapter={chapter} lang={lang} />
+      <ChapterBody chapterId={chapterId} chapter={chapter} lang={lang} />
+      <ChapterFooter chapter={chapter} onNavigate={onNavigate} lang={lang} />
     </article>
   );
 }
 
-function ChapterHeader({ chapter }: { chapter: Chapter }) {
+function ChapterHeader({ chapter, lang }: { chapter: Chapter; lang: Lang }) {
+  const text = chapterText(chapter, lang);
   return (
     <header className="max-w-3xl">
       <p className="kicker">
-        {MODULES[chapter.module].label} · {chapter.kicker}
+        {MODULES[chapter.module].label} · {text.kicker}
       </p>
       <div className="mt-3 flex items-baseline gap-4">
         <span className="font-mono text-sm text-muted">{chapter.number}</span>
-        <h2 className="font-serif text-4xl leading-tight md:text-5xl">{chapter.title}</h2>
+        <h2 className="font-serif text-4xl leading-tight md:text-5xl">{text.title}</h2>
       </div>
-      <p className="mt-2 font-mono text-xs text-muted">{chapter.meta}</p>
-      <p className="mt-5 text-lg leading-relaxed text-ink/80">{chapter.description}</p>
+      <p className="mt-2 font-mono text-xs text-muted">{text.meta}</p>
+      <p className="mt-5 text-lg leading-relaxed text-ink/80">{text.description}</p>
       <hr className="mt-8 border-line" />
     </header>
   );
 }
 
-function ChapterBody({ chapterId, chapter }: { chapterId: string; chapter: Chapter }) {
+function ChapterBody({ chapterId, chapter, lang }: { chapterId: string; chapter: Chapter; lang: Lang }) {
   const Lab = LAB_COMPONENTS[chapterId];
-  return Lab ? <Lab /> : <ComingSoon chapter={chapter} />;
+  return Lab ? <Lab /> : <ComingSoon chapter={chapter} lang={lang} />;
 }
 
-function ComingSoon({ chapter }: { chapter: Chapter }) {
+function ComingSoon({ chapter, lang }: { chapter: Chapter; lang: Lang }) {
+  const moduleTitle = lang === 'en' ? MODULES_EN[chapter.module] : MODULES[chapter.module].title;
   return (
     <section className="mt-10 max-w-3xl rounded-lg border border-dashed border-line bg-paper-deep p-8">
-      <p className="font-mono text-xs tracking-[0.15em] text-ember">COMING SOON</p>
-      <h3 className="mt-3 font-serif text-2xl">本章内容建设中</h3>
+      <p className="font-mono text-xs tracking-[0.15em] text-ember">
+        {t(lang, 'comingSoonKicker')}
+      </p>
+      <h3 className="mt-3 font-serif text-2xl">{t(lang, 'comingSoonTitle')}</h3>
       <p className="mt-3 leading-relaxed text-ink/75">
-        这一章属于 {MODULES[chapter.module].label}「{MODULES[chapter.module].title}」， 将对照以下
-        hermes-agent 真实源码展开：
+        {t(lang, 'comingSoonBodyPrefix')} {MODULES[chapter.module].label}「{moduleTitle}」
+        {t(lang, 'comingSoonBodySuffix')}
       </p>
       {chapter.sourceFiles.length > 0 && (
         <ul className="mt-4 space-y-1.5">
@@ -150,9 +157,11 @@ function ComingSoon({ chapter }: { chapter: Chapter }) {
 function ChapterFooter({
   chapter,
   onNavigate,
+  lang,
 }: {
   chapter: Chapter;
   onNavigate: (id: string) => void;
+  lang: Lang;
 }) {
   const progress = useProgress();
   const prev = prevChapter(chapter.id);
@@ -180,7 +189,11 @@ function ChapterFooter({
                 : 'bg-ink text-acid hover:bg-ink/90'
             }`}
           >
-            {complete ? '✓ 本章已完成（点击撤销）' : next ? '完成本章，继续下一章 →' : '完成本章'}
+            {complete
+              ? t(lang, 'completeUndo')
+              : next
+                ? t(lang, 'completeAndNext')
+                : t(lang, 'completeOnly')}
           </button>
         </div>
       )}
@@ -191,7 +204,7 @@ function ChapterFooter({
             onClick={() => onNavigate(prev.id)}
             className="text-blue hover:underline"
           >
-            ‹ {prev.number} {prev.title}
+            ‹ {prev.number} {chapterText(prev, lang).title}
           </button>
         ) : (
           <span />
@@ -202,7 +215,7 @@ function ChapterFooter({
             onClick={() => onNavigate(next.id)}
             className="text-blue hover:underline"
           >
-            {next.number} {next.title} ›
+            {next.number} {chapterText(next, lang).title} ›
           </button>
         ) : (
           <span />

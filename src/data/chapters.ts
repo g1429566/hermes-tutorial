@@ -1,11 +1,11 @@
-// 28 章元数据。每章映射 hermes-agent 真实源码路径（sourceFiles）。
-// 阶段 1 仅实现 M0 四章内容，其余章节在导航中可见、内容为占位。
+// 33 章元数据。每章映射 hermes-agent 真实源码路径（sourceFiles）。
+// 中文为规范字段；英文展示文案在本文件末尾的 CHAPTERS_EN / MODULES_EN。
 
 export type ModuleId = 'M0' | 'M1' | 'M2' | 'M3' | 'M4' | 'M5';
 
 export interface Chapter {
   id: string;
-  number: string; // "00"–"28"
+  number: string; // "00"–"32"
   title: string;
   meta: string; // "12 min" / "18 min · 进阶"
   module: ModuleId;
@@ -379,4 +379,255 @@ export function nextChapter(id: string): Chapter | null {
 export function prevChapter(id: string): Chapter | null {
   const idx = CHAPTERS.findIndex((c) => c.id === id);
   return idx > 0 ? CHAPTERS[idx - 1] : null;
+}
+
+// ── 英文元数据（与 CHAPTERS 一一对应，按 id 索引） ───────────────
+
+import type { Lang } from '@/lib/i18n';
+
+export const MODULES_EN: Record<ModuleId, string> = {
+  M0: 'Meet Hermes',
+  M1: 'Under the Hood',
+  M2: 'Build on the Principles',
+  M3: 'Interview Sprint',
+  M4: 'Extensions & Frontiers',
+  M5: 'Agent Core Completion',
+};
+
+export interface ChapterText {
+  title: string;
+  kicker: string;
+  description: string;
+  meta: string;
+}
+
+export const CHAPTERS_EN: Record<string, ChapterText> = {
+  start: {
+    title: 'Build Intuition First',
+    kicker: 'Intuition',
+    description:
+      'Before touching anything, get a feel for what the hermes command can do via a terminal animation.',
+    meta: '5 min',
+  },
+  map: {
+    title: 'Read the Repo Map',
+    kicker: 'Repo structure',
+    description:
+      'Package architecture explorer: six building blocks, each mapped to real source paths.',
+    meta: '10 min',
+  },
+  features: {
+    title: 'Feature Panorama',
+    kicker: 'Capability matrix',
+    description:
+      'Seven-capability matrix + scenario picker: which capabilities your use case actually exercises.',
+    meta: '10 min',
+  },
+  install: {
+    title: 'Install & First Conversation',
+    kicker: 'Getting started',
+    description: 'Install Hermes, hold your first conversation, meet the six most-used commands.',
+    meta: '8 min',
+  },
+  'agent-loop': {
+    title: 'The Agent Loop',
+    kicker: 'Main loop',
+    description:
+      'Agent loop stepper: INPUT→CONTEXT→MODEL→TOOL→RESULT→LOOP, checked against the source step by step.',
+    meta: '18 min · Core',
+  },
+  'skills-1': {
+    title: 'The Skill System (I)',
+    kicker: 'Skills',
+    description: 'Skill format explorer: YAML structure, loading pipeline, and the SkillManager.',
+    meta: '12 min',
+  },
+  'skills-2': {
+    title: 'The Skill System (II) · Curator',
+    kicker: 'Curator',
+    description:
+      'Curator state machine visualized: create→match→invoke→evaluate→improve/retire.',
+    meta: '15 min',
+  },
+  tools: {
+    title: 'Tools & Toolsets',
+    kicker: 'Tool routing',
+    description:
+      'Tool routing lab: register→validate→execute→result stream, with parallel/serial flags.',
+    meta: '15 min',
+  },
+  memory: {
+    title: 'Memory & Cross-Session Recall',
+    kicker: 'Memory',
+    description:
+      'Memory architecture: FTS5 index + LLM summaries + Honcho user model + retrieval pipeline.',
+    meta: '14 min',
+  },
+  delegation: {
+    title: 'The Delegation System',
+    kicker: 'Delegation',
+    description: 'Delegation sequence diagram: spawn→task→tool_calls→result→parent aggregation.',
+    meta: '14 min',
+  },
+  'gateway-1': {
+    title: 'Message Gateway (I)',
+    kicker: 'Gateway topology',
+    description:
+      'Gateway topology: Telegram/Discord/Slack/WhatsApp/Signal → gateway → agent.',
+    meta: '12 min',
+  },
+  'gateway-2': {
+    title: 'Message Gateway (II)',
+    kicker: 'Message flow',
+    description: 'Message flow + voice transcription + cross-platform continuity.',
+    meta: '12 min',
+  },
+  cron: {
+    title: 'Cron Scheduling',
+    kicker: 'Scheduled jobs',
+    description: 'Cron expression lab: visual cron parsing + the scheduler dispatch pipeline.',
+    meta: '12 min',
+  },
+  kanban: {
+    title: 'The Kanban Work Queue',
+    kicker: 'Multi-agent collaboration',
+    description: 'Kanban board simulation: multi-agent task state transitions.',
+    meta: '12 min',
+  },
+  tui: {
+    title: 'TUI Architecture',
+    kicker: 'Terminal UI',
+    description:
+      'Terminal component lab: render(width)→lines, invalidate, requestRender, input methods.',
+    meta: '15 min',
+  },
+  cli: {
+    title: 'CLI Architecture',
+    kicker: 'Command line',
+    description: 'CLI command tree + argument parsing + subcommand routing.',
+    meta: '12 min',
+  },
+  backends: {
+    title: 'Terminal Backends',
+    kicker: 'Execution environments',
+    description:
+      'Six backends compared: local/Docker/SSH/Singularity/Modal/Daytona + serverless sleep/wake.',
+    meta: '12 min',
+  },
+  profiles: {
+    title: 'Profiles & Multi-Instance',
+    kicker: 'Multi-instance',
+    description: 'Profile file structure + the instance isolation model.',
+    meta: '10 min',
+  },
+  'build-skill': {
+    title: 'Write a New Skill',
+    kicker: 'Build',
+    description: 'Skill builder: YAML editor + field validation + expected-effect preview.',
+    meta: '20 min · Hands-on',
+  },
+  'build-tool': {
+    title: 'Add a New Tool',
+    kicker: 'Build',
+    description: 'Tool registration lab: schema definition→register→simulated call→validation.',
+    meta: '18 min · Hands-on',
+  },
+  'build-provider': {
+    title: 'Add a Provider',
+    kicker: 'Build',
+    description: 'Provider adapter lab: auth→models→streamSimple→unified event stream.',
+    meta: '18 min · Hands-on',
+  },
+  'build-plugin': {
+    title: 'Write a Plugin',
+    kicker: 'Build',
+    description: 'Plugin builder: extension-point selection→event binding→simulated load.',
+    meta: '18 min · Hands-on',
+  },
+  'design-agent': {
+    title: 'Design a New Agent from Scratch',
+    kicker: 'Capstone design',
+    description:
+      'Agent design workbench: a complete design card spanning loop→tools→memory→skills→deploy.',
+    meta: '25 min · Capstone',
+  },
+  'interview-loop': {
+    title: 'Interview: Agent Loop Design',
+    kicker: 'Interview',
+    description: 'Interview flashcards: question + flip-for-approach + follow-up chains.',
+    meta: '15 min · Interview',
+  },
+  'interview-multi': {
+    title: 'Interview: Multi-Agent Design',
+    kicker: 'Interview',
+    description:
+      'Topology picker: Manager/Handoff/Supervisor/Group/Swarm — five patterns compared.',
+    meta: '18 min · Interview',
+  },
+  'interview-design': {
+    title: 'System Design Interview',
+    kicker: 'Interview',
+    description: 'Design doc template: requirements→architecture→components→data→failure→eval.',
+    meta: '20 min · Interview',
+  },
+  'interview-checklist': {
+    title: 'Self-Assessment & Interview Checklist',
+    kicker: 'Self-assessment',
+    description:
+      'Self-assessment matrix: "can explain / can design / can handle follow-ups" + knowledge graph.',
+    meta: '12 min · Interview',
+  },
+  reliability: {
+    title: 'Reliability Design',
+    kicker: 'Reliability',
+    description:
+      'Fault-injection lab: 429/overflow/abort/partial failure — retry→circuit-break→compensate→audit.',
+    meta: '18 min · Advanced',
+  },
+  interop: {
+    title: 'MCP / A2A Interop',
+    kicker: 'Interop',
+    description:
+      'Protocol comparison panel: Pi RPC ↔ MCP ↔ A2A / participants / payloads / when to use.',
+    meta: '14 min · Advanced',
+  },
+  compression: {
+    title: 'Context Compression & Checkpoints',
+    kicker: 'Context management',
+    description:
+      'The only sanctioned mid-conversation context change: compression pipeline + invisible snapshots before file edits.',
+    meta: '14 min · Core',
+  },
+  routing: {
+    title: 'Model Routing & Credential Pool',
+    kicker: 'Fallback & routing',
+    description:
+      'When the primary model dies, who picks up: credential pool, fallback_model, and the unified routing chain for auxiliary tasks.',
+    meta: '12 min · Core',
+  },
+  multimodal: {
+    title: 'Multimodal Tools',
+    kicker: 'Perception',
+    description:
+      'Vision understanding, image/video generation, TTS/STT: how multimodality grows at the edges as tools and provider plugins.',
+    meta: '12 min',
+  },
+  evaluation: {
+    title: 'Batch Runs & Agent Evaluation',
+    kicker: 'Measurability',
+    description:
+      'batch_runner parallel datasets, resumable runs, the standard trajectory format, and the SWE eval pipeline.',
+    meta: '12 min',
+  },
+};
+
+// 按语言取一章的展示文案（标题 / kicker / 描述 / meta）。
+export function chapterText(chapter: Chapter, lang: Lang): ChapterText {
+  if (lang === 'en') return CHAPTERS_EN[chapter.id];
+  return {
+    title: chapter.title,
+    kicker: chapter.kicker,
+    description: chapter.description,
+    meta: chapter.meta,
+  };
 }

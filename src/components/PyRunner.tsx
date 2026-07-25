@@ -6,6 +6,8 @@
 
 import { useState } from 'react';
 import type { PyodideInterface } from 'pyodide';
+import { useLang } from '@/lib/i18n';
+import { t } from '@/data/ui-strings';
 
 declare global {
   interface Window {
@@ -45,6 +47,7 @@ interface PyRunnerProps {
 }
 
 export default function PyRunner({ title, initialCode, note }: PyRunnerProps) {
+  const { lang } = useLang();
   const [code, setCode] = useState(initialCode);
   const [status, setStatus] = useState<RunStatus>('idle');
   const [output, setOutput] = useState<string[] | null>(null);
@@ -80,7 +83,7 @@ export default function PyRunner({ title, initialCode, note }: PyRunnerProps) {
           disabled={busy}
           className="rounded bg-acid px-3 py-1 font-mono text-xs font-bold text-ink disabled:opacity-50"
         >
-          {status === 'loading' ? '加载运行时…' : status === 'running' ? '运行中…' : '▶ 运行'}
+          {status === 'loading' ? t(lang, 'pyLoading') : status === 'running' ? t(lang, 'pyRunning') : t(lang, 'pyRun')}
         </button>
       </div>
       <textarea
@@ -93,12 +96,12 @@ export default function PyRunner({ title, initialCode, note }: PyRunnerProps) {
       {note && <p className="border-t border-white/10 px-4 py-2 text-xs text-white/55">{note}</p>}
       {output !== null && (
         <pre className="max-h-72 overflow-auto border-t border-white/10 bg-black/30 p-4 font-mono text-xs leading-5 text-acid">
-          {output.length > 0 ? output.join('\n') : '（无输出）'}
+          {output.length > 0 ? output.join('\n') : t(lang, 'pyNoOutput')}
         </pre>
       )}
       {output === null && busy && (
         <p className="border-t border-white/10 px-4 py-2 font-mono text-xs text-white/50">
-          {status === 'loading' ? '首次运行需加载 Python 运行时（约 15MB，之后常驻）…' : '执行中…'}
+          {status === 'loading' ? t(lang, 'pyFirstLoad') : t(lang, 'pyExecuting')}
         </p>
       )}
     </div>

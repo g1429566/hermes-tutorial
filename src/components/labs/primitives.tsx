@@ -4,6 +4,8 @@
 // 数据驱动——章节数据在 src/data/*.ts，这里只管渲染与交互状态。
 
 import type { ReactNode } from 'react';
+import { useLang } from '@/lib/i18n';
+import { t } from '@/data/ui-strings';
 
 /* ── SectionHeading：实验室内的小节标题 ─────────────────────────── */
 export function SectionHeading({ kicker, title }: { kicker: string; title: string }) {
@@ -211,6 +213,7 @@ export function FlipCard({
   front: ReactNode;
   back: ReactNode;
 }) {
+  const { lang } = useLang();
   return (
     <button
       type="button"
@@ -221,7 +224,7 @@ export function FlipCard({
     >
       {flipped ? back : front}
       <p className={`mt-4 font-mono text-[11px] ${flipped ? 'text-acid' : 'text-muted'}`}>
-        {flipped ? '▲ 收起思路' : '▼ 点击翻转，看模范思路'}
+        {flipped ? t(lang, 'flipCollapse') : t(lang, 'flipExpand')}
       </p>
     </button>
   );
