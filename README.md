@@ -1,6 +1,6 @@
-# Hermes Agent 学习教程
+# Hermes Agent Tutorial
 
-**中文** | [English](README.en.md)
+[中文](README.ch.md) | **English**
 
 [![CI](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml/badge.svg)](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml)
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
@@ -9,88 +9,88 @@
 ![Node](https://img.shields.io/badge/Node-%E2%89%A520.9-3c873a)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
 
-围绕 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的**交互式学习教程网站**：单页沉浸式应用，纯静态导出、无后端、可完全离线运行。
+An **interactive tutorial site** built around [Hermes Agent](https://github.com/NousResearch/hermes-agent): a single-page immersive app, statically exported, backend-free, and fully offline-capable. Defaults to English; 中文 available via the in-site language switcher.
 
-## 效果预览
+## Screenshots
 
-| 首页（M0 · 先建立直觉）              | 交互实验室（M1 · Agent 主循环）           |
-| ------------------------------------ | ----------------------------------------- |
-| ![首页](.github/screenshot-home.png) | ![交互实验室](.github/screenshot-lab.png) |
+| Home (M0 · Build Intuition First)       | Interactive lab (M1 · The Agent Loop)             |
+| --------------------------------------- | ------------------------------------------------- |
+| ![Home](.github/screenshot-home-en.png) | ![Interactive lab](.github/screenshot-lab-en.png) |
 
-## 简介
+## Overview
 
-本教程把 Hermes 当作教学对象，通过 33 章循序渐进的课程，让学习者：
+Using Hermes itself as the teaching subject, the tutorial walks learners through 33 progressive chapters:
 
-1. **了解** Hermes 的各项功能（M0 认识 Hermes）；
-2. **深入** Hermes 的工作原理（M1 深入原理，14 章对照真实源码）；
-3. 基于原理**自己设计新 agent、扩展 agent 功能**（M2 基于原理构建）；
-4. 达到 **AI agent 工程方向的面试要求**（M3 面试冲刺 + M4 扩展与前沿）。
+1. **Meet** Hermes and its capabilities (M0 Meet Hermes);
+2. Go **under the hood** of how it works (M1, 14 chapters mapped to real source code);
+3. **Design new agents and extend agent functionality** on those principles (M2 Build on the Principles);
+4. Reach **interview readiness for AI agent engineering roles** (M3 Interview Sprint + M4 Extensions & Frontiers).
 
-每章 = kicker + 讲解 + 交互实验室 + 要点 + 完成按钮。第 19 章内嵌 Pyodide（CPython WebAssembly）沙箱，可在浏览器中直接运行 Python 代码。
+Each chapter = kicker + explanation + interactive lab + key takeaways + completion button. Chapter 19 embeds a Pyodide (CPython WebAssembly) sandbox so you can run Python right in the browser.
 
-## 课程结构
+## Course Structure
 
-| 模块 | 主题           | 章数 |
-| ---- | -------------- | ---- |
-| M0   | 认识 Hermes    | 4    |
-| M1   | 深入原理       | 14   |
-| M2   | 基于原理构建   | 5    |
-| M3   | 面试冲刺       | 4    |
-| M4   | 扩展与前沿     | 2    |
-| M5   | Agent 核心补全 | 4    |
+| Module | Topic                   | Chapters |
+| ------ | ----------------------- | -------- |
+| M0     | Meet Hermes             | 4        |
+| M1     | Under the Hood          | 14       |
+| M2     | Build on the Principles | 5        |
+| M3     | Interview Sprint        | 4        |
+| M4     | Extensions & Frontiers  | 2        |
+| M5     | Agent Core Completion   | 4        |
 
-M5 覆盖上下文压缩与 checkpoint、模型路由与凭据池、多模态工具、批处理与评测。
+M5 covers context compression & checkpoints, model routing & credential pools, multimodal tools, and batch runs & evaluation.
 
-## 特性
+## Features
 
-- 中英双语界面与内容（默认英文），导航栏一键切换，选择持久化
-- 33 个交互实验室（lab），每章一个可动手操作的组件
-- 学习进度存 `localStorage`：版本化 key，支持导出 / 导入 / v1 迁移 / 重置
-- Hash 路由，纯静态部署到任意静态服务器即可使用
-- Pyodide 运行时由 `postinstall` 从 npm 包 vendor 到 `public/pyodide/`，全程离线
-- Vitest 单元测试 + ESLint + Prettier + GitHub Actions CI
+- Bilingual UI and content (中文 / English), switchable in the nav sidebar and persisted locally
+- 33 interactive labs — one hands-on component per chapter
+- Progress stored in `localStorage`: versioned keys, export / import / v1 migration / reset
+- Hash routing — deploy the static export to any static file server
+- Pyodide runtime vendored from npm into `public/pyodide/` by `postinstall`, fully offline
+- Vitest unit tests + ESLint + Prettier + GitHub Actions CI
 
-## 快速开始
+## Quick Start
 
-需要 Node.js ≥ 20.9。
+Requires Node.js ≥ 20.9.
 
-### 开发模式（热更新）
+### Development (hot reload)
 
 ```bash
 npm install
 npm run dev
 ```
 
-### 生产模式（静态导出 + 本地静态服务器）
+### Production (static export + local static server)
 
 ```bash
-npm run build   # 产出 out/
+npm run build   # outputs out/
 npm run start   # http://localhost:3000
 ```
 
-### Docker 一键部署（nginx）
+### Docker one-liner (nginx)
 
 ```bash
 docker compose up --build
 ```
 
-然后访问 http://localhost:8080 。
+Then visit http://localhost:8080 .
 
-## 技术栈
+## Tech Stack
 
-Next.js 16（静态导出）+ React 19 + Tailwind CSS 4 + TypeScript 6。内容以 TypeScript 类型化数据结构嵌入（`src/data/`），非 MDX。
+Next.js 16 (static export) + React 19 + Tailwind CSS 4 + TypeScript 6. Content is embedded as typed TypeScript data structures (`src/data/`), not MDX.
 
-## 项目结构
+## Project Structure
 
 ```
-app/               # Next.js App Router 入口（layout / page / globals.css）
+app/               # Next.js App Router entry (layout / page / globals.css)
 src/
-  components/      # CourseNav / ChapterRenderer / Quiz / labs/ 各章交互实验室
-  data/            # 33 章元数据 + 各章内容数据（类型化 TS）
-  hooks/           # useChapter（hash 路由）/ useProgress（进度订阅）
-  lib/             # i18n、progress v1/v2、assessment、cron-explain、judge、skill-validate
-scripts/           # serve.mjs（静态服务器）/ setup-pyodide.mjs（vendor Pyodide）
-tests/             # Vitest 单元测试
+  components/      # CourseNav / ChapterRenderer / Quiz / labs/ per-chapter interactive labs
+  data/            # 33-chapter metadata + per-chapter content data (typed TS, zh + en exports)
+  hooks/           # useChapter (hash routing) / useProgress (progress subscription)
+  lib/             # i18n, progress v1/v2, assessment, cron-explain, judge, skill-validate
+scripts/           # serve.mjs (static server) / setup-pyodide.mjs (vendor Pyodide)
+tests/             # Vitest unit tests
 ```
 
 ## License
