@@ -1,5 +1,5 @@
 // Chapter 21「写一个 Plugin」数据源：Plugin 构建器。
-// 扩展面与铁律对齐 hermes-agent/AGENTS.md「Plugins」（735–784 行）；
+// 扩展面与铁律对齐 hermes-agent/plugins/AGENTS.md（铁律 7–15 行、发现时机坑 77–80 行）；
 // 生成的 plugin.yaml / __init__.py 形状对齐真实插件 plugins/disk-cleanup/，
 // ctx API 签名对齐 hermes_cli/plugins.py 的 PluginContext。
 
@@ -13,12 +13,12 @@ export const PLUGIN_INTRO =
   '就能往六个生命周期钩子上挂回调、注册新工具、挂载 CLI 子命令——全程不碰核心文件。' +
   '下面勾选你的插件要的扩展点，右侧两个文件会实时长出来。';
 
-// 六个生命周期钩子（AGENTS.md 747–749 行；触发位置：model_tools.py / run_agent.py）
+// 六个生命周期钩子（plugins/AGENTS.md「Plugin kinds」发现表；触发位置：model_tools.py / agent/turn_context.py / agent/turn_finalizer.py / run_agent.py）
 export const LIFECYCLE_HOOKS = [
   { id: 'pre_tool_call', desc: '工具调用前：参数审计/拦截（model_tools.py 触发）' },
   { id: 'post_tool_call', desc: '工具调用后：结果后处理（model_tools.py 触发）' },
-  { id: 'pre_llm_call', desc: '模型调用前（run_agent.py 触发）' },
-  { id: 'post_llm_call', desc: '模型调用后（run_agent.py 触发）' },
+  { id: 'pre_llm_call', desc: '模型调用前（agent/turn_context.py 触发）' },
+  { id: 'post_llm_call', desc: '模型调用后（agent/turn_finalizer.py 触发）' },
   { id: 'on_session_start', desc: '会话开始（run_agent.py 触发）' },
   { id: 'on_session_end', desc: '会话结束：记忆同步、清理等（run_agent.py 触发）' },
 ];
@@ -44,7 +44,7 @@ export const DEFAULT_PLUGIN_FORM: PluginForm = {
 
 export const PLUGIN_NAME_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-// 铁律（AGENTS.md 779–784 行，Teknium, May 2026）
+// 铁律（plugins/AGENTS.md 7–15 行，Teknium, May 2026）
 export const PLUGIN_IRON_RULE = {
   title: '铁律：插件不得修改核心文件',
   body:
@@ -53,7 +53,7 @@ export const PLUGIN_IRON_RULE = {
     'PR #5295 曾为此从 main.py 删掉 95 行硬编码的 honcho argparse。',
 };
 
-// 时机坑（AGENTS.md 755–759 行）
+// 时机坑（plugins/AGENTS.md 77–80 行）
 export const PLUGIN_DISCOVERY_PITFALL = {
   title: '时机坑：discover_plugins() 是 import 副作用',
   body:
@@ -77,7 +77,7 @@ export function buildPluginYaml(form: PluginForm): string {
     'author: "Your Name"',
   ];
   if (hooks.length > 0) {
-    lines.push('hooks:');
+    lines.push('provides_hooks:');
     for (const h of hooks) lines.push(`  - ${h.id}`);
   }
   return lines.join('\n');
@@ -86,7 +86,7 @@ export function buildPluginYaml(form: PluginForm): string {
 // 钩子回调骨架：pre/post_tool_call 对齐 disk-cleanup 的真实签名，其余用 **kw 兜底
 function hookCallback(hook: string): string {
   if (hook === 'pre_tool_call' || hook === 'post_tool_call') {
-    return `def _on_${hook}(tool_name="", args=None, result=None, task_id="", session_id="", **_):
+    return `def _on_${hook}(tool_name="", args=None, task_id="", session_id="", tool_call_id="", **_):
     """${hook}：审计 / 后处理工具调用。"""
     pass`;
   }
@@ -175,8 +175,8 @@ export const LIFECYCLE_HOOKS_EN: typeof LIFECYCLE_HOOKS = [
     id: 'post_tool_call',
     desc: 'After a tool call: result post-processing (fires in model_tools.py)',
   },
-  { id: 'pre_llm_call', desc: 'Before a model call (fires in run_agent.py)' },
-  { id: 'post_llm_call', desc: 'After a model call (fires in run_agent.py)' },
+  { id: 'pre_llm_call', desc: 'Before a model call (fires in agent/turn_context.py)' },
+  { id: 'post_llm_call', desc: 'After a model call (fires in agent/turn_finalizer.py)' },
   { id: 'on_session_start', desc: 'Session start (fires in run_agent.py)' },
   { id: 'on_session_end', desc: 'Session end: memory sync, cleanup, etc. (fires in run_agent.py)' },
 ];

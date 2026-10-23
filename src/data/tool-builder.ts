@@ -1,7 +1,8 @@
 // Chapter 19「加一个新工具」数据源：工具注册实验。
-// 代码模板逐行对齐 hermes-agent/AGENTS.md「Adding New Tools」（509–555 行）：
+// 代码模板逐行对齐 hermes-agent/tools/AGENTS.md「Adding a core tool (2 files)」：
 // check_requirements + handler 返回 json.dumps + registry.register 完整签名；
-// 「第二步把工具名加进 toolsets.py」也是 AGENTS.md 的明文要求（545 行：This step is required）。
+// 「第二步把工具名加进 toolsets.py」也是 tools/AGENTS.md 的明文要求（Required ——
+// discovery registers the schema, but a tool is only exposed if a toolset names it）。
 
 export interface ToolBuilderForm {
   name: string; // snake_case
@@ -56,13 +57,14 @@ function sanitized(form: ToolBuilderForm): ToolBuilderForm {
   };
 }
 
-// 生成 tools/<name>.py：模板对齐 AGENTS.md 524–543 行，schema.parameters 按表单展开
+// 生成 tools/<name>.py：模板对齐 tools/AGENTS.md「Adding a core tool」注册示例，schema.parameters 按表单展开
 export function buildToolCode(form: ToolBuilderForm): string {
   const f = sanitized(form);
   const pyType = PY_TYPES[f.paramType];
-  const envCheck = f.requiresEnv ? `bool(os.getenv("${f.requiresEnv}"))` : 'True  # 无环境依赖';
+  const envCheck = f.requiresEnv ? `bool(get_secret("${f.requiresEnv}"))` : 'True  # 无环境依赖';
   const requiresEnv = f.requiresEnv ? `["${f.requiresEnv}"]` : '[]';
-  return `import json, os
+  return `import json
+from agent.secret_scope import get_secret
 from tools.registry import registry
 
 def check_requirements() -> bool:
@@ -91,7 +93,7 @@ registry.register(
 )`;
 }
 
-// 第二步：toolsets.py 手动接线（AGENTS.md 545 行——自动发现不会替你暴露工具）
+// 第二步：toolsets.py 手动接线（tools/AGENTS.md——Required，自动发现不会替你暴露工具）
 export function buildToolsetsCode(form: ToolBuilderForm): string {
   const f = sanitized(form);
   return `# toolsets.py —— 第二步，必须手动
@@ -200,8 +202,8 @@ export const TOOL_BUILDER_UI = {
   paramDescLabel: { zh: '参数描述', en: 'Description' },
   paramDescPlaceholder: { zh: '这个参数是干什么的。', en: 'What this parameter is for.' },
   previewNote: {
-    zh: '模板逐行对齐 AGENTS.md「Adding New Tools」；所有 handler 必须返回 JSON 字符串',
-    en: 'Template matches AGENTS.md "Adding New Tools" line by line; every handler must return a JSON string',
+    zh: '模板逐行对齐 tools/AGENTS.md「Adding a core tool」；所有 handler 必须返回 JSON 字符串',
+    en: 'Template matches tools/AGENTS.md "Adding a core tool" line by line; every handler must return a JSON string',
   },
   simulateButton: { zh: '▶ 模拟调用一次', en: '▶ Simulate one call' },
   toolsetsKicker: { zh: '最容易漏的一步', en: 'The easiest step to miss' },
@@ -234,8 +236,8 @@ export const TOOL_BUILDER_UI = {
     en: 'Beyond simulation — actually run it in the browser',
   },
   runBody: {
-    zh: '下面的沙箱代码 = 一个最小 registry stub（顶替真实的 tools/registry.py）+ 你刚写的工具文件 + 一次 handler 分发。点「运行」，在浏览器里的 CPython 中看注册信息和 handler 真实返回的 JSON 字符串——可以随手改代码再跑。',
-    en: 'The sandbox code below = a minimal registry stub (standing in for the real tools/registry.py) + the tool file you just wrote + one handler dispatch. Hit "Run" to see the registration info and the JSON string the handler actually returns, in CPython running in your browser — feel free to tweak the code and run again.',
+    zh: '下面的沙箱代码 = 一个最小 registry stub（顶替真实的 tools/registry.py）+ 一个 secret_scope stub（顶替 agent.secret_scope.get_secret）+ 你刚写的工具文件 + 一次 handler 分发。点「运行」，在浏览器里的 CPython 中看注册信息和 handler 真实返回的 JSON 字符串——可以随手改代码再跑。',
+    en: 'The sandbox code below = a minimal registry stub (standing in for the real tools/registry.py) + a secret_scope stub (standing in for agent.secret_scope.get_secret) + the tool file you just wrote + one handler dispatch. Hit "Run" to see the registration info and the JSON string the handler actually returns, in CPython running in your browser — feel free to tweak the code and run again.',
   },
   pyRunnerTitleSuffix: { zh: ' · Pyodide 沙箱', en: ' · Pyodide sandbox' },
   pyRunnerNote: {

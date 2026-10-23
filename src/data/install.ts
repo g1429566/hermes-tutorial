@@ -19,7 +19,7 @@ export const INSTALL_STEPS: InstallStep[] = [
     id: 'install',
     title: '① 运行安装脚本（Linux / macOS / WSL2 / Termux）',
     command: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
-    note: '安装器会自动处理 uv、Python 3.11、Node.js、ripgrep、ffmpeg 等依赖。',
+    note: '安装器会自动处理 uv、Python 3.14、Node.js、ripgrep、ffmpeg 等依赖。',
   },
   {
     id: 'reload-shell',
@@ -73,7 +73,7 @@ export const INSTALL_STEPS_EN: InstallStep[] = [
     id: 'install',
     title: '① Run the install script (Linux / macOS / WSL2 / Termux)',
     command: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
-    note: 'The installer automatically handles uv, Python 3.11, Node.js, ripgrep, ffmpeg, and other dependencies.',
+    note: 'The installer automatically handles uv, Python 3.14, Node.js, ripgrep, ffmpeg, and other dependencies.',
   },
   {
     id: 'reload-shell',

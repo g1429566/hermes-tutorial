@@ -1,7 +1,7 @@
 // Chapter 23「Agent 循环设计题」与 Chapter 26「自我评估与面试清单」共用数据源。
-// 所有模范思路以 hermes-agent/AGENTS.md 的真实设计为依据：
-// §AIAgent Class / Agent Loop（314–371）、§Adding New Tools（509–556）、
-// §Toolsets（964–981）、§Prompt Caching Must Not Break（1132–1144）。
+// 所有模范思路以 hermes-agent 各区域 AGENTS.md 的真实设计为依据：
+// agent/AGENTS.md §Agent loop / §Message-flow invariants、
+// tools/AGENTS.md §Registry and discovery / §Toolsets / §Delegation、cron/AGENTS.md §Cron。
 
 export interface LoopQuestion {
   id: string;
@@ -37,7 +37,7 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
       '感知层的复杂度被推到了显示层（CLI 的 spinner、TUI 的 message.delta 事件），不污染循环本体。' +
       '真正的并发发生在循环之外：delegate_task 的 batch tasks、gateway 的多平台接入。',
     followUps: [
-      '那并发需求怎么解决？——并发在 delegate_task 的 tasks 数组层做（受 delegation.max_concurrent_children 默认 3 限制），主循环保持串行。',
+      '那并发需求怎么解决？——并发在 delegate_task 的 tasks 数组层做（受 delegation.max_concurrent_children 默认 10 限制），主循环保持串行。',
       '人类介入（approval）卡在哪？——在工具执行前的钩子里同步等待，循环本身就是阻塞的，不需要额外状态机。',
       '后台 delegate 完成的结果怎么回到会话？——通过 async-delegation completion queue，在后续轮次注入，而不是打断当前循环。',
     ],
@@ -57,7 +57,7 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
       '重建 system prompt——都会让缓存整体失效，之后每轮全量重算，成本大幅上升。' +
       '所以消息流只增长：工具结果以 role="tool" 消息 append，连技能斜杠命令都以 user 消息注入而不是改写 system prompt。' +
       '唯一的例外是上下文压缩（context compression）：那是故意的、一次性的失效，用来换回上下文窗口空间。' +
-      '其他一切变更默认 deferred invalidation（下次会话生效），--now 才立即失效。',
+      '其他一切变更默认 deferred invalidation（下次会话生效），只有 /skills 系列提供 --now 立即失效。',
     followUps: [
       '用户中途 /skills install 怎么办？——默认写入配置、下次会话生效；加 --now 立即生效并接受缓存失效的代价。',
       '压缩时不也改写了历史吗？——对，那是唯一被允许的例外：窗口耗尽的代价大于一次性缓存失效，压缩后的新前缀从下一轮起重新被缓存。',
@@ -71,44 +71,46 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
   },
   {
     id: 'budget',
-    question: 'max_iterations=90 和 iteration budget 是怎么设计的？为什么不是简单的 for 循环计数？',
+    question:
+      'max_iterations（默认无上限）和 iteration budget 是怎么设计的？为什么不是简单的 for 循环计数？',
     hint: '注意循环条件有三个部分，以及 grace call 存在的意义。',
     answer:
       '循环条件是 `(api_call_count < max_iterations and iteration_budget.remaining > 0) or _budget_grace_call`。' +
-      'max_iterations 默认 90，是与子 agent 共享的全局上限——subagent 继承同一量级，配合 delegation.max_spawn_depth=2 ' +
-      '把整棵委派树的总工作量锁住。iteration_budget 是更细的预算维度，预算先耗尽也会停。' +
+      'max_iterations 默认无上限（AIAgent 构造默认 sys.maxsize，CLI 解析链 TURN_LIMIT_UNLIMITED 同值；500 只是 TUI 网关会话工厂的默认值），是主循环的全局上限；子 agent 不再共享它——每个 subagent ' +
+      '有独立的迭代预算 delegation.max_iterations（默认 250），且调用方传入的 max_iterations 会被忽略、以 config 为准。' +
+      '委派树深度由 delegation.max_spawn_depth 锁住（默认 1，一层摊平）。iteration_budget 是更细的预算维度，预算先耗尽也会停。' +
       'one-turn grace call 是关键细节：预算耗尽后仍给模型最后一轮，让它把手头信息收尾成最终回答，' +
       '而不是硬切断留一个烂尾会话。循环的三个出口：模型返回纯文本（正常完成）、触碰上限（强制收尾）、用户中断。',
     followUps: [
-      '子 agent 为什么共享同一上限？——防递归失控；delegation.max_iterations 可单独覆盖，但默认继承主 agent 的量级。',
+      '子 agent 为什么不继承主循环的上限？——防递归失控：每个 subagent 有独立预算 delegation.max_iterations（默认 250）；调用方传入的值会被忽略，以 config 为准。',
       '预算耗尽时用户看到什么？——grace call 产出的收尾回答，而不是一个截断的工具结果。',
       '为什么不能没有上限？——agent 会陷入工具调用死循环；上限是成本控制，也是故障隔离。',
     ],
     rubric: [
       '能复述循环条件的三个部分（迭代数 / 预算 / grace call）',
       '理解 grace call 的动机：体面收尾而非硬切断',
-      '知道上限与子 agent 共享，配合 spawn depth 锁总量',
+      '知道子 agent 有独立迭代预算（delegation.max_iterations），spawn depth 锁委派树深度',
     ],
   },
   {
     id: 'interrupt',
-    question: '用户在 CLI 里按 Esc 中断 agent，循环里是怎么处理的？为什么不用异常？',
+    question: '用户在 TUI 里按 Esc 中断 agent，循环里是怎么处理的？为什么不用异常？',
     hint: '中断标志在循环的哪个位置被检查？工具执行到一半会怎样？',
     answer:
       '每次迭代开头检查 `self._interrupt_requested`，为真则 break——AGENTS.md 的循环伪代码第一行就是它。' +
-      '中断被设计成循环条件的一部分：Esc 只是设置标志位，agent 在下一个迭代边界这个「安全点」退出，' +
+      '中断被设计成循环条件的一部分：Esc（TUI 走 session.interrupt RPC）只是设置标志位，agent 在下一个迭代边界这个「安全点」退出，' +
       '而不是在工具执行中途被异常撕开。这保证消息流始终一致（没有半截的 tool_call 悬在空中），' +
-      '会话可以体面收尾、正常落盘。同一套机制也服务系统级中断：cron 会话有 3 分钟硬中断，' +
-      '失控的 agent 循环不能把调度器拖死。',
+      '会话可以体面收尾、正常落盘。同一套机制也服务系统级中断：cron 会话有空闲看门狗' +
+      '（默认 600s 无进展即硬中断，HERMES_CRON_TIMEOUT 可调），失控的 agent 循环不能把调度器拖死。',
     followUps: [
       '为什么不在工具执行中间硬断？——会留下不成对的消息（有 tool_call 无 tool 结果），破坏消息流一致性，也破坏缓存前缀。',
       '中断后还能继续这个会话吗？——消息流完整落盘（SessionDB），可以恢复。',
-      '系统级中断的例子？——cron 3 分钟硬中断，同一套标志机制，只是触发源从用户变成看门狗。',
+      '系统级中断的例子？——cron 的空闲看门狗（默认 600s，空闲计时非墙钟），同一套标志机制，只是触发源从用户变成看门狗。',
     ],
     rubric: [
       '标志位 + 迭代边界检查点，而非异常打断',
       '能对比异常方案的状态一致性问题（半截 tool_call）',
-      '能举 cron 3 分钟硬中断作为系统级中断的例子',
+      '能举 cron 空闲看门狗（默认 600s）作为系统级中断的例子',
     ],
   },
   {
@@ -116,9 +118,9 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
     question: '为什么所有工具 handler 必须返回 JSON 字符串，而不是 Python 对象或自然语言段落？',
     hint: '想想 registry 在不知道工具内部类型的情况下要做什么。',
     answer:
-      'AGENTS.md 写明「All handlers MUST return a JSON string」。registry 统一负责 schema 收集、分发、' +
+      'tools/AGENTS.md 写明「All handlers return a JSON string」。registry 统一负责 schema 收集、分发、' +
       '可用性检查和错误包装，它不该感知每个工具的内部类型——统一的字符串边界让它可以通用地做截断/摘要来保护上下文窗口。' +
-      '结果经 tool_result_message 包成 OpenAI role="tool" 消息 append。结构化 JSON（success/data/error 字段）' +
+      '结果经 make_tool_result_message 包成 OpenAI role="tool" 消息 append。结构化 JSON（success/data/error 字段）' +
       '让模型能稳定解析成败：错误也被包装成正常的结果消息而不是抛出，agent 能看到失败并自我纠正，' +
       '循环不会因为一个工具的异常而崩掉。',
     followUps: [
@@ -140,7 +142,7 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
       '自动发现只负责注册：任何 tools/*.py 顶层调用 registry.register() 的模块 import 即注册 schema，没有手动 import 列表。' +
       '但暴露给 agent 是另一个 deliberate 步骤——工具名必须出现在 toolsets.py 的 TOOLSETS dict 里。' +
       '分开的好处：schema footprint 可控，比如 kanban worker 不在 kanban 任务内时工具足迹为零；' +
-      '按平台裁剪，Telegram 用 messaging toolset，各平台默认继承 _HERMES_CORE_TOOLS；' +
+      '按平台裁剪，每个消息平台一个 hermes-<platform> bundle（如 Telegram 的 hermes-telegram），都直接以 _HERMES_CORE_TOOLS 为底座再加减；' +
       'check_fn / requires_env 环境不满足时自动隐藏工具。面试里点出「registration ≠ exposure」这两层设计，' +
       '说明你想过工具的可见性是有成本的——每个 schema 都占上下文、都稀释模型的注意力。',
     followUps: [
@@ -163,7 +165,7 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
       '压缩同样改写历史，但它是故意的、一次性的失效：当消息流逼近上下文窗口上限时，不压缩会话就直接死亡——' +
       '一次性缓存失效的代价远小于会话无法继续。压缩形成的新前缀从下一轮起重新被缓存，成本回落。' +
       '关键在于「唯一」二字：其他一切变更（装技能、改工具集、重载记忆）都走 deferred invalidation，' +
-      '默认下次会话生效，--now 才立即失效。把例外收敛到一个，规则才真正可执行。',
+      '默认下次会话生效，只有 /skills 系列提供 --now 立即失效。把例外收敛到一个，规则才真正可执行。',
     followUps: [
       '压缩的时机谁决定？——上下文窗口压力驱动，是循环里唯一被允许的上下文变更点。',
       '压缩丢信息怎么办？——这是压缩本身的质量问题；工程上保证它只发生一次、之后缓存重建，是成本层面的兜底。',
@@ -180,15 +182,16 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
     question: '技能斜杠命令为什么注入为 user 消息，而不是更新 system prompt？',
     hint: '缓存前缀里哪个位置最「碰不得」？',
     answer:
-      'agent/skill_commands.py 扫描 ~/.hermes/skills/ 后，把技能内容以 user 消息注入——AGENTS.md 的原话是 ' +
-      '「injects as user message (not system prompt) to preserve prompt caching」。' +
+      'agent/skill_commands.py 扫描技能目录（默认 ~/.hermes/skills/）后，把技能内容以 user 消息注入——agent/AGENTS.md 的' +
+      '消息流不变量写明「skill slash commands (agent/skill_commands.py) inject as a user message」，理由是 ' +
+      'prompt caching must not break。' +
       'system prompt 位于缓存前缀的最头部，改它等于让整段前缀失效；user 消息 append 在消息流尾部，前缀不动。' +
       '代价是技能指令的权威性低于 system prompt——用消息角色换缓存命中率，是 Hermes 缓存优先设计的典型取舍。' +
       '这个模式在全仓库一致：任何会改变 system prompt 状态的操作都默认 deferred，下次会话再生效。',
     followUps: [
       '注入 user 消息有什么副作用？——权威性弱于 system prompt，模型可能不听；这是刻意的取舍。',
       '为什么缓存前缀头部最敏感？——前缀缓存按前缀匹配，头部一变，后面全部失效。',
-      '同样的取舍还出现在哪？——/tools、memory 相关命令都默认 deferred invalidation，--now 才立即生效。',
+      '同样的取舍还出现在哪？——/tools、memory 相关命令也都默认 deferred invalidation，下次会话才生效。',
     ],
     rubric: [
       '知道前缀缓存的位置敏感性：头部改动 = 全部失效',
@@ -204,7 +207,7 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
       '由模型的单次响应决定：response.tool_calls 里有几个 call，循环就依次执行几个、逐个 append 结果，' +
       '然后 api_call_count+1 进入下一轮。也就是说「同一轮多个 tool_calls」是模型表达的并行语义，' +
       '执行层按数组顺序处理，主循环内没有并发执行框架。真正的并行发生在 delegate_task 的 batch tasks：' +
-      'tasks: [...] 每个元素起一个独立 subagent 并发跑，受 delegation.max_concurrent_children（默认 3）限制。' +
+      'tasks: [...] 每个元素起一个独立 subagent 并发跑，受 delegation.max_concurrent_children（默认 10）限制。' +
       '这个分工很干净：循环内保持串行的确定性，并发被推到有隔离边界的委派层。',
     followUps: [
       '同轮多个 tool_calls 的结果顺序重要吗？——按数组顺序 append，消息流与模型的调用一一对应。',
@@ -226,53 +229,70 @@ export const LOOP_QUESTIONS: LoopQuestion[] = [
       '支撑跨会话全文搜索）；on_session_end 插件钩子触发，记忆 provider 在这里 sync_turn，把这一轮同步到 ' +
       'honcho / mem0 等后端；之后 curator 这类后台系统才上场（跟踪技能使用、自动归档）。' +
       '这意味着主循环只负责「这一轮的智能」，持久化与学习循环被解耦到会话边界之后。' +
-      '而且这个解耦是可配置的：cron 会话默认 skip_memory=True，记忆 provider 在定时任务里故意不跑。',
+      '而且这个解耦是可配置的：不想让某类会话跑记忆，把 memory 加进 agent.disabled_toolsets 即可（例如定时任务场景）。',
     followUps: [
       '为什么记忆同步不放在循环内？——循环内追加任何上下文都破缓存；会话边界是天然的持久化检查点。',
-      'cron 为什么 skip_memory？——定时任务是无头会话，记忆读写既无意义又增加延迟与不确定性。',
+      'cron 会话默认加载记忆吗？——加载。现行 cron 会话 skip_memory=False（MEMORY.md/USER.md 正常加载）；不想让它读写记忆，用 agent.disabled_toolsets: [memory]。',
       'FTS5 索引带来什么能力？——跨会话搜索自己的历史（session_search），是「自进化」的数据底座。',
     ],
     rubric: [
       '知道会话落盘 SessionDB（SQLite + FTS5）',
       '知道 on_session_end 钩子与记忆 sync_turn 的边界',
-      '理解主循环与后台学习系统的解耦，且解耦可配置（skip_memory）',
+      '理解主循环与后台学习系统的解耦，且解耦可配置（disabled_toolsets 拒用 memory）',
     ],
   },
 ];
 
 export const SELF_ASSESSMENT_TOPICS: SelfAssessmentTopic[] = [
-  { id: 'loop', topic: 'Agent 主循环', sourceRef: 'run_agent.py · AGENTS.md §AIAgent Class' },
+  {
+    id: 'loop',
+    topic: 'Agent 主循环',
+    sourceRef: 'run_agent.py + agent/conversation_loop.py · agent/AGENTS.md §Agent loop',
+  },
   {
     id: 'caching',
     topic: 'Prompt caching 铁律',
-    sourceRef: 'AGENTS.md §Prompt Caching Must Not Break',
+    sourceRef: 'agent/AGENTS.md §Message-flow invariants',
   },
   {
     id: 'tools',
     topic: '工具注册与 toolsets',
-    sourceRef: 'tools/registry.py + toolsets.py · §Adding New Tools',
+    sourceRef: 'tools/registry.py + toolsets.py · §Registry and discovery / §Toolsets',
   },
   {
     id: 'skills',
     topic: '技能与策展器',
-    sourceRef: 'skills/ + agent/curator.py · §Skills / §Curator',
+    sourceRef: 'skills/ + agent/curator.py · §Curator (skill lifecycle)',
   },
   {
     id: 'memory',
     topic: '记忆架构',
-    sourceRef: 'hermes_state.py + plugins/memory/ · §Memory-provider plugins',
+    sourceRef:
+      'hermes_state.py + plugins/memory/ · agent/AGENTS.md §Memory, context engines, curator',
   },
   { id: 'delegation', topic: '委派系统', sourceRef: 'tools/delegate_tool.py · §Delegation' },
   { id: 'gateway', topic: '消息网关', sourceRef: 'gateway/run.py + gateway/platforms/' },
   { id: 'cron', topic: 'Cron 定时调度', sourceRef: 'cron/jobs.py + cron/scheduler.py · §Cron' },
-  { id: 'tui', topic: 'TUI 架构', sourceRef: 'ui-tui/ + tui_gateway/ · §TUI Architecture' },
+  {
+    id: 'tui',
+    topic: 'TUI 架构',
+    sourceRef: 'ui-tui/ + tui_gateway/ · §Process model / §Key surfaces',
+  },
   {
     id: 'cli',
     topic: 'CLI 架构',
-    sourceRef: 'cli.py + hermes_cli/commands.py · §CLI Architecture',
+    sourceRef: 'cli.py + hermes_cli/commands.py · §CLI architecture',
   },
-  { id: 'profiles', topic: 'Profiles 多实例', sourceRef: 'hermes_constants.py · §Profiles' },
-  { id: 'plugins', topic: '插件系统', sourceRef: 'plugins/ + hermes_cli/plugins.py · §Plugins' },
+  {
+    id: 'profiles',
+    topic: 'Profiles 多实例',
+    sourceRef: 'hermes_constants.py · §Profiles (multi-instance)',
+  },
+  {
+    id: 'plugins',
+    topic: '插件系统',
+    sourceRef: 'plugins/ + hermes_cli/plugins.py · §Plugin kinds and their discovery systems',
+  },
 ];
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
@@ -301,7 +321,7 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'message.delta events) and never pollutes the loop itself. Real concurrency happens outside the loop: ' +
       "delegate_task batch tasks and the gateway's multi-platform ingress.",
     followUps: [
-      'How are concurrency needs handled then? — Concurrency lives at the delegate_task tasks-array level (capped by delegation.max_concurrent_children, default 3); the main loop stays serial.',
+      'How are concurrency needs handled then? — Concurrency lives at the delegate_task tasks-array level (capped by delegation.max_concurrent_children, default 10); the main loop stays serial.',
       'Where does human approval block? — It waits synchronously in a hook before tool execution; the loop itself is blocking, so no extra state machine is needed.',
       'How do background delegate results return to the session? — Via the async-delegation completion queue, injected in a later turn instead of interrupting the current loop.',
     ],
@@ -324,7 +344,7 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'stream only grows: tool results are appended as role="tool" messages, and even skill slash commands are ' +
       'injected as user messages instead of rewriting the system prompt. The sole exception is context ' +
       'compression: a deliberate, one-time invalidation that buys back context-window space. Every other change ' +
-      'defaults to deferred invalidation (takes effect next session); only --now invalidates immediately.',
+      'defaults to deferred invalidation (takes effect next session); only the /skills commands offer --now to invalidate immediately.',
     followUps: [
       'What if the user runs /skills install mid-session? — By default it writes config and takes effect next session; --now applies immediately and accepts the cache-invalidation cost.',
       "Doesn't compression also rewrite history? — Yes, it is the only allowed exception: a dead context window costs more than a one-time cache miss, and the new compressed prefix gets re-cached from the next turn on.",
@@ -339,50 +359,54 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
   {
     id: 'budget',
     question:
-      'How are max_iterations=90 and the iteration budget designed? Why not a simple for-loop counter?',
+      'How are max_iterations (unlimited by default) and the iteration budget designed? Why not a simple for-loop counter?',
     hint: 'Notice the loop condition has three parts, and why the grace call exists.',
     answer:
       'The loop condition is `(api_call_count < max_iterations and iteration_budget.remaining > 0) or _budget_grace_call`. ' +
-      'max_iterations defaults to 90 and is a global ceiling shared with subagents — subagents inherit the same ' +
-      'magnitude, and together with delegation.max_spawn_depth=2 it caps the total work of the whole delegation ' +
-      'tree. iteration_budget is a finer budget dimension; the loop also stops when the budget runs out first. ' +
+      "max_iterations is unlimited by default — the AIAgent constructor defaults it to sys.maxsize, the CLI parsing chain uses the same value via TURN_LIMIT_UNLIMITED, and 500 is only the TUI gateway session factory default — it is the main loop's global ceiling; subagents " +
+      'no longer share it — each subagent gets its own iteration budget delegation.max_iterations (default 250), ' +
+      'and a caller-supplied max_iterations is ignored in favor of the config value. Delegation tree depth is ' +
+      'locked by delegation.max_spawn_depth (default 1, flat). iteration_budget is a finer budget dimension; the ' +
+      'loop also stops when the budget runs out first. ' +
       'The one-turn grace call is the key detail: after the budget is exhausted the model still gets one final ' +
       'turn to wrap its findings into a final answer, instead of a hard cut that leaves a dangling session. The ' +
       'loop has three exits: the model returns plain text (normal completion), the cap is hit (forced wrap-up), ' +
       'or the user interrupts.',
     followUps: [
-      "Why do subagents share the same cap? — To prevent runaway recursion; delegation.max_iterations can override it, but by default they inherit the main agent's magnitude.",
+      "Why don't subagents inherit the main loop's cap? — To prevent runaway recursion: each subagent has its own budget delegation.max_iterations (default 250); a caller-supplied value is ignored and config wins.",
       'What does the user see when the budget runs out? — The wrap-up answer produced by the grace call, not a truncated tool result.',
       "Why can't there be no cap? — The agent could spin in a tool-call loop forever; the cap is cost control and fault isolation.",
     ],
     rubric: [
       'Can recite the three parts of the loop condition (iterations / budget / grace call)',
       "Understands the grace call's motivation: a graceful wrap-up instead of a hard cut",
-      'Knows the cap is shared with subagents and works with spawn depth to lock the total',
+      'Knows subagents have an independent iteration budget (delegation.max_iterations) and spawn depth locks the delegation tree',
     ],
   },
   {
     id: 'interrupt',
     question:
-      'When a user presses Esc in the CLI to interrupt the agent, how does the loop handle it? Why not exceptions?',
+      'When a user presses Esc in the TUI to interrupt the agent, how does the loop handle it? Why not exceptions?',
     hint: 'Where in the loop is the interrupt flag checked? What happens mid-tool-execution?',
     answer:
       'At the top of every iteration the loop checks `self._interrupt_requested` and breaks if set — it is the ' +
       'first line of the loop pseudocode in AGENTS.md. Interrupt is designed as part of the loop condition: Esc ' +
-      'only sets a flag, and the agent exits at the next iteration boundary, a "safe point", instead of being ' +
+      '(in the TUI, via the session.interrupt RPC) only sets a flag, and the agent exits at the next iteration ' +
+      'boundary, a "safe point", instead of being ' +
       'torn apart mid-tool by an exception. This guarantees the message stream stays consistent (no half-finished ' +
       'tool_call left hanging) and the session can wrap up gracefully and persist normally. The same mechanism ' +
-      'serves system-level interrupts: cron sessions get a 3-minute hard interrupt, so a runaway agent loop ' +
+      'serves system-level interrupts: cron sessions get an inactivity watchdog (default 600s without progress ' +
+      'triggers a hard interrupt, tunable via HERMES_CRON_TIMEOUT), so a runaway agent loop ' +
       'cannot drag down the scheduler.',
     followUps: [
       'Why not hard-interrupt mid-tool? — It would leave unpaired messages (a tool_call with no tool result), breaking message-stream consistency and the cache prefix.',
       'Can the session continue after an interrupt? — The message stream is persisted intact (SessionDB), so it can be resumed.',
-      'An example of a system-level interrupt? — The cron 3-minute hard interrupt: same flag mechanism, but triggered by a watchdog instead of the user.',
+      'An example of a system-level interrupt? — The cron inactivity watchdog (default 600s, idle time rather than wall-clock): same flag mechanism, but triggered by a watchdog instead of the user.',
     ],
     rubric: [
       'Flag bit + iteration-boundary checkpoint, not exception-based interruption',
       'Can contrast the state-consistency problem of the exception approach (half-finished tool_call)',
-      'Can cite the cron 3-minute hard interrupt as a system-level example',
+      'Can cite the cron inactivity watchdog (default 600s) as a system-level example',
     ],
   },
   {
@@ -391,10 +415,10 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'Why must all tool handlers return JSON strings instead of Python objects or natural-language paragraphs?',
     hint: "Think about what the registry must do without knowing each tool's internal types.",
     answer:
-      'AGENTS.md states "All handlers MUST return a JSON string". The registry uniformly handles schema ' +
+      'tools/AGENTS.md states "All handlers return a JSON string". The registry uniformly handles schema ' +
       "collection, dispatch, availability checks, and error wrapping — it should not be aware of each tool's " +
       'internal types; a uniform string boundary lets it generically truncate/summarize to protect the context ' +
-      'window. Results are wrapped by tool_result_message into an OpenAI role="tool" message and appended. ' +
+      'window. Results are wrapped by make_tool_result_message into an OpenAI role="tool" message and appended. ' +
       'Structured JSON (success/data/error fields) lets the model reliably parse success vs failure: errors are ' +
       'also wrapped as normal result messages instead of being raised, so the agent sees the failure and ' +
       'self-corrects, and the loop never crashes because one tool threw.',
@@ -419,8 +443,9 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'level registers its schema on import — no manual import list. But exposing a tool to the agent is a ' +
       'separate, deliberate step — the tool name must appear in the TOOLSETS dict in toolsets.py. Benefits of ' +
       'the split: a controllable schema footprint, e.g. a kanban worker has zero tool footprint outside kanban ' +
-      'tasks; per-platform tailoring, where Telegram uses the messaging toolset and every platform inherits ' +
-      '_HERMES_CORE_TOOLS by default; and check_fn / requires_env automatically hiding tools when the ' +
+      'tasks; per-platform tailoring, where each messaging platform gets a hermes-<platform> bundle (e.g. ' +
+      'hermes-telegram for Telegram) built directly on _HERMES_CORE_TOOLS; and check_fn / requires_env ' +
+      'automatically hiding tools when the ' +
       'environment doesn\'t qualify. Calling out "registration ≠ exposure" in an interview shows you have thought ' +
       "about tool visibility as a cost — every schema consumes context and dilutes the model's attention.",
     followUps: [
@@ -445,7 +470,7 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'compressing means the session simply dies — a one-time cache miss costs far less than losing the session. ' +
       'The new prefix formed by compression gets re-cached from the next turn on, and costs fall back. The key ' +
       'word is "sole": every other change (installing skills, changing toolsets, reloading memory) goes through ' +
-      'deferred invalidation, taking effect next session by default and immediately only with --now. Converging ' +
+      'deferred invalidation, taking effect next session by default; only the /skills commands offer --now for immediate effect. Converging ' +
       'on exactly one exception is what makes the rule enforceable.',
     followUps: [
       'Who decides when to compress? — Context-window pressure drives it; it is the only permitted context-mutation point in the loop.',
@@ -464,8 +489,9 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'Why are skill slash commands injected as user messages instead of updating the system prompt?',
     hint: 'Which position in the cache prefix is the most "untouchable"?',
     answer:
-      'After scanning ~/.hermes/skills/, agent/skill_commands.py injects skill content as a user message — ' +
-      'AGENTS.md\'s own words: "injects as user message (not system prompt) to preserve prompt caching". The ' +
+      'After scanning the skills dir (default ~/.hermes/skills/), agent/skill_commands.py injects skill content ' +
+      'as a user message — agent/AGENTS.md\'s message-flow invariants state that "skill slash commands ' +
+      '(agent/skill_commands.py) inject as a user message", because prompt caching must not break. The ' +
       'system prompt sits at the very head of the cache prefix; touching it invalidates the entire prefix, while ' +
       'a user message is appended at the tail and leaves the prefix untouched. The cost is that skill ' +
       'instructions carry less authority than the system prompt — trading message role for cache hit rate is a ' +
@@ -474,7 +500,7 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
     followUps: [
       'Side effects of injecting as a user message? — Weaker authority than the system prompt; the model may not comply. That trade-off is deliberate.',
       'Why is the head of the prefix most sensitive? — Prefix caching matches by prefix; once the head changes, everything after it is invalidated.',
-      'Where else does the same trade-off appear? — /tools and memory-related commands all default to deferred invalidation; only --now takes effect immediately.',
+      'Where else does the same trade-off appear? — /tools and memory-related commands also default to deferred invalidation, taking effect next session.',
     ],
     rubric: [
       'Knows the position sensitivity of prefix caching: touching the head = invalidating everything',
@@ -493,7 +519,7 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'words, "multiple tool_calls in one turn" is parallelism expressed by the model; the execution layer ' +
       'processes them in array order and there is no concurrent execution framework inside the main loop. Real ' +
       'parallelism happens in delegate_task batch tasks: each element of tasks: [...] spawns an independent ' +
-      'subagent running concurrently, capped by delegation.max_concurrent_children (default 3). The division of ' +
+      'subagent running concurrently, capped by delegation.max_concurrent_children (default 10). The division of ' +
       'labor is clean: serial determinism inside the loop, concurrency pushed to the delegation layer with ' +
       'isolation boundaries.',
     followUps: [
@@ -518,42 +544,47 @@ export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
       'fires, and memory providers run sync_turn there, syncing this turn to backends like honcho / mem0; only ' +
       'then do background systems like the curator take the stage (tracking skill usage, auto-archiving). This ' +
       'means the main loop is only responsible for "this turn\'s intelligence"; persistence and the learning ' +
-      'loop are decoupled past the session boundary. And the decoupling is configurable: cron sessions default ' +
-      'to skip_memory=True, deliberately skipping memory providers in scheduled jobs.',
+      'loop are decoupled past the session boundary. And the decoupling is configurable: add memory to ' +
+      'agent.disabled_toolsets for session types that should not run memory (e.g. scheduled jobs).',
     followUps: [
       "Why isn't memory sync inside the loop? — Anything appended to context inside the loop breaks the cache; the session boundary is the natural persistence checkpoint.",
-      'Why does cron skip memory? — Scheduled jobs are headless sessions; memory reads/writes are meaningless there and only add latency and uncertainty.',
+      'Do cron sessions load memory by default? — Yes. Cron sessions now run with skip_memory=False (MEMORY.md/USER.md load normally); to keep them memory-free, set agent.disabled_toolsets: [memory].',
       'What capability does the FTS5 index bring? — Searching your own history across sessions (session_search) — the data foundation of "self-evolution".',
     ],
     rubric: [
       'Knows sessions persist to SessionDB (SQLite + FTS5)',
       'Knows the boundary between the on_session_end hook and memory sync_turn',
-      'Understands the decoupling of the main loop from background learning systems, and that it is configurable (skip_memory)',
+      'Understands the decoupling of the main loop from background learning systems, and that it is configurable (disabled_toolsets opting out of memory)',
     ],
   },
 ];
 
 export const SELF_ASSESSMENT_TOPICS_EN: SelfAssessmentTopic[] = [
-  { id: 'loop', topic: 'Agent main loop', sourceRef: 'run_agent.py · AGENTS.md §AIAgent Class' },
+  {
+    id: 'loop',
+    topic: 'Agent main loop',
+    sourceRef: 'run_agent.py + agent/conversation_loop.py · agent/AGENTS.md §Agent loop',
+  },
   {
     id: 'caching',
     topic: 'Prompt-caching iron rule',
-    sourceRef: 'AGENTS.md §Prompt Caching Must Not Break',
+    sourceRef: 'agent/AGENTS.md §Message-flow invariants',
   },
   {
     id: 'tools',
     topic: 'Tool registration & toolsets',
-    sourceRef: 'tools/registry.py + toolsets.py · §Adding New Tools',
+    sourceRef: 'tools/registry.py + toolsets.py · §Registry and discovery / §Toolsets',
   },
   {
     id: 'skills',
     topic: 'Skills & curator',
-    sourceRef: 'skills/ + agent/curator.py · §Skills / §Curator',
+    sourceRef: 'skills/ + agent/curator.py · §Curator (skill lifecycle)',
   },
   {
     id: 'memory',
     topic: 'Memory architecture',
-    sourceRef: 'hermes_state.py + plugins/memory/ · §Memory-provider plugins',
+    sourceRef:
+      'hermes_state.py + plugins/memory/ · agent/AGENTS.md §Memory, context engines, curator',
   },
   {
     id: 'delegation',
@@ -562,21 +593,25 @@ export const SELF_ASSESSMENT_TOPICS_EN: SelfAssessmentTopic[] = [
   },
   { id: 'gateway', topic: 'Message gateway', sourceRef: 'gateway/run.py + gateway/platforms/' },
   { id: 'cron', topic: 'Cron scheduling', sourceRef: 'cron/jobs.py + cron/scheduler.py · §Cron' },
-  { id: 'tui', topic: 'TUI architecture', sourceRef: 'ui-tui/ + tui_gateway/ · §TUI Architecture' },
+  {
+    id: 'tui',
+    topic: 'TUI architecture',
+    sourceRef: 'ui-tui/ + tui_gateway/ · §Process model / §Key surfaces',
+  },
   {
     id: 'cli',
     topic: 'CLI architecture',
-    sourceRef: 'cli.py + hermes_cli/commands.py · §CLI Architecture',
+    sourceRef: 'cli.py + hermes_cli/commands.py · §CLI architecture',
   },
   {
     id: 'profiles',
     topic: 'Profiles (multi-instance)',
-    sourceRef: 'hermes_constants.py · §Profiles',
+    sourceRef: 'hermes_constants.py · §Profiles (multi-instance)',
   },
   {
     id: 'plugins',
     topic: 'Plugin system',
-    sourceRef: 'plugins/ + hermes_cli/plugins.py · §Plugins',
+    sourceRef: 'plugins/ + hermes_cli/plugins.py · §Plugin kinds and their discovery systems',
   },
 ];
 

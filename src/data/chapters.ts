@@ -65,7 +65,7 @@ export const CHAPTERS: Chapter[] = [
     module: 'M0',
     kicker: '上手',
     description: '安装 Hermes、完成第一次对话，认识六个最常用命令。',
-    sourceFiles: ['setup-hermes.sh', 'cli.py'],
+    sourceFiles: ['scripts/install.sh', 'cli.py'],
   },
   // ── M1 · 深入原理 ────────────────────────────────────────────────
   {
@@ -76,7 +76,7 @@ export const CHAPTERS: Chapter[] = [
     module: 'M1',
     kicker: '主循环',
     description: 'Agent 循环步进器：INPUT→CONTEXT→MODEL→TOOL→RESULT→LOOP，逐步对照源码。',
-    sourceFiles: ['run_agent.py'],
+    sourceFiles: ['run_agent.py', 'agent/conversation_loop.py'],
   },
   {
     id: 'skills-1',
@@ -126,7 +126,7 @@ export const CHAPTERS: Chapter[] = [
     module: 'M1',
     kicker: '委派',
     description: '委派时序图：spawn→task→tool_calls→result→parent 聚合。',
-    sourceFiles: ['agent/', 'tools/'],
+    sourceFiles: ['tools/delegate_tool.py', 'tools/'],
   },
   {
     id: 'gateway-1',
@@ -136,7 +136,7 @@ export const CHAPTERS: Chapter[] = [
     module: 'M1',
     kicker: '网关拓扑',
     description: '网关拓扑图：Telegram/Discord/Slack/WhatsApp/Signal → gateway → agent。',
-    sourceFiles: ['gateway/run.py', 'gateway/platforms/'],
+    sourceFiles: ['gateway/run.py', 'gateway/platforms/', 'plugins/platforms/'],
   },
   {
     id: 'gateway-2',
@@ -146,7 +146,7 @@ export const CHAPTERS: Chapter[] = [
     module: 'M1',
     kicker: '消息流转',
     description: '消息流转 + 语音转录 + 跨平台连续性。',
-    sourceFiles: ['gateway/session.py', 'gateway/platforms/'],
+    sourceFiles: ['gateway/session.py', 'gateway/platforms/', 'plugins/platforms/'],
   },
   {
     id: 'cron',
@@ -196,7 +196,7 @@ export const CHAPTERS: Chapter[] = [
     module: 'M1',
     kicker: '执行环境',
     description:
-      '6 种后端对比：local/Docker/SSH/Singularity/Modal/Daytona + serverless 休眠/唤醒。',
+      '6 种内置后端对比：local/Docker/SSH/Modal/Daytona/Vercel Sandbox + Singularity 插件 + serverless 休眠/唤醒。',
     sourceFiles: ['tools/environments/'],
   },
   {
@@ -237,7 +237,7 @@ export const CHAPTERS: Chapter[] = [
     meta: '18 min · 实操',
     module: 'M2',
     kicker: '构建',
-    description: 'Provider 适配实验：auth→models→streamSimple→统一事件流。',
+    description: 'Provider 适配实验：auth→models→chat.completions 形状→统一事件流。',
     sourceFiles: ['providers/', 'plugins/model-providers/'],
   },
   {
@@ -320,7 +320,12 @@ export const CHAPTERS: Chapter[] = [
     module: 'M4',
     kicker: '互操作',
     description: '协议对比面板：Pi RPC ↔ MCP ↔ A2A / 参与方 / 传递内容 / 何时用。',
-    sourceFiles: ['mcp_serve.py', 'acp_adapter/', 'acp_registry/'],
+    sourceFiles: [
+      'plugin-catalog/mcp-serve.yaml',
+      'tools/mcp_tool.py',
+      'acp_adapter/',
+      'plugins/platforms/a2a/',
+    ],
   },
   // ── M5 · Agent 核心补全 ──────────────────────────────────────────
   {
@@ -509,7 +514,7 @@ export const CHAPTERS_EN: Record<string, ChapterText> = {
     title: 'Terminal Backends',
     kicker: 'Execution environments',
     description:
-      'Six backends compared: local/Docker/SSH/Singularity/Modal/Daytona + serverless sleep/wake.',
+      'Six built-in backends compared: local/Docker/SSH/Modal/Daytona/Vercel Sandbox + the Singularity plugin + serverless sleep/wake.',
     meta: '12 min',
   },
   profiles: {
@@ -533,7 +538,7 @@ export const CHAPTERS_EN: Record<string, ChapterText> = {
   'build-provider': {
     title: 'Add a Provider',
     kicker: 'Build',
-    description: 'Provider adapter lab: auth→models→streamSimple→unified event stream.',
+    description: 'Provider adapter lab: auth→models→chat.completions shape→unified event stream.',
     meta: '18 min · Hands-on',
   },
   'build-plugin': {

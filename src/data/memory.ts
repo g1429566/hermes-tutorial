@@ -43,7 +43,10 @@ export const MEMORY_LAYERS: MemoryLayer[] = [
     reads:
       '每一次模型调用：整个 messages 数组随请求发出，后续轮次复用缓存前缀（per-conversation prompt caching）。',
     impl: [
-      { path: 'run_agent.py', note: 'AIAgent.run_conversation() 的主循环与消息流' },
+      {
+        path: 'run_agent.py（AIAgent）+ agent/conversation_loop.py（run_conversation）',
+        note: '主循环与消息流',
+      },
       { path: 'AGENTS.md §Core Invariants', note: '「Per-conversation prompt caching is sacred」' },
     ],
     cautions: [
@@ -62,14 +65,15 @@ export const MEMORY_LAYERS: MemoryLayer[] = [
       'FTS5 索引同步维护——这是「上周我让你改的那个 bug」能被找回来的基础。',
     stores: [
       'sessions 表：来源、模型、起止时间、token 统计、标题等元数据',
-      '全部消息原文 + FTS5 全文索引（messages_fts；另有 trigram 表支持 CJK 子串搜索）',
+      '全部消息原文 + FTS5 全文索引（messages_fts；另有 trigram 表，可用时由 CJK-bigram 索引替代以支持 CJK 子串搜索）',
       '首轮交换后由辅助 LLM 异步生成的会话标题（agent/title_generator.py，不阻塞回复）',
     ],
     writes:
       '会话进行中持续写入；标题在第一轮应答交付后由后台线程生成并 _persist_session_title() 落库。',
     reads:
-      'agent 通过 session_search 工具召回：discovery（FTS5 检索 + 去重 + 上下文窗口）、' +
-      'scroll（锚点前后翻页）、browse（按时间浏览）三种模式——全程零 LLM 调用，返回的都是库里的真实消息。',
+      'agent 通过 session_search 工具召回，按参数推断四种形态：discovery（query：FTS5 检索 + ' +
+      '按谱系去重 + 上下文窗口）、read（session_id：整段会话或头/尾窗口）、scroll（锚点前后 ±window 翻页）、' +
+      'browse（无参数：按时间浏览）——全程零 LLM 调用，返回的都是库里的真实消息。',
     impl: [
       { path: 'hermes_state.py', note: 'SessionDB —— SQLite session store（FTS5 search）' },
       { path: 'tools/session_search_tool.py', note: '跨会话召回工具，挂在 session_search toolset' },
@@ -87,9 +91,10 @@ export const MEMORY_LAYERS: MemoryLayer[] = [
     latin: 'Semantic',
     tagline: 'MemoryProvider 插件（Honcho dialectic modeling 等）',
     lifecycle:
-      '跨会话、由外部后端持有。内置 provider 有 honcho、mem0、supermemory、byterover、hindsight、' +
-      'holographic、openviking、retaindb 八个；config.yaml 的 memory.provider 指定当前激活者，' +
-      'MemoryManager 统一编排。',
+      '跨会话、由外部后端持有。in-tree 的 plugins/memory/ 现在只内置 byterover、' +
+      'retaindb 两个 provider；mem0、holographic、openviking 与更早迁出的 honcho、supermemory、' +
+      'hindsight 都已进入插件目录（plugin-catalog/*.yaml，老配置自动迁移安装，2026 年 9–10 月）。' +
+      'config.yaml 的 memory.provider 指定当前激活者，MemoryManager 统一编排。',
     stores: [
       '用户画像与长期事实：偏好、身份、项目背景（Honcho：dialectic Q&A、peer cards、conclusions）',
       '由 provider 后端自行索引的语义内容（向量 / 图 / 关系库，实现各异）',
@@ -103,10 +108,17 @@ export const MEMORY_LAYERS: MemoryLayer[] = [
     impl: [
       {
         path: 'agent/memory_provider.py',
-        note: 'MemoryProvider ABC：prefetch / sync_turn / shutdown / post_setup',
+        note: 'MemoryProvider ABC：prefetch / sync_turn / shutdown（post_setup 是可选钩子，由 hermes memory setup 调用）',
       },
       { path: 'agent/memory_manager.py', note: 'MemoryManager 编排全部 provider 实例' },
-      { path: 'plugins/memory/honcho/', note: 'Honcho：跨会话用户建模 + dialectic Q&A' },
+      {
+        path: 'plugins/memory/',
+        note: 'in-tree provider 目录：byterover / retaindb（其余 provider 见插件目录）',
+      },
+      {
+        path: 'plugin-catalog/honcho.yaml',
+        note: 'Honcho（plastic-labs）：已迁出 in-tree，经插件目录安装；跨会话用户建模 + dialectic Q&A',
+      },
     ],
     cautions: [
       'in-tree memory provider 集合已关闭（2026 年 5 月政策）：新后端必须发独立插件仓库，实现同一个 ABC',
@@ -121,7 +133,8 @@ export const MEMORY_LAYERS: MemoryLayer[] = [
     tagline: '技能系统：会做事的知识',
     lifecycle:
       '文件级持久，由策展器后台维护。agent 用 skill_manage 把「这次摸索出来的做法」写成技能；' +
-      '30 天不用标 stale、90 天归档（可恢复）；pinned 技能永远豁免。',
+      '默认 14 天不用标 stale、30 天归档（可恢复；阈值由 curator.stale_after_days / ' +
+      'curator.archive_after_days 调整）；pinned 技能永远豁免。',
     stores: [
       'SKILL.md：frontmatter（元数据）+ 正文（操作步骤、陷阱、验收方法）',
       'scripts/ 辅助脚本、references/ 参考资料、templates/ 模板',
@@ -135,8 +148,12 @@ export const MEMORY_LAYERS: MemoryLayer[] = [
       '或 agent 主动调 skills_list / skill_view 查看技能内容。',
     impl: [
       { path: 'skills/ + ~/.hermes/skills/', note: '内置技能目录与用户级技能目录' },
-      { path: 'tools/skills_tool.py', note: 'skills_list / skill_view / skill_manage 三工具' },
-      { path: 'agent/curator.py', note: '策展器：stale / archive 自动流转 + LLM 评审' },
+      { path: 'tools/skills_tool.py', note: 'skills_list / skill_view 两工具' },
+      { path: 'tools/skill_manager_tool.py', note: 'skill_manage：创建 / 修补 / pin / 归档' },
+      {
+        path: 'agent/curator.py',
+        note: '策展器：stale / archive 自动流转（LLM 合并评审默认关闭）',
+      },
     ],
     cautions: [
       '程序性记忆 = 第 05/06 章的主题，这里只记一句：技能就是 Hermes 的「肌肉记忆」',
@@ -181,7 +198,10 @@ export const MEMORY_LAYERS_EN: MemoryLayer[] = [
       'Every model call: the entire messages array is sent with the request, and later turns ' +
       'reuse the cached prefix (per-conversation prompt caching).',
     impl: [
-      { path: 'run_agent.py', note: 'AIAgent.run_conversation() main loop and message flow' },
+      {
+        path: 'run_agent.py（AIAgent）+ agent/conversation_loop.py（run_conversation）',
+        note: 'main loop and message flow',
+      },
       { path: 'AGENTS.md §Core Invariants', note: '"Per-conversation prompt caching is sacred"' },
     ],
     cautions: [
@@ -203,16 +223,17 @@ export const MEMORY_LAYERS_EN: MemoryLayer[] = [
       'this is what makes "the bug I asked you to fix last week" retrievable.',
     stores: [
       'sessions table: source, model, start/end time, token stats, title and other metadata',
-      'full message bodies + FTS5 full-text index (messages_fts; a trigram table supports CJK substring search)',
+      'full message bodies + FTS5 full-text index (messages_fts; a trigram table, replaced when available by a CJK-bigram index that supports CJK substring search)',
       'session titles generated asynchronously by a helper LLM after the first exchange (agent/title_generator.py, does not block the reply)',
     ],
     writes:
       'Written continuously while the session runs; the title is generated by a background thread ' +
       'after the first reply is delivered and persisted via _persist_session_title().',
     reads:
-      'The agent recalls via the session_search tool: discovery (FTS5 retrieval + dedup + context ' +
-      'window), scroll (paging around an anchor), and browse (by time) — zero LLM calls end to end; ' +
-      'everything returned is a real message from the store.',
+      'The agent recalls via the session_search tool, which infers one of four shapes from the ' +
+      'args: discovery (query; FTS5 retrieval + lineage dedup + context window), read (session_id; ' +
+      'whole session or head/tail), scroll (paging ±window around an anchor), browse (no args; by ' +
+      'time) — zero LLM calls end to end; everything returned is a real message from the store.',
     impl: [
       { path: 'hermes_state.py', note: 'SessionDB — SQLite session store (FTS5 search)' },
       {
@@ -238,8 +259,10 @@ export const MEMORY_LAYERS_EN: MemoryLayer[] = [
     latin: 'Semantic',
     tagline: 'MemoryProvider plugins (Honcho dialectic modeling, etc.)',
     lifecycle:
-      'Cross-session, held by an external backend. Built-in providers: honcho, mem0, supermemory, ' +
-      'byterover, hindsight, holographic, openviking, retaindb — eight in total. memory.provider ' +
+      'Cross-session, held by an external backend. In-tree plugins/memory/ now ships only two ' +
+      'built-in providers: byterover and retaindb. mem0, holographic, and openviking joined the ' +
+      'earlier departures honcho, supermemory, and hindsight in the plugin catalog ' +
+      '(plugin-catalog/*.yaml, auto-installed for existing homes, Sep-Oct 2026). memory.provider ' +
       'in config.yaml selects the active one; MemoryManager orchestrates them all.',
     stores: [
       'User profile and long-term facts: preferences, identity, project background (Honcho: dialectic Q&A, peer cards, conclusions)',
@@ -256,15 +279,19 @@ export const MEMORY_LAYERS_EN: MemoryLayer[] = [
     impl: [
       {
         path: 'agent/memory_provider.py',
-        note: 'MemoryProvider ABC: prefetch / sync_turn / shutdown / post_setup',
+        note: 'MemoryProvider ABC: prefetch / sync_turn / shutdown (post_setup is an optional hook invoked by hermes memory setup)',
       },
       {
         path: 'agent/memory_manager.py',
         note: 'MemoryManager orchestrates all provider instances',
       },
       {
-        path: 'plugins/memory/honcho/',
-        note: 'Honcho: cross-session user modeling + dialectic Q&A',
+        path: 'plugins/memory/',
+        note: 'in-tree provider directory: byterover / retaindb (the rest live in the plugin catalog)',
+      },
+      {
+        path: 'plugin-catalog/honcho.yaml',
+        note: 'Honcho (plastic-labs): moved out of the in-tree set, installed via the plugin catalog; cross-session user modeling + dialectic Q&A',
       },
     ],
     cautions: [
@@ -283,8 +310,9 @@ export const MEMORY_LAYERS_EN: MemoryLayer[] = [
     tagline: 'The skill system: knowledge of how to do things',
     lifecycle:
       'File-level persistence, maintained in the background by the curator. The agent uses ' +
-      'skill_manage to write "the approach figured out this time" into a skill; 30 days unused ' +
-      'marks it stale, 90 days archives it (recoverable); pinned skills are always exempt.',
+      'skill_manage to write "the approach figured out this time" into a skill; by default 14 days ' +
+      'unused marks it stale, 30 days archives it (recoverable; thresholds tunable via ' +
+      'curator.stale_after_days / curator.archive_after_days); pinned skills are always exempt.',
     stores: [
       'SKILL.md: frontmatter (metadata) + body (steps, pitfalls, acceptance criteria)',
       'scripts/ helper scripts, references/ reference material, templates/ templates',
@@ -304,11 +332,15 @@ export const MEMORY_LAYERS_EN: MemoryLayer[] = [
       },
       {
         path: 'tools/skills_tool.py',
-        note: 'the three tools: skills_list / skill_view / skill_manage',
+        note: 'the two read tools: skills_list / skill_view',
+      },
+      {
+        path: 'tools/skill_manager_tool.py',
+        note: 'skill_manage: create / patch / pin / archive',
       },
       {
         path: 'agent/curator.py',
-        note: 'the curator: automatic stale / archive transitions + LLM review',
+        note: 'the curator: automatic stale / archive transitions (LLM consolidation review off by default)',
       },
     ],
     cautions: [

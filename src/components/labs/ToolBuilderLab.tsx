@@ -74,9 +74,9 @@ export default function ToolBuilderLab() {
   // 沙箱代码：最小 registry stub + 生成的工具文件 + 一次 handler 分发（Pyodide 真跑）
   const safeParam = /^\w+$/.test(form.paramName.trim()) ? form.paramName.trim() : 'param';
   const sandboxCode = [
-    'import sys, types, json',
+    'import sys, types, json, os',
     '',
-    '# ① 沙箱 stub：顶替真实的 tools/registry.py',
+    '# ① 沙箱 stub：顶替真实的 tools/registry.py 和 agent/secret_scope',
     '_calls = []',
     'class _Registry:',
     '    def register(self, **kw):',
@@ -85,6 +85,12 @@ export default function ToolBuilderLab() {
     '_mod.registry = _Registry()',
     'sys.modules["tools"] = types.ModuleType("tools")',
     'sys.modules["tools.registry"] = _mod',
+    '_secret = types.ModuleType("agent.secret_scope")',
+    '_secret.get_secret = lambda name, default=None: os.getenv(name, default)',
+    '_agent = types.ModuleType("agent")',
+    '_agent.secret_scope = _secret',
+    'sys.modules["agent"] = _agent',
+    'sys.modules["agent.secret_scope"] = _secret',
     '',
     '# ② 你的工具文件（与右侧预览一致）',
     buildToolCode(form),

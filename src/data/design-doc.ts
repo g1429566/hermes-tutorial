@@ -1,7 +1,7 @@
 // Chapter 25「系统设计面试」数据源：Design Doc 六节模板。
 // 「Hermes 对应实例」全部对齐 AGENTS.md 的真实设计：
 // §AIAgent Class（构造参数即需求参数化）、§Prompt Caching、§Adding New Tools（注册≠暴露）、
-// §Cron（3 分钟硬中断）、§Kanban（failure_limit 自动 block）、§Delegation（进程级隔离）、
+// §Cron（600s 不活动看门狗）、§Kanban（failure_limit 自动 block）、§Delegation（进程级隔离）、
 // §Curator（遥测驱动技能生命周期）。
 
 export interface DesignDocSection {
@@ -30,7 +30,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
     ],
     hermesExample:
       'Hermes 用 platform 构造参数（"cli" / "telegram" / …）区分接入形态，每个平台选自己的基础 toolset；' +
-      'max_iterations=90、iteration_budget、quiet_mode、save_trajectories 等约 60 个构造参数，' +
+      'max_iterations（默认不限）、iteration_budget、quiet_mode、save_trajectories 等约 85 个构造参数，' +
       '本质就是把「需求」参数化——同一个 agent 内核，按场景装配出不同形态。',
     placeholder:
       '例：面向开发者的 CLI agent，单会话交互；预算敏感（要 prompt caching）；暂不考虑多租户 SaaS……',
@@ -44,7 +44,8 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '会话结束后发生什么：持久化、记忆同步、后台系统',
     ],
     hermesExample:
-      'Hermes 的心脏是 run_conversation() 里一个同步 while 循环（AGENTS.md 原话：entirely synchronous），' +
+      'Hermes 的心脏是 run_conversation() 里一个同步 while 循环（实现在 agent/conversation_loop.py；' +
+      'agent/AGENTS.md 原话：entirely synchronous），' +
       '流式与动画全在显示层；循环之外才有 gateway 多平台接入、SessionDB 落盘（SQLite + FTS5）、' +
       'on_session_end 钩子触发的记忆同步，以及 curator / cron 这类后台系统。',
     placeholder: '画出你的架构分层：主循环 / 显示层 / 持久化 / 后台系统，标出同步与异步边界……',
@@ -59,9 +60,10 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
     ],
     hermesExample:
       'Hermes 的 tools/registry.py 自动发现（import 即注册），但必须登记进 toolsets.py 的 TOOLSETS 才会暴露给 agent' +
-      '——registration ≠ exposure，schema footprint 是刻意控制的成本。provider 以插件形式统一成 ' +
-      'chat.completions 一种形状；记忆后端实现 MemoryProvider ABC（sync_turn / prefetch / shutdown）；' +
-      '通用插件只能挂生命周期钩子（pre_tool_call 等），不许改核心文件。',
+      '——registration ≠ exposure，schema footprint 是刻意控制的成本。provider 以插件形式接入' +
+      '（plugins/model-providers/）、统一成 chat.completions 风格的一种请求形状' +
+      '（api_mode 另有 codex_responses / anthropic_messages 等变体）；记忆后端实现 MemoryProvider ABC' +
+      '（sync_turn / prefetch / shutdown）；通用插件只能挂生命周期钩子（pre_tool_call 等），不许改核心文件。',
     placeholder: '列出你的核心组件：工具注册表、provider 适配层、记忆接口……各自的替换成本是什么？',
   },
   {
@@ -88,9 +90,10 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '隔离级别：子任务故障能不能拖垮主流程',
     ],
     hermesExample:
-      'Hermes 的防线层层可数：max_iterations=90 与子 agent 共享防失控；预算耗尽仍有 one-turn grace call 体面收尾；' +
-      'cron 会话 3 分钟硬中断，失控任务拖不死调度器；kanban 同一任务连续失败（默认 2 次）自动 block 防空转；' +
-      '委派是进程级隔离——子 agent 有独立上下文与 terminal session，配 child_timeout_seconds；' +
+      'Hermes 的防线层层可数：max_iterations 上限与子 agent 共享（默认不限，防失控靠 iteration_budget）；' +
+      '预算耗尽仍有 one-turn grace call 体面收尾；cron 会话有 600 秒不活动看门狗（空闲计时，非墙钟），' +
+      '失控任务拖不死调度器；kanban 同一任务连续失败（默认 2 次）自动 block 防空转；' +
+      '委派是进程级隔离——子 agent 有独立上下文与 terminal session，卡死检测靠心跳监视器（child_timeout_seconds 可选兜底）；' +
       'fallback_model 与 credential_pool 处理 provider 单点故障。',
     placeholder:
       '逐条列出你的防线：迭代上限 / 超时 / 重试熔断 / 隔离 / 降级，每条给出具体数值或机制……',
@@ -133,9 +136,10 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
     ],
     hermesExample:
       'Hermes uses the platform constructor parameter ("cli" / "telegram" / …) to distinguish integration ' +
-      'forms, and each platform picks its own base toolset; some 60 constructor parameters — ' +
-      'max_iterations=90, iteration_budget, quiet_mode, save_trajectories — are essentially requirements ' +
-      'turned into parameters: one agent kernel, assembled into different forms per scenario.',
+      'forms, and each platform picks its own base toolset; some 85 constructor parameters — ' +
+      'max_iterations (unlimited by default), iteration_budget, quiet_mode, save_trajectories — are ' +
+      'essentially requirements turned into parameters: one agent kernel, assembled into different ' +
+      'forms per scenario.',
     placeholder:
       'e.g. a CLI agent for developers, single-session interaction; budget-sensitive (needs prompt caching); no multi-tenant SaaS for now……',
   },
@@ -148,8 +152,9 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'What happens after the session ends: persistence, memory sync, background systems',
     ],
     hermesExample:
-      "Hermes' heart is a synchronous while loop in run_conversation() (AGENTS.md's own words: entirely " +
-      'synchronous), with streaming and animation all in the display layer; outside the loop sit the ' +
+      "Hermes' heart is a synchronous while loop in run_conversation() (implemented in " +
+      "agent/conversation_loop.py; agent/AGENTS.md's own words: entirely synchronous), " +
+      'with streaming and animation all in the display layer; outside the loop sit the ' +
       "gateway's multi-platform ingress, SessionDB persistence (SQLite + FTS5), memory sync triggered by " +
       'the on_session_end hook, and background systems like curator / cron.',
     placeholder:
@@ -166,9 +171,11 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
     hermesExample:
       "Hermes' tools/registry.py auto-discovers (import registers), but a tool is only exposed to the agent " +
       "once listed in toolsets.py's TOOLSETS — registration ≠ exposure, and schema footprint is a " +
-      'deliberately controlled cost. Providers are unified as plugins into a single chat.completions shape; ' +
-      'memory backends implement the MemoryProvider ABC (sync_turn / prefetch / shutdown); generic plugins ' +
-      'may only attach lifecycle hooks (pre_tool_call etc.) and may not modify core files.',
+      'deliberately controlled cost. Providers plug in as plugins (plugins/model-providers/) behind a ' +
+      'single chat.completions-style request shape (api_mode adds variants like codex_responses / ' +
+      'anthropic_messages); memory backends implement the MemoryProvider ABC (sync_turn / prefetch / ' +
+      'shutdown); generic plugins may only attach lifecycle hooks (pre_tool_call etc.) and may not ' +
+      'modify core files.',
     placeholder:
       'List your core components: tool registry, provider adapter layer, memory interface… What is the replacement cost of each?',
   },
@@ -198,12 +205,14 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'Isolation levels: can a subtask failure drag down the main flow',
     ],
     hermesExample:
-      "Hermes' lines of defense are enumerable: max_iterations=90 shared with subagents against runaway; a " +
-      'one-turn grace call wraps up gracefully even after the budget runs out; cron sessions get a 3-minute ' +
-      "hard interrupt so runaway jobs can't kill the scheduler; kanban auto-blocks a task after consecutive " +
-      'failures (default 2) against spinning; delegation is process-level isolation — subagents get their ' +
-      'own context and terminal session, with child_timeout_seconds; fallback_model and credential_pool ' +
-      'handle provider single points of failure.',
+      "Hermes' lines of defense are enumerable: the max_iterations cap is shared with subagents (unlimited " +
+      'by default; runaway protection rides on iteration_budget); a one-turn grace call wraps up ' +
+      'gracefully even after the budget runs out; cron sessions get a 600-second inactivity watchdog ' +
+      "(idle time, not wall-clock) so runaway jobs can't kill the scheduler; kanban auto-blocks a task " +
+      'after consecutive failures (default 2) against spinning; delegation is process-level isolation — ' +
+      'subagents get their own context and terminal session, with stuck-child detection via a heartbeat ' +
+      'monitor (child_timeout_seconds as an opt-in backstop); fallback_model and credential_pool handle ' +
+      'provider single points of failure.',
     placeholder:
       'List your defenses one by one: iteration cap / timeout / retry & circuit-breaking / isolation / degradation — give a concrete number or mechanism for each……',
   },

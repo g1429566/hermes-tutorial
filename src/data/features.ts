@@ -28,7 +28,7 @@ export const FEATURES: Feature[] = [
     id: 'gateway',
     name: '多平台网关',
     desc: 'Telegram / Discord / Slack / WhatsApp / Signal 等 20+ 平台，单一 gateway 进程。',
-    sourceRef: 'gateway/platforms/',
+    sourceRef: 'plugins/platforms/',
   },
   {
     id: 'skills',
@@ -46,12 +46,12 @@ export const FEATURES: Feature[] = [
     id: 'delegation',
     name: '委派与并行',
     desc: '派生隔离的子 agent；用 RPC 脚本压缩多步流水线。',
-    sourceRef: 'run_agent.py',
+    sourceRef: 'tools/delegate_tool.py',
   },
   {
     id: 'backends',
     name: '多终端后端',
-    desc: 'local / Docker / SSH / Singularity / Modal / Daytona，后两者支持 serverless 休眠。',
+    desc: 'local / Docker / SSH / Modal / Daytona / Vercel Sandbox（Singularity 已转为官方插件），Modal 与 Daytona 支持 serverless 休眠。',
     sourceRef: 'tools/environments/',
   },
   {
@@ -124,7 +124,7 @@ export const FEATURES_EN: Feature[] = [
     id: 'gateway',
     name: 'Multi-platform gateway',
     desc: 'Telegram / Discord / Slack / WhatsApp / Signal and 20+ platforms, a single gateway process.',
-    sourceRef: 'gateway/platforms/',
+    sourceRef: 'plugins/platforms/',
   },
   {
     id: 'skills',
@@ -142,12 +142,12 @@ export const FEATURES_EN: Feature[] = [
     id: 'delegation',
     name: 'Delegation & parallelism',
     desc: 'Spawn isolated sub-agents; compress multi-step pipelines with RPC scripts.',
-    sourceRef: 'run_agent.py',
+    sourceRef: 'tools/delegate_tool.py',
   },
   {
     id: 'backends',
     name: 'Multiple terminal backends',
-    desc: 'local / Docker / SSH / Singularity / Modal / Daytona — the last two support serverless hibernation.',
+    desc: 'local / Docker / SSH / Modal / Daytona / Vercel Sandbox (Singularity is now an official plugin) — Modal and Daytona support serverless hibernation.',
     sourceRef: 'tools/environments/',
   },
   {

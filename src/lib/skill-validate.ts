@@ -1,5 +1,5 @@
 // 技能字段校验（纯函数，不进浏览器 API，可在 Vitest 直接跑）。
-// 规则来自 hermes-agent/AGENTS.md「Skill authoring standards (HARDLINE)」：
+// 规则来自 hermes-agent/skills/AGENTS.md「Authoring standards (HARDLINE)」：
 // description ≤60 字符、一句话、以句号结尾、无营销词、不重复技能名（第 1 条）；
 // platforms 对照真实脚本依赖声明 OS 门控（第 3 条）。
 // name 用 kebab-case、version 用 x.y.z——仓库里所有真实 SKILL.md 的一致惯例。
@@ -18,7 +18,7 @@ export interface SkillValidationError {
   message: string;
 }
 
-// OS 门控白名单（AGENTS.md「SKILL.md frontmatter」：platforms 是 OS-gating list）
+// OS 门控白名单（skills/AGENTS.md「SKILL.md frontmatter」：platforms 是 OS-gating list）
 export const SKILL_PLATFORMS = ['macos', 'linux', 'windows'] as const;
 
 export const DESCRIPTION_MAX_LENGTH = 60;

@@ -25,12 +25,12 @@ export const MODALITIES: Modality[] = [
     tagline: '让 agent 看图',
     tool: 'vision_analyze',
     architecture:
-      '不走主模型，走第 30 章的辅助 vision 路由：下载图片转 base64，交给解析链选出的 vision 后端分析，临时文件自动清理。主循环只收到文本结论——上下文不被图片撑爆。',
-    configKey: 'auxiliary.vision.*',
+      '由 agent.image_input_mode 自动选路（默认 auto）：主模型报告支持视觉时走 native 快速路径——图片编码后作为多模态工具结果直接挂进对话，主模型自己看图；否则落到第 30 章的辅助 vision 路由：下载图片转 base64，交给解析链选出的 vision 后端分析，主循环只收到文本结论。临时文件自动清理，过大的图片会被自动重编码。',
+    configKey: 'agent.image_input_mode / auxiliary.vision.*',
     sourceRef: 'tools/vision_tools.py',
     notes: [
-      '输入是图片 URL + 自定义 prompt',
-      '本地视觉模型（Qwen-VL/LLaVA）可走自定义 endpoint',
+      '输入是图片 URL + 自定义 prompt（另支持 region 局部裁剪放大）',
+      '自定义/本地 endpoint 的模型可用 model.supports_vision 声明视觉能力，native 路径同样可用',
       '图片过大时由压缩层做重编码自救（第 29 章）',
     ],
   },
@@ -40,7 +40,7 @@ export const MODALITIES: Modality[] = [
     tagline: '文生图 / 图改图，一个工具',
     tool: 'image_generate',
     architecture:
-      'Provider 插件制：plugins/image_gen/<name>/ 内置，用户可放 ~/.hermes/plugins/ 覆盖。provider 通过 PluginContext.register_image_gen_provider() 注册，image_gen.provider 配置选型，所有 image_generate 调用都路由到当前 provider。',
+      'Provider 插件制：plugins/image_gen/<name>/ 内置，用户可放 ~/.hermes/plugins/image_gen/<name>/ 覆盖。provider 通过 PluginContext.register_image_gen_provider() 注册，image_gen.provider 配置选型，所有 image_generate 调用都路由到当前 provider。',
     configKey: 'image_gen.provider',
     sourceRef: 'agent/image_gen_provider.py',
     notes: [
@@ -55,18 +55,18 @@ export const MODALITIES: Modality[] = [
     tagline: '参考图生视频',
     tool: 'video_generate',
     architecture:
-      '与 image_gen 镜像的 provider 插件面：参考图驱动，provider 各自的编辑能力被统一在同一工具签名后面。',
+      '与 image_gen 镜像的 provider 插件面：参考图驱动，文生视频与图生视频统一在同一工具签名后面；视频编辑/延长被刻意不暴露——各后端差异太大。',
     configKey: 'video_gen.provider',
     sourceRef: 'agent/video_gen_provider.py',
-    notes: ['image_url 可作参考图', 'provider 特定的编辑/延长时间能力'],
+    notes: ['image_url 可作参考图', '编辑/延长端点刻意不进统一工具，后端差异太大'],
   },
   {
     id: 'tts',
     name: '语音合成',
     tagline: '让 agent 开口说话',
-    tool: 'tts',
+    tool: 'text_to_speech',
     architecture:
-      'tts_tool + NeuTTS 合成（neutts_synth.py）：把回复文本渲染成语音，主要服务网关场景——在 Telegram 里收到的是语音消息而不是文字。',
+      'tts_tool 把回复文本渲染成语音：内置 edge（默认、免费）/openai/elevenlabs/neutts（本地）等多家 provider，neutts_synth.py 负责 NeuTTS 本地合成。主要服务网关场景——在 Telegram 里收到的是语音消息而不是文字。',
     configKey: 'tts.*',
     sourceRef: 'tools/tts_tool.py',
     notes: ['neutts_samples/ 提供音色样本', '配置段 tts 控制开关与音色'],
@@ -86,7 +86,7 @@ export const MODALITIES: Modality[] = [
 
 // 「统一接口」互动：image_generate 如何按入参路由
 export const UNIFIED_SURFACE = {
-  tool: 'image_generate(prompt, image_url?, reference_image_urls?)',
+  tool: 'image_generate(prompt, image_url?, reference_image_urls?, upscale?)',
   routes: [
     {
       id: 't2i',
@@ -119,12 +119,12 @@ export const MODALITIES_EN: Modality[] = [
     tagline: 'Let the agent look at images',
     tool: 'vision_analyze',
     architecture:
-      'It bypasses the main model and goes through Chapter 30’s auxiliary vision routing: download the image, convert to base64, hand it to the vision backend chosen by the resolution chain, and clean up temp files automatically. The loop only receives a textual conclusion — the context is never bloated by images.',
-    configKey: 'auxiliary.vision.*',
+      'Routing is automatic via agent.image_input_mode (default auto): when the main model reports vision support, the native fast path attaches the encoded image to the conversation as a multimodal tool result and the main model sees it directly; otherwise it falls back to Chapter 30’s auxiliary vision routing: download the image, convert to base64, hand it to the vision backend chosen by the resolution chain — the loop receives only a textual conclusion. Temp files are cleaned up automatically, and oversized images are re-encoded on rejection.',
+    configKey: 'agent.image_input_mode / auxiliary.vision.*',
     sourceRef: 'tools/vision_tools.py',
     notes: [
-      'Input is an image URL + a custom prompt',
-      'Local vision models (Qwen-VL/LLaVA) can go through a custom endpoint',
+      'Input is an image URL + a custom prompt (plus an optional region crop to zoom)',
+      'Models on custom/local endpoints can declare vision capability via model.supports_vision — the native path works for them too',
       'Oversized images are self-rescued by the compression layer via re-encoding (Chapter 29)',
     ],
   },
@@ -134,7 +134,7 @@ export const MODALITIES_EN: Modality[] = [
     tagline: 'Text-to-image / image editing, one tool',
     tool: 'image_generate',
     architecture:
-      'Provider-plugin based: plugins/image_gen/<name>/ ships built-ins, and users can drop overrides into ~/.hermes/plugins/. A provider registers via PluginContext.register_image_gen_provider(), image_gen.provider selects which one is active, and every image_generate call is routed to the current provider.',
+      'Provider-plugin based: plugins/image_gen/<name>/ ships built-ins, and users can drop overrides into ~/.hermes/plugins/image_gen/<name>/. A provider registers via PluginContext.register_image_gen_provider(), image_gen.provider selects which one is active, and every image_generate call is routed to the current provider.',
     configKey: 'image_gen.provider',
     sourceRef: 'agent/image_gen_provider.py',
     notes: [
@@ -149,21 +149,21 @@ export const MODALITIES_EN: Modality[] = [
     tagline: 'Reference-image-driven video',
     tool: 'video_generate',
     architecture:
-      'A provider-plugin surface mirroring image_gen: driven by reference images, with each provider’s editing capabilities unified behind the same tool signature.',
+      'A provider-plugin surface mirroring image_gen: reference-image-driven, with text-to-video and image-to-video unified behind the same tool signature; video editing / extension is deliberately not exposed — the backends are too inconsistent.',
     configKey: 'video_gen.provider',
     sourceRef: 'agent/video_gen_provider.py',
     notes: [
       'image_url can serve as a reference image',
-      'provider-specific editing / duration-extension capabilities',
+      'editing / extension endpoints stay out of the unified tool — backends differ too much',
     ],
   },
   {
     id: 'tts',
     name: 'Speech synthesis',
     tagline: 'Let the agent speak',
-    tool: 'tts',
+    tool: 'text_to_speech',
     architecture:
-      'tts_tool + NeuTTS synthesis (neutts_synth.py): renders reply text into speech, mainly serving gateway scenarios — what arrives in Telegram is a voice message, not text.',
+      'tts_tool renders reply text into speech: built-in providers include edge (default, free) / openai / elevenlabs / neutts (local), with neutts_synth.py handling NeuTTS local synthesis. Mainly serving gateway scenarios — what arrives in Telegram is a voice message, not text.',
     configKey: 'tts.*',
     sourceRef: 'tools/tts_tool.py',
     notes: [
@@ -189,7 +189,7 @@ export const MODALITIES_EN: Modality[] = [
 
 // 「统一接口」互动：image_generate 如何按入参路由
 export const UNIFIED_SURFACE_EN: typeof UNIFIED_SURFACE = {
-  tool: 'image_generate(prompt, image_url?, reference_image_urls?)',
+  tool: 'image_generate(prompt, image_url?, reference_image_urls?, upscale?)',
   routes: [
     {
       id: 't2i',

@@ -26,7 +26,7 @@ export const TERMINAL_LINES: TerminalLine[] = [
   { kind: 'out', text: '✻ Hermes Agent — 输入消息开始对话，/help 查看命令' },
   { kind: 'cmd', text: '帮我看看 gateway 怎么接入一个新平台' },
   { kind: 'agent', text: '我先读一下网关的平台适配层结构……' },
-  { kind: 'tool', text: '✓ Read gateway/ADDING_A_PLATFORM.md' },
+  { kind: 'tool', text: '✓ Read gateway/platforms/ADDING_A_PLATFORM.md' },
   { kind: 'tool', text: '✓ Grep "register_platform" gateway/platforms/' },
   {
     kind: 'agent',
@@ -57,7 +57,7 @@ export const TERMINAL_LINES_EN: TerminalLine[] = [
   { kind: 'out', text: '✻ Hermes Agent — type a message to start, /help for commands' },
   { kind: 'cmd', text: 'show me how to onboard a new platform to the gateway' },
   { kind: 'agent', text: "Let me read the gateway's platform adapter layer first……" },
-  { kind: 'tool', text: '✓ Read gateway/ADDING_A_PLATFORM.md' },
+  { kind: 'tool', text: '✓ Read gateway/platforms/ADDING_A_PLATFORM.md' },
   { kind: 'tool', text: '✓ Grep "register_platform" gateway/platforms/' },
   {
     kind: 'agent',

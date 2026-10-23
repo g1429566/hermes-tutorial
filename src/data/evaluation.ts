@@ -86,9 +86,9 @@ export const EVAL_ECOSYSTEM: { name: string; desc: string; sourceRef: string }[]
     sourceRef: 'toolset_distributions.py',
   },
   {
-    name: 'rl / moa toolset',
-    desc: 'RL 训练与 mixture-of-agents 工具集：默认关闭（_DEFAULT_OFF_TOOLSETS），按需启用',
-    sourceRef: 'toolsets.py',
+    name: 'evals/',
+    desc: '仓库内置离线基准：codebase_navigability、compaction 等可重复评测',
+    sourceRef: 'evals/',
   },
 ];
 
@@ -174,9 +174,9 @@ export const EVAL_ECOSYSTEM_EN: typeof EVAL_ECOSYSTEM = [
     sourceRef: 'toolset_distributions.py',
   },
   {
-    name: 'rl / moa toolset',
-    desc: 'RL training and mixture-of-agents toolsets: off by default (_DEFAULT_OFF_TOOLSETS), enabled on demand',
-    sourceRef: 'toolsets.py',
+    name: 'evals/',
+    desc: 'In-repo offline benchmarks: reproducible evals like codebase_navigability and compaction',
+    sourceRef: 'evals/',
   },
 ];
 

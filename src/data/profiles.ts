@@ -1,6 +1,9 @@
 // Chapter 17「Profiles 多实例」数据源：隔离模型 / profile-safe 规则 GOOD vs BAD / 路径解析器。
-// 内容对齐 hermes-agent/AGENTS.md 的「Profiles: Multi-Instance Support」一节（6 条规则），
-// 代码示例逐字对齐 hermes_constants.py、hermes_cli/main.py、hermes_cli/profiles.py、gateway/status.py。
+// 内容对齐 hermes-agent 根 AGENTS.md 的 profile 路径规则、hermes_cli/AGENTS.md 的
+// 「Profiles (multi-instance)」一节与 gateway/AGENTS.md 的「Profile scope」一节（原 6 条规则，
+// 规则 3 随多路复用网关演进已更新），代码示例逐字对齐 hermes_constants.py、
+// hermes_cli/main.py、hermes_cli/profiles.py；锁的 GOOD 范式对齐 plugins/platforms/irc/adapter.py
+//（经 gateway/platforms/base.py 的 _acquire_platform_lock() 封装 gateway/status.py 的锁）。
 
 export interface ProfileRule {
   id: string;
@@ -23,7 +26,9 @@ export const PROFILES_INTRO =
   'config、API keys、记忆、会话、技能、网关状态全都各自独立。默认实例住 ~/.hermes，' +
   '命名 profile 住 ~/.hermes/profiles/<name>。核心机制只有一个：' +
   '_apply_profile_override()（hermes_cli/main.py）在任何 module import 之前设置好 ' +
-  'HERMES_HOME 环境变量，之后所有 get_hermes_home() 调用自动 scoped 到当前 profile。';
+  'HERMES_HOME 环境变量，之后所有 get_hermes_home() 调用自动 scoped 到当前 profile。' +
+  '（多路复用网关 / Desktop serve 是另一条路：按活动绑定 contextvar override，' +
+  'os.environ["HERMES_HOME"] 保持启动 profile。）';
 
 /* ── ① 隔离模型 ─────────────────────────────────────────────────── */
 export const ISOLATION_OWNED = [
@@ -69,7 +74,7 @@ config_path = get_hermes_home() / "config.yaml"`,
       label: 'BAD — breaks profiles',
       code: `config_path = Path.home() / ".hermes" / "config.yaml"`,
     },
-    note: '硬编码路径会让所有 profile 读写同一份文件。AGENTS.md 记载：PR #3575 一口气修了 5 个这样的 bug。',
+    note: '硬编码路径会让所有 profile 读写同一份文件。这类 bug 在 hermes 仓库历史上反复出现，修复要点是所有路径访问都走 hermes_constants 的 home 系列 helper。',
   },
   {
     id: 'display',
@@ -89,27 +94,29 @@ print(f"Config saved to {display_hermes_home()}/config.yaml")`,
   {
     id: 'anchor',
     title: '规则 6 · profile 操作锚定 HOME，而非 HERMES_HOME',
-    rule: '_get_profiles_root()（hermes_cli/profiles.py）返回 Path.home() / ".hermes" / "profiles"，不是 get_hermes_home() / "profiles"。',
+    rule: '_get_profiles_root()（hermes_cli/profiles.py）返回 _get_default_hermes_home() / "profiles"——默认实例目录（通常 ~/.hermes，Docker / 自定义部署下是 HERMES_HOME 本身），不是 get_hermes_home() / "profiles"。',
     good: {
       label: 'GOOD',
       code: `def _get_profiles_root() -> Path:
-    return Path.home() / ".hermes" / "profiles"`,
+    return _get_default_hermes_home() / "profiles"`,
     },
     bad: {
       label: 'BAD — 只看得到当前 profile',
       code: `return get_hermes_home() / "profiles"`,
     },
-    note: '这是故意的：hermes -p coder profile list 无论激活哪个 profile，都要能看到全部 profiles。与规则 1 方向相反——状态读写锚定 HERMES_HOME，profile 管理锚定 HOME。',
+    note: '这是故意的：hermes -p coder profile list 无论激活哪个 profile，都要能看到全部 profiles。与规则 1 方向相反——状态读写锚定 HERMES_HOME，profile 管理锚定默认实例目录。',
   },
   {
     id: 'lock',
     title: '规则 5 · 网关平台适配器用 token 锁',
-    rule: '适配器用唯一凭证（bot token、API key）连接时，connect()/start() 里 acquire_scoped_lock()，disconnect()/stop() 里 release_scoped_lock()（gateway/status.py）。',
+    rule: '适配器用唯一凭证（bot token、API key）连接时，connect()/start() 里获取 scoped 锁，disconnect()/stop() 里释放——gateway/platforms/base.py 的 _acquire_platform_lock()/_release_platform_lock() 封装了 gateway/status.py 的 acquire_scoped_lock()/release_scoped_lock()。',
     good: {
       label: 'GOOD（plugins/platforms/irc/adapter.py 的范式）',
-      code: `from gateway.status import acquire_scoped_lock
-if not acquire_scoped_lock("irc", lock_key):
-    ...  # 凭证已被另一个 profile 占用`,
+      code: `# connect() 里——防止两个 profile 共用同一 IRC 身份
+if not self._acquire_platform_lock(
+    "irc", f"{self.server}:{self.nickname}",
+    f"IRC identity {self.nickname}@{self.server}"):
+    return False  # 凭证已被另一个 profile 占用`,
     },
     bad: {
       label: 'BAD — 两个 profile 抢同一凭证',
@@ -122,9 +129,10 @@ if not acquire_scoped_lock("irc", lock_key):
 ];
 
 export const EXTRA_RULES_NOTE =
-  '另两条规则：模块级常量是安全的——它们在 import 时缓存 get_hermes_home()，而 import 发生在 ' +
-  '_apply_profile_override() 之后（规则 3）；mock Path.home() 的测试必须同时 patch ' +
-  'HERMES_HOME 环境变量，因为代码读的是环境变量（规则 4）。';
+  '另两条规则：模块级常量只在单实例 CLI 里安全——import 发生在 _apply_profile_override() 之后；' +
+  '但多路复用网关 / Desktop serve 里一个进程服务多个 profile，import 时缓存的 get_hermes_home() ' +
+  '会冻结在启动 profile 上（当前 AGENTS.md 把它列为 bug class，要求按活动绑定 scope 或运行时解析）（规则 3）；' +
+  'mock Path.home() 的测试必须同时 patch HERMES_HOME 环境变量，因为代码读的是环境变量（规则 4）。';
 
 /* ── ③ 路径解析器 ───────────────────────────────────────────────── */
 export const RESOLVER_PROFILES = [
@@ -155,7 +163,9 @@ export const PROFILES_INTRO_EN =
   'The default instance lives in ~/.hermes; a named profile lives in ' +
   '~/.hermes/profiles/<name>. There is exactly one core mechanism: _apply_profile_override() ' +
   '(hermes_cli/main.py) sets the HERMES_HOME environment variable before any module import, ' +
-  'so every subsequent get_hermes_home() call is automatically scoped to the active profile.';
+  'so every subsequent get_hermes_home() call is automatically scoped to the active profile. ' +
+  '(The multiplex gateway / Desktop serve backend takes another route: a contextvar override ' +
+  'bound per activity, while os.environ["HERMES_HOME"] keeps the launch profile.)';
 
 export const ISOLATION_OWNED_EN = [
   { label: 'config.yaml', note: 'All configuration: model / agent / gateway' },
@@ -199,7 +209,7 @@ config_path = get_hermes_home() / "config.yaml"`,
       label: 'BAD — breaks profiles',
       code: `config_path = Path.home() / ".hermes" / "config.yaml"`,
     },
-    note: 'Hardcoded paths make every profile read and write the same file. AGENTS.md records that PR #3575 fixed 5 such bugs in one go.',
+    note: 'Hardcoded paths make every profile read and write the same file. Bugs like this have recurred throughout the hermes repo history; the fix is to route every path access through the home helpers in hermes_constants.',
   },
   {
     id: 'display',
@@ -219,27 +229,29 @@ print(f"Config saved to {display_hermes_home()}/config.yaml")`,
   {
     id: 'anchor',
     title: 'Rule 6 · Profile operations anchor on HOME, not HERMES_HOME',
-    rule: '_get_profiles_root() (hermes_cli/profiles.py) returns Path.home() / ".hermes" / "profiles", not get_hermes_home() / "profiles".',
+    rule: '_get_profiles_root() (hermes_cli/profiles.py) returns _get_default_hermes_home() / "profiles" — the default instance dir (usually ~/.hermes; in Docker / custom deployments, HERMES_HOME itself), not get_hermes_home() / "profiles".',
     good: {
       label: 'GOOD',
       code: `def _get_profiles_root() -> Path:
-    return Path.home() / ".hermes" / "profiles"`,
+    return _get_default_hermes_home() / "profiles"`,
     },
     bad: {
       label: 'BAD — can only see the current profile',
       code: `return get_hermes_home() / "profiles"`,
     },
-    note: 'This is deliberate: hermes -p coder profile list must see all profiles no matter which one is active. The opposite direction of Rule 1 — state reads/writes anchor on HERMES_HOME, profile management anchors on HOME.',
+    note: 'This is deliberate: hermes -p coder profile list must see all profiles no matter which one is active. The opposite direction of Rule 1 — state reads/writes anchor on HERMES_HOME, profile management anchors on the default instance dir.',
   },
   {
     id: 'lock',
     title: 'Rule 5 · Gateway platform adapters use token locks',
-    rule: 'When an adapter connects with a unique credential (bot token, API key), call acquire_scoped_lock() in connect()/start() and release_scoped_lock() in disconnect()/stop() (gateway/status.py).',
+    rule: 'When an adapter connects with a unique credential (bot token, API key), acquire a scoped lock in connect()/start() and release it in disconnect()/stop() — gateway/platforms/base.py::_acquire_platform_lock()/_release_platform_lock() wrap acquire_scoped_lock()/release_scoped_lock() in gateway/status.py.',
     good: {
       label: 'GOOD (the plugins/platforms/irc/adapter.py pattern)',
-      code: `from gateway.status import acquire_scoped_lock
-if not acquire_scoped_lock("irc", lock_key):
-    ...  # credential already in use by another profile`,
+      code: `# in connect() — prevent two profiles from sharing one IRC identity
+if not self._acquire_platform_lock(
+    "irc", f"{self.server}:{self.nickname}",
+    f"IRC identity {self.nickname}@{self.server}"):
+    return False  # credential already in use by another profile`,
     },
     bad: {
       label: 'BAD — two profiles fighting over one credential',
@@ -252,10 +264,12 @@ if not acquire_scoped_lock("irc", lock_key):
 ];
 
 export const EXTRA_RULES_NOTE_EN =
-  'Two more rules: module-level constants are safe — they cache get_hermes_home() at import ' +
-  'time, and imports happen after _apply_profile_override() (Rule 3); tests that mock ' +
-  'Path.home() must also patch the HERMES_HOME environment variable, because the code reads ' +
-  'the environment variable (Rule 4).';
+  'Two more rules: module-level constants are safe only in the single-profile CLI — imports happen ' +
+  'after _apply_profile_override(); but in the multiplex gateway / Desktop serve backend, one process ' +
+  'serves many profiles, and a get_hermes_home() cached at import time freezes to the launch profile ' +
+  '(current AGENTS.md flags it as a bug class — bind scope per activity or resolve at call time) (Rule 3); ' +
+  'tests that mock Path.home() must also patch the HERMES_HOME environment variable, because the code ' +
+  'reads the environment variable (Rule 4).';
 
 export const RESOLVER_RESOURCES_EN: ProfileResource[] = [
   {
@@ -294,8 +308,8 @@ export const PROFILES_UI = {
   rulesKicker: { zh: 'profile-safe 规则', en: 'Profile-safe rules' },
   rulesTitle: { zh: 'GOOD vs BAD 代码对照', en: 'GOOD vs BAD code comparison' },
   rulesDesc: {
-    zh: 'AGENTS.md 给贡献者立了 6 条 profile-safe 规则。点击左侧规则，看右侧代码对照。',
-    en: 'AGENTS.md lays down 6 profile-safe rules for contributors. Click a rule on the left to see the code comparison on the right.',
+    zh: 'AGENTS.md 给贡献者立了 6 条 profile-safe 规则（如今分散在根、hermes_cli/ 与 gateway/ 的 AGENTS.md 中）。点击左侧规则，看右侧代码对照。',
+    en: 'AGENTS.md lays down 6 profile-safe rules for contributors (now spread across the root, hermes_cli/, and gateway/ AGENTS.md files). Click a rule on the left to see the code comparison on the right.',
   },
   badPrefix: { zh: '反例', en: 'Counter-example' },
   resolverKicker: { zh: '动手试试', en: 'Try it' },

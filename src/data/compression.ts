@@ -39,9 +39,9 @@ export const COMPRESSION_STEPS: CompressionStep[] = [
   },
   {
     id: 'split',
-    label: '会话分裂',
-    title: 'SQLite 会话切分，session_id 轮换',
-    body: 'compress_context 真正执行压缩：跑完压缩器后把 SQLite 里的会话切分、轮换 session_id，返回压缩后的消息列表和重新构建的系统提示。这也是为什么压缩是「允许的例外」——它是一次性的、刻意的缓存失效，换来继续对话的窗口空间。',
+    label: '原位提交',
+    title: '原位落库，session_id 保持不变',
+    body: 'compress_context 真正执行压缩：压缩器跑完后默认原位提交——同一个 session_id 不动，被压掉的旧消息在 SQLite 里就地软归档（同一 session 下标记为已压缩），返回压缩后的消息列表和重新构建的系统提示。旧式的「切分会话 + 轮换 session_id」只留在 compression.in_place: false 的遗留路径里。这也是为什么压缩是「允许的例外」——它是一次性的、刻意的缓存失效，换来继续对话的窗口空间。',
     sourceRef: 'agent/conversation_compression.py',
   },
   {
@@ -126,9 +126,9 @@ export const COMPRESSION_STEPS_EN: CompressionStep[] = [
   },
   {
     id: 'split',
-    label: 'Session split',
-    title: 'SQLite session split, session_id rotation',
-    body: 'compress_context performs the actual compression: after the compressor runs, it splits the session in SQLite, rotates the session_id, and returns the compressed message list plus a rebuilt system prompt. This is also why compression is the “permitted exception” — it is a one-time, deliberate cache invalidation that buys back window space to keep the conversation going.',
+    label: 'In-place commit',
+    title: 'In-place persistence, session_id unchanged',
+    body: 'compress_context performs the actual compression: after the compressor runs, the default is an in-place commit — the same session_id stays put, the compacted-away messages are soft-archived in SQLite under the same session (marked compacted), and it returns the compressed message list plus a rebuilt system prompt. The old-style “split the session + rotate the session_id” survives only as the legacy path behind compression.in_place: false. This is also why compression is the “permitted exception” — a one-time, deliberate cache invalidation that buys back window space to keep the conversation going.',
     sourceRef: 'agent/conversation_compression.py',
   },
   {

@@ -91,7 +91,7 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
         name: '不要记忆',
         desc: '每次会话从零开始。',
         tradeoff:
-          '最简单也最隐私，但「会积累」这个核心差异就没了——cron 会话正是刻意 skip_memory=True 的这个形态。',
+          '最简单也最隐私，但「会积累」这个核心差异就没了——想要这个形态，把 memory 加进 agent.disabled_toolsets 即可（例如刻意无状态的定时任务会话）。',
       },
     ],
   },
@@ -233,7 +233,7 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
         name: 'No memory',
         desc: 'Every session starts from scratch.',
         tradeoff:
-          'Simplest and most private, but the core differentiator of "accumulating" is gone — cron sessions are deliberately this shape with skip_memory=True.',
+          'Simplest and most private, but the core differentiator of "accumulating" is gone — to get this shape, add memory to agent.disabled_toolsets (e.g. deliberately stateless scheduled-job sessions).',
       },
     ],
   },

@@ -1,5 +1,5 @@
 // Chapter 30「模型路由与凭据池」数据源。
-// 对齐 agent/auxiliary_client.py 的 docstring（解析顺序与 Codex 例外）、
+// 对齐 agent/auxiliary_client.py 的 docstring 与 _vision_auto_route（解析顺序与 Codex 例外）、
 // agent/credential_pool.py（同 provider 多凭据 failover）、AGENTS.md 的
 // AIAgent 参数（credential_pool / fallback_model）与 auxiliary 配置段说明。
 
@@ -35,7 +35,7 @@ export const FAILOVER_LAYERS: FailoverLayer[] = [
     id: 'auxiliary',
     name: '③ auxiliary：侧边任务的统一路由',
     trigger: '压缩 / 摘要 / vision 等辅助 LLM 调用',
-    body: '主循环之外有大量「侧边」LLM 工作：上下文压缩、session_search、标题生成、vision 分析、curator 评审。auxiliary_client 给它们一条统一解析链，不为每个任务复制 fallback 逻辑；每个任务还能用 auxiliary.<task>.provider/model 单独钉住后端。',
+    body: '主循环之外有大量「侧边」LLM 工作：上下文压缩、approval 审批分类、标题生成、vision 分析、curator 评审。auxiliary_client 给它们一条统一解析链，不为每个任务复制 fallback 逻辑；每个任务还能用 auxiliary.<task>.provider/model 单独钉住后端。',
     sourceRef: 'agent/auxiliary_client.py',
   },
 ];
@@ -49,7 +49,7 @@ export interface AuxTask {
 
 export const AUX_TASKS: AuxTask[] = [
   { id: 'compression', name: '上下文压缩', kind: 'text', desc: '压缩必须是便宜快速的模型' },
-  { id: 'session_search', name: '会话搜索', kind: 'text', desc: '跨会话召回的查询理解' },
+  { id: 'approval', name: '审批分类', kind: 'text', desc: '快而便宜的小模型分类器' },
   { id: 'title', name: '标题生成', kind: 'text', desc: '给会话起标题' },
   { id: 'curator', name: '策展评审', kind: 'text', desc: '技能质量 LLM review pass' },
   { id: 'vision', name: 'vision 分析', kind: 'vision', desc: '图片理解（第 31 章）' },
@@ -66,14 +66,13 @@ export const TEXT_CHAIN = [
   { step: 7, backend: 'None', note: '全部不可用——该辅助功能静默降级' },
 ];
 
-// 视觉任务的 auto 解析顺序（同一份 docstring）
+// 视觉任务的 auto 解析顺序（agent/auxiliary_client.py::_vision_auto_route）
 export const VISION_CHAIN = [
   { step: 1, backend: '主 provider（须支持视觉）', note: '在受支持的 vision 后端列表里才行' },
   { step: 2, backend: 'OpenRouter', note: '' },
   { step: 3, backend: 'Nous Portal', note: '' },
-  { step: 4, backend: '原生 Anthropic', note: '' },
-  { step: 5, backend: '自定义 endpoint', note: '本地视觉模型：Qwen-VL / LLaVA / Pixtral' },
-  { step: 6, backend: 'None', note: '' },
+  { step: 4, backend: 'DeepInfra', note: '默认视觉模型从在线目录实时发现' },
+  { step: 5, backend: 'None', note: '' },
 ];
 
 export const CODEX_CALLOUT = {
@@ -86,7 +85,7 @@ auxiliary:
   compression:
     provider: openrouter
     model: google/gemini-flash
-    max_tokens: 4096
+    timeout: 300
   vision:
     provider: anthropic
     reasoning_effort: low`;
@@ -119,7 +118,7 @@ export const FAILOVER_LAYERS_EN: FailoverLayer[] = [
     id: 'auxiliary',
     name: '③ auxiliary: unified routing for side tasks',
     trigger: 'Auxiliary LLM calls like compression / summarization / vision',
-    body: 'Outside the agent loop there is a lot of “side” LLM work: context compression, session_search, title generation, vision analysis, curator review. auxiliary_client gives them all one unified resolution chain instead of copying fallback logic per task; each task can also pin its own backend via auxiliary.<task>.provider/model.',
+    body: 'Outside the agent loop there is a lot of “side” LLM work: context compression, approval classification, title generation, vision analysis, curator review. auxiliary_client gives them all one unified resolution chain instead of copying fallback logic per task; each task can also pin its own backend via auxiliary.<task>.provider/model.',
     sourceRef: 'agent/auxiliary_client.py',
   },
 ];
@@ -132,10 +131,10 @@ export const AUX_TASKS_EN: AuxTask[] = [
     desc: 'Compression must be a cheap, fast model',
   },
   {
-    id: 'session_search',
-    name: 'Session search',
+    id: 'approval',
+    name: 'Approval classification',
     kind: 'text',
-    desc: 'Query understanding for cross-session recall',
+    desc: 'A fast, cheap classifier model',
   },
   { id: 'title', name: 'Title generation', kind: 'text', desc: 'Titling sessions' },
   { id: 'curator', name: 'Curator review', kind: 'text', desc: 'LLM review pass on skill quality' },
@@ -162,7 +161,7 @@ export const TEXT_CHAIN_EN: typeof TEXT_CHAIN = [
   { step: 7, backend: 'None', note: 'All unavailable — this auxiliary feature silently degrades' },
 ];
 
-// 视觉任务的 auto 解析顺序（同一份 docstring）
+// Vision-task auto resolution order (agent/auxiliary_client.py::_vision_auto_route)
 export const VISION_CHAIN_EN: typeof VISION_CHAIN = [
   {
     step: 1,
@@ -171,9 +170,12 @@ export const VISION_CHAIN_EN: typeof VISION_CHAIN = [
   },
   { step: 2, backend: 'OpenRouter', note: '' },
   { step: 3, backend: 'Nous Portal', note: '' },
-  { step: 4, backend: 'Native Anthropic', note: '' },
-  { step: 5, backend: 'Custom endpoint', note: 'local vision models: Qwen-VL / LLaVA / Pixtral' },
-  { step: 6, backend: 'None', note: '' },
+  {
+    step: 4,
+    backend: 'DeepInfra',
+    note: 'default vision model discovered live from the online catalog',
+  },
+  { step: 5, backend: 'None', note: '' },
 ];
 
 export const CODEX_CALLOUT_EN: typeof CODEX_CALLOUT = {

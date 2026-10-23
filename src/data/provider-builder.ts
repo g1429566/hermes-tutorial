@@ -1,6 +1,7 @@
 // Chapter 20「加一个 Provider」数据源：Provider 适配实验。
-// 统一接口四步与懒发现机制对齐 hermes-agent/AGENTS.md「Model-provider plugins」（815–838 行）、
-// providers/__init__.py（_discover_providers 扫描顺序）与 providers/base.py（ProviderProfile 字段）；
+// 统一接口四步与懒发现机制对齐 hermes-agent/plugins/AGENTS.md「Plugin kinds and their discovery
+// systems」表（model-provider 行）、providers/__init__.py（_discover_providers 扫描顺序）与
+// providers/base.py（ProviderProfile 字段）；
 // 代码模板对齐真实插件 plugins/model-providers/novita/__init__.py 与 deepseek/plugin.yaml。
 
 export interface ProviderStep {
@@ -24,16 +25,16 @@ export const PROVIDER_STEPS: ProviderStep[] = [
     title: '认证：API key 与环境变量元数据',
     body: 'profile 用 env_vars 声明自己需要哪些密钥；用户侧的录入走 OPTIONAL_ENV_VARS——带元数据（description / prompt / url / password / category）注册后，hermes setup 的设置向导会自动把它列出来。铁律：.env 只放密钥，非密钥配置进 config.yaml。',
     code: {
-      file: 'hermes_cli/config.py',
+      file: 'hermes_cli/config_defaults.py',
       lines: 'OPTIONAL_ENV_VARS',
       snippet: `"ACME_API_KEY": {
     "description": "What it's for",
     "prompt": "Display name",
     "url": "https://...",
     "password": True,
-    "category": "provider",  # provider / tool / messaging / setting
+    "category": "provider",  # provider / tool / skill / messaging / setting
 },`,
-      note: 'AGENTS.md「.env variables (SECRETS ONLY)」一节的元数据模板',
+      note: '根 AGENTS.md「.env is for secrets only」铁律（Contribution Rubric）对应的元数据模板',
     },
     points: [
       'env_vars 是 tuple：("ACME_API_KEY",) 或 ("ACME_API_KEY", "ACME_BASE_URL")',
@@ -66,7 +67,7 @@ default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
     title: '调用：统一成 chat.completions 形状',
     body: '主循环只认一种形状：client.chat.completions.create(model, messages, tools)。provider 适配层负责把各家 API 的方言翻译进来——声明式的 profile 覆盖端点与默认参数，prepare_messages / build_api_kwargs_extras 这类钩子处理请求级怪癖，比如 DeepSeek 要在 extra_body 里显式带 thinking 开关。',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'Agent Loop',
       snippet: `response = client.chat.completions.create(
     model=model, messages=messages, tools=tool_schemas)
@@ -88,14 +89,14 @@ else:
     title: '统一事件流：插件钩子与两种结局',
     body: '无论底层是哪个 provider，主循环只看到两种结局：tool_calls（继续循环）或 content（返回）。调用前后各有一对插件钩子——pre_llm_call / post_llm_call 在统一位置触发，插件做审计、改写、统计都不用认识具体 provider。',
     code: {
-      file: 'run_agent.py + model_tools.py',
+      file: 'agent/turn_context.py + turn_finalizer.py + model_tools.py',
       lines: '生命周期钩子',
       snippet: `# pre_llm_call   —— 调用前：插件可审计/改写
 # post_llm_call  —— 调用后：统一的结果后处理
 # 两种结局：
 #   response.tool_calls → handle_function_call → 循环继续
 #   response.content    → return，会话收尾`,
-      note: '钩子在 run_agent.py 触发；pre/post_tool_call 在 model_tools.py 触发',
+      note: 'pre_llm_call 在 turn_context.py、post_llm_call 在 turn_finalizer.py 触发；pre/post_tool_call 在 model_tools.py 触发',
     },
     points: [
       '钩子与 provider 解耦：写一个插件，惠及所有后端',
@@ -191,22 +192,22 @@ description: ${f.displayName}
 author: Your Name`;
 }
 
-// 懒发现机制（providers/__init__.py 的 _discover_providers + AGENTS.md 815–838 行）
+// 懒发现机制（providers/__init__.py 的 _discover_providers + plugins/AGENTS.md 的 model-provider 行）
 export const DISCOVERY_ORDER = [
   {
     step: '1',
     where: '<repo>/plugins/model-providers/<name>/',
-    what: 'bundled：随仓库发布的 profile',
+    what: 'bundled：随仓库发布的 profile（进程级扫描第 1 步）',
   },
   {
     step: '2',
     where: '$HERMES_HOME/plugins/model-providers/<name>/',
-    what: 'user：同名覆盖 bundled（last-writer-wins）',
+    what: 'user：查询时按 home 懒装载，同名覆盖 bundled',
   },
   {
     step: '3',
     where: '<repo>/providers/<name>.py',
-    what: 'legacy：单文件 profile，向后兼容',
+    what: 'legacy：单文件 profile，向后兼容（进程级扫描最后一步）',
   },
 ];
 
@@ -215,6 +216,7 @@ export const DISCOVERY_POINTS = [
   'register_provider() 是 last-writer-wins：user 插件同名覆盖 bundled，第三方不用打 repo 补丁就能换掉任何内置 profile',
   '通用 PluginManager 只记录 kind: model-provider 的 manifest，不 import——否则 ProviderProfile 会被实例化两次',
   '没写 kind: 的插件按源码启发式自动归类：__init__.py 里同时出现 register_provider + ProviderProfile',
+  'pip 安装的 provider（entry points）优先级最低：要在 plugins.enabled 白名单内才装载，同名 bundled/user 总会覆盖它',
 ];
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
@@ -232,16 +234,16 @@ export const PROVIDER_STEPS_EN: ProviderStep[] = [
     title: 'Auth: API keys and env-var metadata',
     body: 'The profile declares which secrets it needs via env_vars; user-side entry goes through OPTIONAL_ENV_VARS — once registered with metadata (description / prompt / url / password / category), the hermes setup wizard lists it automatically. Iron rule: .env holds secrets only; non-secret config goes into config.yaml.',
     code: {
-      file: 'hermes_cli/config.py',
+      file: 'hermes_cli/config_defaults.py',
       lines: 'OPTIONAL_ENV_VARS',
       snippet: `"ACME_API_KEY": {
     "description": "What it's for",
     "prompt": "Display name",
     "url": "https://...",
     "password": True,
-    "category": "provider",  # provider / tool / messaging / setting
+    "category": "provider",  # provider / tool / skill / messaging / setting
 },`,
-      note: 'Metadata template from the AGENTS.md ".env variables (SECRETS ONLY)" section',
+      note: 'Metadata template for the root AGENTS.md ".env is for secrets only" rule (Contribution Rubric)',
     },
     points: [
       'env_vars is a tuple: ("ACME_API_KEY",) or ("ACME_API_KEY", "ACME_BASE_URL")',
@@ -274,7 +276,7 @@ default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
     title: 'Calling: unified into the chat.completions shape',
     body: "The agent loop speaks exactly one shape: client.chat.completions.create(model, messages, tools). The provider adapter layer translates each vendor's API dialect into it — the declarative profile covers endpoints and default parameters, while hooks like prepare_messages / build_api_kwargs_extras handle request-level quirks, e.g. DeepSeek needs an explicit thinking switch in extra_body.",
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'Agent Loop',
       snippet: `response = client.chat.completions.create(
     model=model, messages=messages, tools=tool_schemas)
@@ -296,14 +298,14 @@ else:
     title: 'Unified event flow: plugin hooks and two outcomes',
     body: 'No matter which provider sits underneath, the agent loop sees only two outcomes: tool_calls (loop continues) or content (return). A pair of plugin hooks flanks each call — pre_llm_call / post_llm_call fire at unified points, so plugins can audit, rewrite, and meter without knowing any specific provider.',
     code: {
-      file: 'run_agent.py + model_tools.py',
+      file: 'agent/turn_context.py + turn_finalizer.py + model_tools.py',
       lines: '生命周期钩子',
       snippet: `# pre_llm_call   —— 调用前：插件可审计/改写
 # post_llm_call  —— 调用后：统一的结果后处理
 # 两种结局：
 #   response.tool_calls → handle_function_call → 循环继续
 #   response.content    → return，会话收尾`,
-      note: 'Hooks fire in run_agent.py; pre/post_tool_call fire in model_tools.py',
+      note: 'pre_llm_call fires in turn_context.py and post_llm_call in turn_finalizer.py; pre/post_tool_call fire in model_tools.py',
     },
     points: [
       'Hooks are decoupled from providers: write one plugin, benefit every backend',
@@ -317,17 +319,17 @@ export const DISCOVERY_ORDER_EN: typeof DISCOVERY_ORDER = [
   {
     step: '1',
     where: '<repo>/plugins/model-providers/<name>/',
-    what: 'bundled: profiles shipped with the repo',
+    what: 'bundled: profiles shipped with the repo (process-wide scan, step 1)',
   },
   {
     step: '2',
     where: '$HERMES_HOME/plugins/model-providers/<name>/',
-    what: 'user: same-name override of bundled (last-writer-wins)',
+    what: 'user: loaded lazily per home at lookup time, overriding bundled same-name profiles',
   },
   {
     step: '3',
     where: '<repo>/providers/<name>.py',
-    what: 'legacy: single-file profiles, kept for backward compatibility',
+    what: 'legacy: single-file profiles, kept for backward compatibility (last step of the process-wide scan)',
   },
 ];
 
@@ -336,6 +338,7 @@ export const DISCOVERY_POINTS_EN: typeof DISCOVERY_POINTS = [
   'register_provider() is last-writer-wins: a same-named user plugin overrides the bundled one, so third parties can replace any built-in profile without patching the repo',
   'The generic PluginManager only records manifests of kind: model-provider without importing them — otherwise the ProviderProfile would be instantiated twice',
   'Plugins without a kind: field are auto-classified by source heuristic: register_provider + ProviderProfile both appear in __init__.py',
+  'Pip-installed providers (entry points) have the lowest precedence: they load only when named in the plugins.enabled allow-list, and a same-named bundled/user profile always overrides them',
 ];
 
 // 本章专属 UI 文案（步进器标题、表单标签、发现机制段落等）
@@ -364,8 +367,8 @@ export const PROVIDER_UI = {
   discoveryKicker: { zh: '发现机制', en: 'Discovery' },
   discoveryTitle: { zh: '懒发现：第一次用到才扫描', en: 'Lazy discovery: scanned on first use' },
   discoveryBody: {
-    zh: '_discover_providers() 不在启动时跑——第一次调用 get_provider_profile() 或 list_providers() 时才扫描三个位置并 import 每个插件，import 触发模块级的 register_provider()。',
-    en: '_discover_providers() does not run at startup — on the first call to get_provider_profile() or list_providers() it scans three locations and imports each plugin, and the import triggers the module-level register_provider().',
+    zh: '_discover_providers() 不在启动时跑——第一次调用 get_provider_profile() 或 list_providers() 时才扫描并 import（bundled 插件目录、legacy 单文件，外加优先级最低的 pip entry points），import 触发模块级的 register_provider()；$HERMES_HOME 的 user 插件不走这个扫描，而是查询时按 home 懒装载、同名覆盖 bundled。',
+    en: '_discover_providers() does not run at startup — on the first call to get_provider_profile() or list_providers() it scans and imports (the bundled plugin dir, legacy single-file profiles, plus pip entry points at the lowest precedence), and the import triggers the module-level register_provider(); $HERMES_HOME user plugins are not part of this scan — they load lazily per home at lookup time, overriding bundled same-name profiles.',
   },
   hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
   hookTitle: { zh: '一句话记住 provider 插件', en: 'Provider plugins in one sentence' },

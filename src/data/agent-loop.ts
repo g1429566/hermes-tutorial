@@ -1,6 +1,6 @@
 // Chapter 04「Agent 主循环」数据源：六步步进器。
-// 内容对齐 hermes-agent/AGENTS.md 的「AIAgent Class」与「Agent Loop」一节，
-// 代码片段摘自 run_agent.py 的真实循环结构（手动摘录，阶段 2 起保持此方式）。
+// 内容对齐 hermes-agent/agent/AGENTS.md 的「Shape」与「Agent loop」一节，
+// 代码片段摘自 agent/conversation_loop.py 的真实循环结构（手动摘录，阶段 2 起保持此方式）。
 
 export interface LoopStep {
   id: string;
@@ -13,7 +13,7 @@ export interface LoopStep {
 }
 
 export const AGENT_LOOP_INTRO =
-  '整个 Hermes 的心脏是 run_agent.py 里 AIAgent.run_conversation() 中的一个同步 while 循环：' +
+  '整个 Hermes 的心脏是 agent/conversation_loop.py 里 run_conversation() 中的一个同步 while 循环：' +
   '组装消息 → 调模型 → 有工具调用就执行并追加结果 → 再调模型，直到模型直接返回文本或触碰预算上限。' +
   '点击下面六个步骤，看每一步对应的真实源码与事件流。';
 
@@ -24,16 +24,15 @@ export const LOOP_STEPS: LoopStep[] = [
     title: '输入进入 run_conversation()',
     body: '用户消息以 OpenAI 消息格式进入循环。入口有两个：chat(message) 只回最终文本；run_conversation() 返回完整 dict（final_response + messages）。循环每次迭代开头先检查中断标志——用户在 CLI 里按 Esc 能把 agent 从循环里拽回来。',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'run_conversation()',
-      snippet: `def run_conversation(self, user_message, system_message=None,
-                     conversation_history=None, task_id=None) -> dict:
-    messages = self._build_messages(user_message, system_message,
-                                    conversation_history)
-    while (api_call_count < self.max_iterations
-           and self.iteration_budget.remaining > 0) \\
-           or self._budget_grace_call:
-        if self._interrupt_requested:
+      snippet: `def run_conversation(agent, user_message, system_message=None,
+                     conversation_history=None, task_id=None, ...) -> dict:
+    s = build_turn_context(agent, user_message, ...)  # 组装 system + history
+    while (s.api_call_count < agent.max_iterations
+           and agent.iteration_budget.remaining > 0) \\
+           or agent._budget_grace_call:
+        if agent._interrupt_requested:
             break`,
       note: '消息遵循 OpenAI 格式：{"role": "system/user/assistant/tool", ...}',
     },
@@ -42,7 +41,7 @@ export const LOOP_STEPS: LoopStep[] = [
       { name: 'interrupt.check', desc: '每次迭代开头检查 _interrupt_requested' },
     ],
     points: [
-      'max_iterations 默认 90（与子 agent 共享）',
+      'max_iterations 默认无上限（sys.maxsize），agent.max_turns 可设限',
       'iteration_budget 与「one-turn grace call」：预算耗尽后仍给最后一轮机会',
       '中断不是异常，是循环条件的一部分',
     ],
@@ -77,7 +76,7 @@ export const LOOP_STEPS: LoopStep[] = [
     title: '调用模型',
     body: '同步调用 chat.completions.create——没有流式复杂度的主循环（流式在显示层处理）。模型返回两种东西之一：tool_calls（继续循环）或纯文本 content（结束循环）。provider 适配层把不同后端统一成这一种形状。',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'Agent Loop',
       snippet: `response = client.chat.completions.create(
     model=model, messages=messages, tools=tool_schemas)
@@ -100,14 +99,15 @@ else:
     id: 'tool',
     label: 'TOOL',
     title: '工具调用分发',
-    body: '每个 tool_call 交给 handle_function_call(name, args, task_id)：registry 查表、beforeToolCall 钩子、执行 handler、包装错误、返回 JSON 字符串。todo / memory 这类 agent 级工具在进 handle_function_call 之前就被 run_agent.py 拦截。工具能不能用，取决于 toolsets 配置与 check_fn 环境检查。',
+    body: '每个 tool_call 交给 handle_function_call(name, args, task_id)：registry 查表、pre_tool_call 钩子、执行 handler、包装错误、返回 JSON 字符串。todo_list / memory 这类 agent 级工具在进 handle_function_call 之前就被 agent/tool_executor.py 通过 INLINE_TOOL_EXECUTORS 表拦截。工具能不能用，取决于 toolsets 配置与 check_fn 环境检查。',
     code: {
       file: 'model_tools.py',
       lines: 'handle_function_call()',
       snippet: `for tool_call in response.tool_calls:
     result = handle_function_call(
         tool_call.name, tool_call.args, task_id)
-    messages.append(tool_result_message(result))
+    messages.append(make_tool_result_message(
+        tool_call.name, result, tool_call.id))
 api_call_count += 1`,
       note: '所有 handler 必须返回 JSON 字符串',
     },
@@ -128,9 +128,10 @@ api_call_count += 1`,
     title: '结果回写消息流',
     body: '工具结果以 role="tool" 的消息追加到 messages——追加，永不改写。这是缓存友好的关键：消息流只增长。api_call_count 递增，进入下一次迭代。',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/tool_executor.py',
       lines: 'Agent Loop',
-      snippet: `messages.append(tool_result_message(result))
+      snippet: `messages.append(make_tool_result_message(
+    tool_call.name, result, tool_call.id))
 # 消息流只 append，从不修改历史——
 # 任何 in-place 修改都会让 prompt cache 整体失效`,
     },
@@ -139,7 +140,7 @@ api_call_count += 1`,
       { name: 'budget.tick', desc: '迭代计数与预算扣减' },
     ],
     points: [
-      'tool_result_message 把 JSON 字符串包成 OpenAI tool 消息',
+      'make_tool_result_message 把 JSON 字符串包成 OpenAI tool 消息',
       '大结果会被截断/摘要以保护上下文窗口',
       '错误也被包装成结果消息，agent 能看到并自我纠正',
     ],
@@ -150,12 +151,12 @@ api_call_count += 1`,
     title: '循环还是返回',
     body: '三个出口：模型返回纯文本（正常完成）；触碰 max_iterations 或预算上限（强制收尾）；_interrupt_requested（用户中断，grace call 收尾）。循环结束后，会话写入 SQLite（FTS5 可搜）， curator / memory 等后台系统才上场。',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'Agent Loop',
-      snippet: `while (api_call_count < self.max_iterations
-       and self.iteration_budget.remaining > 0) \\
-       or self._budget_grace_call:
-    if self._interrupt_requested:
+      snippet: `while (s.api_call_count < agent.max_iterations
+       and agent.iteration_budget.remaining > 0) \\
+       or agent._budget_grace_call:
+    if agent._interrupt_requested:
         break
     ...
     else:
@@ -166,9 +167,9 @@ api_call_count += 1`,
       { name: 'on_session_end', desc: '插件钩子：记忆同步等' },
     ],
     points: [
-      '90 次迭代上限与子 agent 共享，防失控',
+      '子 agent 由 delegation.max_iterations 单独限制（示例默认 250）',
       '会话落盘 hermes_state.py（SessionDB），支撑跨会话搜索',
-      'cron 会话有 3 分钟硬中断——调度器不被单个任务拖死',
+      'cron 会话有 600 秒闲置看门狗硬中断（HERMES_CRON_TIMEOUT 可调）——调度器不被单个任务拖死',
     ],
   },
 ];
@@ -176,7 +177,7 @@ api_call_count += 1`,
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const AGENT_LOOP_INTRO_EN =
-  'The heart of Hermes is a synchronous while loop inside AIAgent.run_conversation() in run_agent.py: ' +
+  'The heart of Hermes is a synchronous while loop inside run_conversation() in agent/conversation_loop.py: ' +
   'assemble messages → call the model → execute any tool calls and append the results → call the model again, ' +
   'until the model returns plain text or hits a budget limit. ' +
   'Click the six steps below to see the real source code and event flow behind each one.';
@@ -188,16 +189,15 @@ export const LOOP_STEPS_EN: LoopStep[] = [
     title: 'Input enters run_conversation()',
     body: 'User messages enter the loop in OpenAI message format. There are two entry points: chat(message) returns only the final text; run_conversation() returns the full dict (final_response + messages). At the top of every iteration the loop checks the interrupt flag — pressing Esc in the CLI yanks the agent back out of the loop.',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'run_conversation()',
-      snippet: `def run_conversation(self, user_message, system_message=None,
-                     conversation_history=None, task_id=None) -> dict:
-    messages = self._build_messages(user_message, system_message,
-                                    conversation_history)
-    while (api_call_count < self.max_iterations
-           and self.iteration_budget.remaining > 0) \\
-           or self._budget_grace_call:
-        if self._interrupt_requested:
+      snippet: `def run_conversation(agent, user_message, system_message=None,
+                     conversation_history=None, task_id=None, ...) -> dict:
+    s = build_turn_context(agent, user_message, ...)  # assemble system + history
+    while (s.api_call_count < agent.max_iterations
+           and agent.iteration_budget.remaining > 0) \\
+           or agent._budget_grace_call:
+        if agent._interrupt_requested:
             break`,
       note: 'Messages follow the OpenAI format: {"role": "system/user/assistant/tool", ...}',
     },
@@ -209,7 +209,7 @@ export const LOOP_STEPS_EN: LoopStep[] = [
       },
     ],
     points: [
-      'max_iterations defaults to 90 (shared with subagents)',
+      'max_iterations defaults to unlimited (sys.maxsize); agent.max_turns can cap it',
       'iteration_budget and the "one-turn grace call": one last chance even after the budget runs out',
       'Interrupts are not exceptions — they are part of the loop condition',
     ],
@@ -244,7 +244,7 @@ export const LOOP_STEPS_EN: LoopStep[] = [
     title: 'Call the model',
     body: 'A synchronous chat.completions.create call — no streaming complexity in the main loop (streaming is handled at the display layer). The model returns one of two things: tool_calls (keep looping) or plain text content (end the loop). The provider adapter layer unifies different backends into this single shape.',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'Agent Loop',
       snippet: `response = client.chat.completions.create(
     model=model, messages=messages, tools=tool_schemas)
@@ -267,14 +267,15 @@ else:
     id: 'tool',
     label: 'TOOL',
     title: 'Tool call dispatch',
-    body: 'Each tool_call goes to handle_function_call(name, args, task_id): registry lookup, beforeToolCall hook, handler execution, error wrapping, and a JSON string result. Agent-level tools like todo / memory are intercepted by run_agent.py before they ever reach handle_function_call. Whether a tool is available depends on the toolsets configuration and check_fn environment checks.',
+    body: 'Each tool_call goes to handle_function_call(name, args, task_id): registry lookup, pre_tool_call hook, handler execution, error wrapping, and a JSON string result. Agent-level tools like todo_list / memory are intercepted via the INLINE_TOOL_EXECUTORS table in agent/tool_executor.py before they ever reach handle_function_call. Whether a tool is available depends on the toolsets configuration and check_fn environment checks.',
     code: {
       file: 'model_tools.py',
       lines: 'handle_function_call()',
       snippet: `for tool_call in response.tool_calls:
     result = handle_function_call(
         tool_call.name, tool_call.args, task_id)
-    messages.append(tool_result_message(result))
+    messages.append(make_tool_result_message(
+        tool_call.name, result, tool_call.id))
 api_call_count += 1`,
       note: 'Every handler must return a JSON string',
     },
@@ -295,9 +296,10 @@ api_call_count += 1`,
     title: 'Results written back to the message stream',
     body: 'Tool results are appended to messages as role="tool" messages — appended, never rewritten. This is the key to cache-friendliness: the message stream only grows. api_call_count increments and the next iteration begins.',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/tool_executor.py',
       lines: 'Agent Loop',
-      snippet: `messages.append(tool_result_message(result))
+      snippet: `messages.append(make_tool_result_message(
+    tool_call.name, result, tool_call.id))
 # 消息流只 append，从不修改历史——
 # 任何 in-place 修改都会让 prompt cache 整体失效`,
     },
@@ -306,7 +308,7 @@ api_call_count += 1`,
       { name: 'budget.tick', desc: 'Iteration counting and budget deduction' },
     ],
     points: [
-      'tool_result_message wraps the JSON string into an OpenAI tool message',
+      'make_tool_result_message wraps the JSON string into an OpenAI tool message',
       'Large results are truncated/summarized to protect the context window',
       'Errors are also wrapped as result messages, so the agent can see them and self-correct',
     ],
@@ -317,12 +319,12 @@ api_call_count += 1`,
     title: 'Loop or return',
     body: 'Three exits: the model returns plain text (normal completion); max_iterations or the budget limit is hit (forced wrap-up); _interrupt_requested (user interrupt, wrapped up via the grace call). After the loop ends, the session is written to SQLite (searchable via FTS5), and only then do background systems like the curator and memory kick in.',
     code: {
-      file: 'run_agent.py',
+      file: 'agent/conversation_loop.py',
       lines: 'Agent Loop',
-      snippet: `while (api_call_count < self.max_iterations
-       and self.iteration_budget.remaining > 0) \\
-       or self._budget_grace_call:
-    if self._interrupt_requested:
+      snippet: `while (s.api_call_count < agent.max_iterations
+       and agent.iteration_budget.remaining > 0) \\
+       or agent._budget_grace_call:
+    if agent._interrupt_requested:
         break
     ...
     else:
@@ -333,9 +335,9 @@ api_call_count += 1`,
       { name: 'on_session_end', desc: 'Plugin hook: memory sync, etc.' },
     ],
     points: [
-      'The 90-iteration cap is shared with subagents to prevent runaway loops',
+      'Subagents are capped separately by delegation.max_iterations (250 in the shipped example)',
       'Sessions persist via hermes_state.py (SessionDB), powering cross-session search',
-      'Cron sessions have a 3-minute hard interrupt — the scheduler never gets stuck on one task',
+      'Cron sessions have a 600-second idle watchdog hard interrupt (HERMES_CRON_TIMEOUT overrides) — the scheduler never gets stuck on one task',
     ],
   },
 ];

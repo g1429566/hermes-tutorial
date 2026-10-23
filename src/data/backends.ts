@@ -1,4 +1,4 @@
-// Chapter 16「终端后端」数据源：6 种执行环境对比 + serverless 休眠/唤醒时序。
+// Chapter 16「终端后端」数据源：6 种内置执行环境对比 + serverless 休眠/唤醒时序。
 // 内容对齐 hermes-agent/tools/environments/ 各后端源码的 docstring 与真实机制
 // （对应 AGENTS.md 项目结构中的 environments/ 一行）。
 
@@ -30,11 +30,12 @@ export interface CompareRow {
 
 export const BACKENDS_INTRO =
   'Hermes 的终端工具不只有一种「跑法」：同一条命令可以跑在本机进程、Docker 容器、' +
-  '远程 SSH 主机、HPC 集群的 Singularity 容器，或 Modal / Daytona 的云沙箱里。' +
-  '它们都实现 tools/environments/ 下的同一套 BaseEnvironment 接口，区别在隔离级别、' +
-  '成本模型与启动速度。选中下面每张卡，看各后端的真实机制。';
+  '远程 SSH 主机，或 Modal / Daytona / Vercel Sandbox 的云沙箱里——内置共六种，' +
+  '都实现 tools/environments/ 下的同一套 BaseEnvironment 接口，区别在隔离级别、' +
+  '成本模型与启动速度。HPC 场景的 Singularity/Apptainer 自 2026-10 起转为官方插件' +
+  '（plugin-catalog/singularity.yaml，机制不变）。选中下面每张卡，看各后端的真实机制。';
 
-/* ── ① 六种后端 ─────────────────────────────────────────────────── */
+/* ── ① 六种内置后端 + 插件后端（Singularity） ─────────────────────── */
 export const BACKENDS: Backend[] = [
   {
     id: 'local',
@@ -81,11 +82,13 @@ export const BACKENDS: Backend[] = [
   {
     id: 'singularity',
     name: 'Singularity',
-    tagline: 'HPC 集群的持久容器',
+    tagline: 'HPC 集群的持久容器（2026-10 起为官方插件）',
     isolation: '容器级隔离：--containall、--no-home、capability dropping',
     scenarios: ['HPC / 超算集群（无 root、无 Docker 守护进程）', '需要跨会话保留环境的批处理'],
-    source: 'tools/environments/singularity.py',
+    source:
+      'plugin-catalog/singularity.yaml（原内置，现位于 hermes-official-plugins 仓库 singularity/）',
     features: [
+      '已从核心树移出：plugin-catalog/singularity.yaml 一键安装，老用户配置自动迁移',
       '优先找 apptainer，其次 singularity CLI',
       '安全加固：--containall、--no-home、capability dropping',
       'writable overlay 目录跨会话持久，资源限制可配置',
@@ -100,8 +103,8 @@ export const BACKENDS: Backend[] = [
     scenarios: ['弹性云端算力，按需付费', '本机资源不够或不想占用本机'],
     source: 'tools/environments/modal.py',
     features: [
-      '原生 Modal SDK：Sandbox.create() + Sandbox.exec()',
-      'snapshot_filesystem() 拍文件系统快照，跨会话持久',
+      'modal_mode 可配 auto / direct / managed：直连 Modal，或走 Nous 托管工具网关（managed_modal.py）',
+      '直连模式：Sandbox.create() + Sandbox.exec()，snapshot_filesystem() 拍快照跨会话持久',
       '快照 id 记录在 modal_snapshots.json，下次从快照恢复',
     ],
     serverless: true,
@@ -120,9 +123,23 @@ export const BACKENDS: Backend[] = [
     ],
     serverless: true,
   },
+  {
+    id: 'vercel',
+    name: 'Vercel Sandbox',
+    tagline: 'serverless 云沙箱',
+    isolation: '云沙箱隔离——每个任务跑在 Vercel 云端沙箱里',
+    scenarios: ['已经在用 Vercel 的团队', 'serverless 云端执行', '按需付费的弹性算力'],
+    source: 'tools/environments/vercel_sandbox.py',
+    features: [
+      'Vercel Python SDK（vercel ≥ 0.7）创建与管理云沙箱',
+      '持久化：cleanup 时拍快照、id 存进 vercel_sandbox_snapshots.json，复用时从快照恢复新沙箱',
+      '镜像可配（terminal.vercel_image）；vercel_runtime 已被 Vercel 弃用',
+    ],
+    serverless: true,
+  },
 ];
 
-/* ── ② serverless 休眠/唤醒时序（Modal / Daytona 共用模型） ────────── */
+/* ── ② serverless 休眠/唤醒时序（Modal / Daytona / Vercel 共用模型） ────── */
 export const SERVERLESS_STEPS: ServerlessStep[] = [
   {
     id: 'idle',
@@ -134,7 +151,7 @@ export const SERVERLESS_STEPS: ServerlessStep[] = [
     id: 'sleep',
     label: '休眠',
     title: '休眠省成本，文件系统保留',
-    body: 'Daytona 在 cleanup 时 stop() 沙箱；Modal 用 snapshot_filesystem() 拍下文件系统快照后 terminate()。计算资源释放，但文件系统被完整保留——这是「休眠」而不是「销毁」。',
+    body: 'Daytona 在 cleanup 时 stop() 沙箱；Modal 用 snapshot_filesystem() 拍下文件系统快照后 terminate()；Vercel 也先把快照 id 存进 vercel_sandbox_snapshots.json 再停掉沙箱。计算资源释放，但文件系统被完整保留——这是「休眠」而不是「销毁」。',
   },
   {
     id: 'arrive',
@@ -146,7 +163,7 @@ export const SERVERLESS_STEPS: ServerlessStep[] = [
     id: 'wake',
     label: '冷启动',
     title: '冷启动唤醒',
-    body: 'Daytona 对同一个沙箱调 start() 恢复；Modal 按 modal_snapshots.json 里记录的快照 id 从快照重建。这一步比本地执行慢——serverless 的成本优势就是用冷启动延迟换来的。',
+    body: 'Daytona 对同一个沙箱调 start() 恢复；Modal 与 Vercel 按各自快照记录（modal_snapshots.json / vercel_sandbox_snapshots.json）里的快照 id 从快照重建。这一步比本地执行慢——serverless 的成本优势就是用冷启动延迟换来的。',
   },
   {
     id: 'resume',
@@ -200,16 +217,25 @@ export const COMPARE_ROWS: CompareRow[] = [
     startup: '冷启动（可恢复同一沙箱）',
     platform: 'Daytona 云',
   },
+  {
+    id: 'vercel',
+    isolation: '云沙箱',
+    cost: '按用量计费',
+    startup: '冷启动（快照恢复）',
+    platform: 'Vercel 云',
+  },
 ];
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const BACKENDS_INTRO_EN =
   "Hermes's terminal tool has more than one way to run: the same command can execute in a " +
-  'local process, a Docker container, a remote SSH host, a Singularity container on an HPC ' +
-  'cluster, or a Modal / Daytona cloud sandbox. They all implement the same BaseEnvironment ' +
+  'local process, a Docker container, a remote SSH host, or a Modal / Daytona / Vercel cloud ' +
+  'sandbox — six built-in backends in total, all implementing the same BaseEnvironment ' +
   'interface under tools/environments/; what differs is isolation level, cost model, and ' +
-  'startup speed. Select each card below to see how each backend really works.';
+  'startup speed. Singularity/Apptainer for HPC became an official plugin in 2026-10 ' +
+  '(plugin-catalog/singularity.yaml, mechanism unchanged). Select each card below to see how ' +
+  'each backend really works.';
 
 export const BACKENDS_EN: Backend[] = [
   {
@@ -270,14 +296,16 @@ export const BACKENDS_EN: Backend[] = [
   {
     id: 'singularity',
     name: 'Singularity',
-    tagline: 'Persistent containers for HPC clusters',
+    tagline: 'Persistent containers for HPC clusters (an official plugin since 2026-10)',
     isolation: 'Container-level isolation: --containall, --no-home, capability dropping',
     scenarios: [
       'HPC / supercomputing clusters (no root, no Docker daemon)',
       'Batch jobs that need the environment kept across sessions',
     ],
-    source: 'tools/environments/singularity.py',
+    source:
+      'plugin-catalog/singularity.yaml (moved out of core, now in hermes-official-plugins, singularity/)',
     features: [
+      'Moved out of the core tree: install via plugin-catalog/singularity.yaml; existing users migrated automatically',
       'Prefers apptainer, falls back to the singularity CLI',
       'Hardened: --containall, --no-home, capability dropping',
       'Writable overlay directory persists across sessions; resource limits configurable',
@@ -295,8 +323,8 @@ export const BACKENDS_EN: Backend[] = [
     ],
     source: 'tools/environments/modal.py',
     features: [
-      'Native Modal SDK: Sandbox.create() + Sandbox.exec()',
-      'snapshot_filesystem() takes a filesystem snapshot, persisted across sessions',
+      'modal_mode config: auto / direct / managed — direct Modal, or the Nous-managed tool gateway (managed_modal.py)',
+      'Direct mode: Sandbox.create() + Sandbox.exec(), snapshot_filesystem() snapshot persists across sessions',
       'Snapshot id recorded in modal_snapshots.json; restored from the snapshot next time',
     ],
     serverless: true,
@@ -319,6 +347,24 @@ export const BACKENDS_EN: Backend[] = [
     ],
     serverless: true,
   },
+  {
+    id: 'vercel',
+    name: 'Vercel Sandbox',
+    tagline: 'Serverless cloud sandbox',
+    isolation: 'Cloud sandbox isolation — each task runs in a Vercel cloud sandbox',
+    scenarios: [
+      'Teams already on Vercel',
+      'Serverless cloud execution',
+      'Elastic pay-per-use compute',
+    ],
+    source: 'tools/environments/vercel_sandbox.py',
+    features: [
+      'Vercel Python SDK (vercel >= 0.7) creates and manages cloud sandboxes',
+      'Persistence: snapshot taken on cleanup, id stored in vercel_sandbox_snapshots.json; new sandboxes restore from it on reuse',
+      'Image configurable via terminal.vercel_image; vercel_runtime deprecated by Vercel',
+    ],
+    serverless: true,
+  },
 ];
 
 export const SERVERLESS_STEPS_EN: ServerlessStep[] = [
@@ -332,7 +378,7 @@ export const SERVERLESS_STEPS_EN: ServerlessStep[] = [
     id: 'sleep',
     label: 'Sleep',
     title: 'Sleep to save cost, filesystem kept',
-    body: 'Daytona stop()s the sandbox on cleanup; Modal takes a filesystem snapshot with snapshot_filesystem() and then terminate()s. Compute is released, but the filesystem is fully preserved — this is "sleep", not "destroy".',
+    body: 'Daytona stop()s the sandbox on cleanup; Modal takes a filesystem snapshot with snapshot_filesystem() and then terminate()s; Vercel likewise stores a snapshot id in vercel_sandbox_snapshots.json and then stops the sandbox. Compute is released, but the filesystem is fully preserved — this is "sleep", not "destroy".',
   },
   {
     id: 'arrive',
@@ -344,7 +390,7 @@ export const SERVERLESS_STEPS_EN: ServerlessStep[] = [
     id: 'wake',
     label: 'Cold start',
     title: 'Cold-start wake-up',
-    body: 'Daytona calls start() on the same sandbox to resume it; Modal rebuilds from the snapshot id recorded in modal_snapshots.json. This step is slower than local execution — the cost advantage of serverless is bought with cold-start latency.',
+    body: 'Daytona calls start() on the same sandbox to resume it; Modal and Vercel rebuild from the snapshot id in their snapshot records (modal_snapshots.json / vercel_sandbox_snapshots.json). This step is slower than local execution — the cost advantage of serverless is bought with cold-start latency.',
   },
   {
     id: 'resume',
@@ -397,14 +443,21 @@ export const COMPARE_ROWS_EN: CompareRow[] = [
     startup: 'Cold start (can resume the same sandbox)',
     platform: 'Daytona cloud',
   },
+  {
+    id: 'vercel',
+    isolation: 'Cloud sandbox',
+    cost: 'Pay per usage',
+    startup: 'Cold start (snapshot restore)',
+    platform: 'Vercel cloud',
+  },
 ];
 
 /* ── 组件专属 UI 文案 ─────────────────────────────────────────── */
 export const BACKENDS_UI = {
   backendsKicker: { zh: '执行环境', en: 'Execution environments' },
   backendsTitle: {
-    zh: '六种后端，同一套接口',
-    en: 'Six backends, one interface',
+    zh: '六种内置后端 + 插件，同一套接口',
+    en: 'Six built-in backends + plugins, one interface',
   },
   isolationLabel: { zh: '隔离级别', en: 'Isolation level' },
   scenariosLabel: { zh: '适用场景', en: 'Best for' },
@@ -422,8 +475,8 @@ export const BACKENDS_UI = {
   },
   compareKicker: { zh: '横向对比', en: 'Side by side' },
   compareTitle: {
-    zh: '一张表看懂六种后端',
-    en: 'Six backends in one table',
+    zh: '一张表看懂六种内置后端',
+    en: 'Six built-in backends in one table',
   },
   thBackend: { zh: '后端', en: 'Backend' },
   thIsolation: { zh: '隔离性', en: 'Isolation' },
@@ -435,7 +488,7 @@ export const BACKENDS_UI = {
     en: "Qualitative comparison based on each backend's source docstrings and config options; the selected backend is highlighted in green.",
   },
   takeaway: {
-    zh: '一句话记住终端后端：同一套 BaseEnvironment 接口，六种「跑法」—— 本机求快、 容器求隔离、SSH 借算力、serverless 用冷启动换成本。',
-    en: 'Terminal backends in one sentence: one BaseEnvironment interface, six ways to run — local for speed, containers for isolation, SSH for borrowed compute, serverless trading cold starts for cost.',
+    zh: '一句话记住终端后端：同一套 BaseEnvironment 接口，六种内置「跑法」+ 插件扩展（如 Singularity）—— 本机求快、 容器求隔离、SSH 借算力、serverless 用冷启动换成本。',
+    en: 'Terminal backends in one sentence: one BaseEnvironment interface, six built-in ways to run plus plugin extensions (like Singularity) — local for speed, containers for isolation, SSH for borrowed compute, serverless trading cold starts for cost.',
   },
 };

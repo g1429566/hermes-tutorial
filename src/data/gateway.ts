@@ -1,7 +1,7 @@
 // Chapter 10「消息网关（上）」数据源：网关拓扑图 + 平台 adapter 浏览器。
-// 平台路径对齐真实仓库布局：内置 adapter 在 gateway/platforms/，
-// 插件平台在 plugins/platforms/<name>/adapter.py（AGENTS.md §Project Structure +
-// gateway/platforms/ADDING_A_PLATFORM.md；文件系统为准）。
+// 平台路径对齐真实仓库布局：内置 adapter 只剩 api_server / webhook / msgraph_webhook
+//（gateway/platforms/ 基类与共享件仍在），各消息平台 adapter 住在 plugins/platforms/ 捆绑插件
+//（gateway/run.py 的 _BUILTIN_ADAPTERS 表 + gateway/platforms/ADDING_A_PLATFORM.md；文件系统为准）。
 
 export interface GatewayPlatform {
   id: string;
@@ -22,7 +22,7 @@ export const GATEWAY_INTRO =
 export const GATEWAY_TOPOLOGY = {
   left: {
     title: '平台 adapters',
-    body: '每平台一个 adapter，继承 gateway/platforms/base.py 的 BasePlatformAdapter。内置 adapter 住在 gateway/platforms/，插件平台住在 plugins/platforms/ 并通过 platform_registry.py 自注册。',
+    body: '每平台一个 adapter，继承 gateway/platforms/base.py 的 BasePlatformAdapter。gateway/platforms/ 只剩 api_server / webhook / msgraph_webhook 三个内置 adapter 与基类，各消息平台 adapter 住在 plugins/platforms/ 捆绑插件并通过 platform_registry.py 自注册。',
   },
   middle: {
     title: 'gateway 进程',
@@ -45,7 +45,7 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
     features: [
       'BotCommand 菜单由中央注册表 telegram_bot_commands() 自动生成',
       '支持 forum topics；/handoff 移交会话时会开一个新 topic',
-      '基础 toolset 选 "messaging"，再按 tools.telegram.enabled/disabled 增减',
+      '默认工具面是 hermes-telegram 预设（即 _HERMES_CORE_TOOLS 本体），可用 platform_toolsets.telegram 整体替换',
     ],
   },
   {
@@ -60,7 +60,7 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
     builtin: false,
     features: [
       '可自动建 thread（SessionSource.auto_thread_created），/handoff 创建 1440 分钟自动归档线程',
-      'voice_mixer.py 支撑语音频道：听用户说话 → 转录 → agent → 语音回播',
+      '语音频道闭环：听用户说话 → 转录 → agent → 经 voice_mixer.py 混音回播',
       'recovery.py 负责断连恢复',
     ],
   },
@@ -82,10 +82,10 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
     name: 'WhatsApp',
     tagline: '一套行为 mixin，两种接入',
     source: 'plugins/platforms/whatsapp/adapter.py',
-    extraSources: ['gateway/platforms/whatsapp_cloud.py', 'gateway/platforms/whatsapp_common.py'],
+    extraSources: ['plugins/platforms/whatsapp_cloud/', 'gateway/platforms/whatsapp_common.py'],
     builtin: false,
     features: [
-      'Baileys bridge（插件）与 Meta Cloud API（内置 whatsapp_cloud.py）两种接入',
+      'Baileys bridge（插件）与 Meta Cloud API（plugins/platforms/whatsapp_cloud/ 插件）两种接入',
       '两者共享 gateway/platforms/whatsapp_common.py 的 WhatsAppBehaviorMixin',
       'mixin 必须排在基类列表最前，覆盖默认的 format_message',
     ],
@@ -93,12 +93,15 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
   {
     id: 'signal',
     name: 'Signal',
-    tagline: '内置 adapter',
-    source: 'gateway/platforms/signal.py',
-    extraSources: ['gateway/platforms/signal_format.py', 'gateway/platforms/signal_rate_limit.py'],
-    builtin: true,
+    tagline: '捆绑插件',
+    source: 'plugins/platforms/signal/adapter.py',
+    extraSources: [
+      'plugins/platforms/signal/signal_format.py',
+      'plugins/platforms/signal/signal_rate_limit.py',
+    ],
+    builtin: false,
     features: [
-      '内置在 gateway/platforms/，随仓库直装',
+      '捆绑插件：plugins/platforms/signal/，随仓库直装',
       'signal_rate_limit.py 处理平台限流，signal_format.py 处理消息格式',
       '无原生 thread——/handoff 回落到 home channel',
     ],
@@ -107,9 +110,12 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
     id: 'homeassistant',
     name: 'Home Assistant',
     tagline: '智能家居入口',
-    source: 'plugins/platforms/homeassistant/adapter.py',
+    source: 'plugin-catalog/homeassistant.yaml',
     builtin: false,
-    features: ['把家庭助手事件变成 agent 会话', '专属 homeassistant toolset 控制设备'],
+    features: [
+      '已迁出核心树：现为官方 catalog 插件（老用户由 hermes update 自动迁移安装）',
+      '家庭助手事件进会话 + homeassistant toolset 控设备（ha_call_service 等），需 HASS_TOKEN',
+    ],
   },
   {
     id: 'matrix',
@@ -119,7 +125,7 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
     builtin: false,
     features: [
       'Matrix 协议接入，scope_id 区分服务器（工作区隔离）',
-      '无原生 thread——/handoff 回落到 home channel',
+      '没有建线程 API——/handoff 发 seed 消息，用 event_id 作线程锚（Slack 同款）',
     ],
   },
   {
@@ -172,10 +178,10 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
   {
     id: 'weixin',
     name: 'Weixin 微信',
-    tagline: '内置个人微信',
-    source: 'gateway/platforms/weixin.py',
-    builtin: true,
-    features: ['内置在 gateway/platforms/', '个人微信消息接入'],
+    tagline: '捆绑插件',
+    source: 'plugins/platforms/weixin/adapter.py',
+    builtin: false,
+    features: ['捆绑插件：plugins/platforms/weixin/', '个人微信消息接入'],
   },
   {
     id: 'feishu',
@@ -195,19 +201,19 @@ export const GATEWAY_PLATFORMS: GatewayPlatform[] = [
   {
     id: 'qqbot',
     name: 'QQ Bot',
-    tagline: '内置包',
-    source: 'gateway/platforms/qqbot/',
-    builtin: true,
-    features: ['内置在 gateway/platforms/qqbot/ 包', 'QQ 官方机器人协议接入'],
+    tagline: '插件包',
+    source: 'plugins/platforms/qqbot/',
+    builtin: false,
+    features: ['捆绑插件：plugins/platforms/qqbot/', 'QQ 官方机器人协议接入'],
   },
 ];
 
 export const GATEWAY_REGISTRY_NOTE = {
   title: '新平台怎么进来',
-  body: '内置 adapter 走 run.py 里 _create_adapter() 的 if/elif 链；插件平台通过 PluginContext.register_platform() 注册进 gateway/platform_registry.py——查找时插件优先，找不到再回落内置路径。写一个 adapter 的完整清单见 gateway/platforms/ADDING_A_PLATFORM.md：继承 BasePlatformAdapter，实现收发、按钮回调（clarify 选项 cl:<id>:<idx>、审批 appr:<id>:<choice> 等共享 id 约定），并带上 check_fn 环境检查。',
+  body: '内置 adapter 登记在 gateway/run.py 的 _BUILTIN_ADAPTERS 表里（每项带依赖检查，不满足就跳过）；插件平台通过 PluginContext.register_platform() 注册进 gateway/platform_registry.py——查找时插件优先，未注册再回落内置表。写一个 adapter 的完整清单见 gateway/platforms/ADDING_A_PLATFORM.md：继承 BasePlatformAdapter，实现收发、按钮回调（clarify 选项 cl:<id>:<idx>、审批 appr:<id>:<choice>、斜杠确认 sc:<choice>:<id> 等共享 id 约定），并带上 check_<platform>_requirements 环境检查。',
   points: [
-    '平台 adapter 选择基础 toolset（如 Telegram 用 "messaging"），_HERMES_CORE_TOOLS 是大多数平台继承的默认包',
-    'config.yaml 的 tools.<platform>.enabled / disabled 按平台微调工具面',
+    '每个平台有预设工具面（如 telegram 默认 hermes-telegram 预设，即 _HERMES_CORE_TOOLS 本体）；各预设都共享 _HERMES_CORE_TOOLS 核心包',
+    'config.yaml 的 platform_toolsets.<platform> 按平台替换工具面（hermes tools 可交互配置）',
     '用独立凭据联网的 adapter 应在 connect() 里拿 token lock（gateway.status 的 acquire_scoped_lock），防止两个 profile 抢同一个 bot token',
   ],
 };
@@ -224,7 +230,7 @@ export const GATEWAY_INTRO_EN =
 export const GATEWAY_TOPOLOGY_EN: typeof GATEWAY_TOPOLOGY = {
   left: {
     title: 'Platform adapters',
-    body: 'One adapter per platform, inheriting BasePlatformAdapter from gateway/platforms/base.py. Built-in adapters live in gateway/platforms/; plugin platforms live in plugins/platforms/ and self-register via platform_registry.py.',
+    body: 'One adapter per platform, inheriting BasePlatformAdapter from gateway/platforms/base.py. gateway/platforms/ now holds only three built-in adapters (api_server / webhook / msgraph_webhook) plus the base classes; messaging-platform adapters live in plugins/platforms/ as bundled plugins and self-register via platform_registry.py.',
   },
   middle: {
     title: 'gateway process',
@@ -247,7 +253,7 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
     features: [
       'The BotCommand menu is auto-generated from the central registry telegram_bot_commands()',
       'Supports forum topics; /handoff opens a new topic when moving a session over',
-      'Base toolset is "messaging", then adjusted via tools.telegram.enabled/disabled',
+      'Default tool surface is the hermes-telegram preset (i.e. the _HERMES_CORE_TOOLS body); replace it wholesale via platform_toolsets.telegram',
     ],
   },
   {
@@ -262,7 +268,7 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
     builtin: false,
     features: [
       'Can auto-create threads (SessionSource.auto_thread_created); /handoff creates a 1440-minute auto-archive thread',
-      'voice_mixer.py powers voice channels: listen to the user → transcribe → agent → voice playback',
+      'Voice-channel loop: listen to the user → transcribe → agent → voice_mixer.py mixes the spoken reply',
       'recovery.py handles reconnect recovery',
     ],
   },
@@ -284,10 +290,10 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
     name: 'WhatsApp',
     tagline: 'One behavior mixin, two transports',
     source: 'plugins/platforms/whatsapp/adapter.py',
-    extraSources: ['gateway/platforms/whatsapp_cloud.py', 'gateway/platforms/whatsapp_common.py'],
+    extraSources: ['plugins/platforms/whatsapp_cloud/', 'gateway/platforms/whatsapp_common.py'],
     builtin: false,
     features: [
-      'Two transports: the Baileys bridge (plugin) and the Meta Cloud API (built-in whatsapp_cloud.py)',
+      'Two transports: the Baileys bridge (plugin) and the Meta Cloud API (plugins/platforms/whatsapp_cloud/ plugin)',
       'Both share the WhatsAppBehaviorMixin in gateway/platforms/whatsapp_common.py',
       'The mixin must come first in the base-class list to override the default format_message',
     ],
@@ -295,12 +301,15 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
   {
     id: 'signal',
     name: 'Signal',
-    tagline: 'Built-in adapter',
-    source: 'gateway/platforms/signal.py',
-    extraSources: ['gateway/platforms/signal_format.py', 'gateway/platforms/signal_rate_limit.py'],
-    builtin: true,
+    tagline: 'Bundled plugin',
+    source: 'plugins/platforms/signal/adapter.py',
+    extraSources: [
+      'plugins/platforms/signal/signal_format.py',
+      'plugins/platforms/signal/signal_rate_limit.py',
+    ],
+    builtin: false,
     features: [
-      'Built into gateway/platforms/, shipped with the repo',
+      'Bundled plugin: plugins/platforms/signal/, shipped with the repo',
       'signal_rate_limit.py handles platform rate limiting, signal_format.py handles message formatting',
       'No native threads — /handoff falls back to the home channel',
     ],
@@ -309,11 +318,11 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
     id: 'homeassistant',
     name: 'Home Assistant',
     tagline: 'Smart-home entry point',
-    source: 'plugins/platforms/homeassistant/adapter.py',
+    source: 'plugin-catalog/homeassistant.yaml',
     builtin: false,
     features: [
-      'Turns home-assistant events into agent sessions',
-      'A dedicated homeassistant toolset controls devices',
+      'Moved out of the core tree: now an official catalog plugin (hermes update auto-migrates existing installs)',
+      'Home Assistant events feed sessions; the homeassistant toolset controls devices (ha_call_service etc.), requiring HASS_TOKEN',
     ],
   },
   {
@@ -324,7 +333,7 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
     builtin: false,
     features: [
       'Matrix protocol transport; scope_id distinguishes servers (workspace isolation)',
-      'No native threads — /handoff falls back to the home channel',
+      'No thread-creation API — /handoff posts a seed message and uses its event_id as the thread anchor (Slack-style)',
     ],
   },
   {
@@ -380,10 +389,10 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
   {
     id: 'weixin',
     name: 'Weixin 微信',
-    tagline: 'Built-in personal WeChat',
-    source: 'gateway/platforms/weixin.py',
-    builtin: true,
-    features: ['Built into gateway/platforms/', 'Personal WeChat message transport'],
+    tagline: 'Bundled plugin',
+    source: 'plugins/platforms/weixin/adapter.py',
+    builtin: false,
+    features: ['Bundled plugin: plugins/platforms/weixin/', 'Personal WeChat message transport'],
   },
   {
     id: 'feishu',
@@ -403,22 +412,19 @@ export const GATEWAY_PLATFORMS_EN: GatewayPlatform[] = [
   {
     id: 'qqbot',
     name: 'QQ Bot',
-    tagline: 'Built-in package',
-    source: 'gateway/platforms/qqbot/',
-    builtin: true,
-    features: [
-      'Built into the gateway/platforms/qqbot/ package',
-      'Official QQ bot protocol transport',
-    ],
+    tagline: 'Plugin package',
+    source: 'plugins/platforms/qqbot/',
+    builtin: false,
+    features: ['Bundled plugin: plugins/platforms/qqbot/', 'Official QQ bot protocol transport'],
   },
 ];
 
 export const GATEWAY_REGISTRY_NOTE_EN: typeof GATEWAY_REGISTRY_NOTE = {
   title: 'How a new platform gets in',
-  body: 'Built-in adapters go through the if/elif chain in _create_adapter() in run.py; plugin platforms register into gateway/platform_registry.py via PluginContext.register_platform() — lookup prefers plugins, then falls back to the built-in path. The full checklist for writing an adapter is in gateway/platforms/ADDING_A_PLATFORM.md: inherit BasePlatformAdapter, implement send/receive and button callbacks (shared id conventions like clarify options cl:<id>:<idx> and approvals appr:<id>:<choice>), and ship a check_fn environment check.',
+  body: 'Built-in adapters are listed in the _BUILTIN_ADAPTERS table in gateway/run.py (each entry carries a requirements check and is skipped when unmet); plugin platforms register into gateway/platform_registry.py via PluginContext.register_platform() — lookup prefers plugins, then falls back to the built-in table. The full checklist for writing an adapter is in gateway/platforms/ADDING_A_PLATFORM.md: inherit BasePlatformAdapter, implement send/receive and button callbacks (shared id conventions like clarify options cl:<id>:<idx>, approvals appr:<id>:<choice> and slash confirms sc:<choice>:<id>), and ship a check_<platform>_requirements environment check.',
   points: [
-    'A platform adapter picks a base toolset (e.g. Telegram uses "messaging"); _HERMES_CORE_TOOLS is the default bundle most platforms inherit',
-    'tools.<platform>.enabled / disabled in config.yaml fine-tunes the tool surface per platform',
+    'Each platform has a preset tool surface (e.g. telegram defaults to the hermes-telegram preset, i.e. the _HERMES_CORE_TOOLS bundle itself); all presets share the _HERMES_CORE_TOOLS core bundle',
+    'platform_toolsets.<platform> in config.yaml replaces the tool surface per platform (configurable interactively via hermes tools)',
     'Adapters that go online with their own credentials should take a token lock in connect() (acquire_scoped_lock from gateway.status) to stop two profiles from fighting over the same bot token',
   ],
 };

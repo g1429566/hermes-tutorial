@@ -1,7 +1,8 @@
 // Chapter 12「Cron 定时调度」：5 字段 cron 表达式的纯函数解释器。
 // 输入形如 "0 9 * * *" 的表达式，输出每个字段（分/时/日/月/周）的解释或错误。
-// 支持语法：*、*/n（步长）、单值、逗号列表、区间 a-b——与 cron/jobs.py 接受的
-// 5-field cron 格式对齐（Hermes 另支持时长 / every 短语 / ISO 一次性时间戳，见 cron.ts）。
+// 本解释器覆盖常用子集：*、*/n（步长）、单值、逗号列表、区间 a-b。hermes 侧由 croniter
+// 解析（cron/jobs.py::parse_schedule），接受的方言更广（5–6 字段、MON/FRI 与 JAN-DEC
+// 命名字段等，见 cron.ts 的格式卡片）。（Hermes 另支持时长 / every 短语 / ISO 一次性时间戳。）
 // 解释文案按调用方传入的语言返回（默认中文）。
 
 import type { Lang } from '@/lib/i18n';

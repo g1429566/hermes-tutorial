@@ -256,13 +256,14 @@ export default function SkillCuratorLab() {
           file="~/.hermes/skills/.usage.json"
           code={`{
   "weekly-review": {
+    "created_by": "agent",
     "use_count": 6,
     "view_count": 11,
     "patch_count": 2,
-    "last_activity_at": 1750000000.0,
+    "last_used_at": "2026-10-11T09:30:00+00:00",
+    "created_at": "2026-06-20T12:00:00+00:00",
     "state": "active",
-    "pinned": false,
-    "created_by": "agent"
+    "pinned": false
   }
 }`}
           note={pick(lang, CURATOR_UI.usageNote)}

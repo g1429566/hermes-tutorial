@@ -53,14 +53,12 @@ const FLOW_STEPS: FlowStep[] = [
       file: 'gateway/session.py',
       lines: 'class SessionSource',
       snippet: `class SessionSource:
-    """Describes where a message originated from.
-
-    1. Route responses back to the right place
-    2. Inject context into the system prompt
-    3. Track origin for cron job delivery
-    """
+    """Where a message originated: routes responses, feeds the
+    system-prompt context block, and records origin for cron
+    delivery."""
     platform: Platform
     chat_id: str
+    chat_name: Optional[str] = None
     chat_type: str = "dm"   # "dm", "group", "channel", "thread"
     thread_id: Optional[str] = None
     scope_id: Optional[str] = None  # Discord guild / Slack workspace / Matrix server`,
@@ -80,11 +78,7 @@ const FLOW_STEPS: FlowStep[] = [
       file: 'hermes_cli/commands.py',
       lines: 'ACTIVE_SESSION_BYPASS_COMMANDS',
       snippet: `ACTIVE_SESSION_BYPASS_COMMANDS: frozenset[str] = frozenset(
-    {
-        "agents", "approve", "background", "commands", "deny",
-        "help", "new", "profile", "queue", "restart",
-        "status", "steer", "stop", "update", "version",
-    }
+    cmd.name for cmd in COMMAND_REGISTRY if cmd.busy_policy != "reject"
 )
 # 真正的 bypass 集更大：should_bypass_active_session()
 # 对任何可解析的 slash 命令都返回 True——排队对命令永远是错的`,
@@ -130,8 +124,8 @@ const FLOW_STEPS: FlowStep[] = [
     ...
 ) -> bool:
     """Append a delivery-mirror message to the target session's
-    transcript — the receiving-side agent has context about
-    what was sent."""`,
+    SQLite transcript so the receiving-side agent knows what was
+    sent."""`,
     },
     points: [
       '回复目标 = SessionSource（platform + chat_id + thread_id）',
@@ -145,12 +139,14 @@ const FLOW_STEPS: FlowStep[] = [
 
 const STT_NOTE = {
   title: '语音消息转录（stt）',
-  body: '用户发来语音，音频附件自动进入 STT pipeline（run.py 的 _event_media_is_stt_input 判断），转录文本再交给 agent——agent 看到的始终是文字。config.yaml 的 stt: 段控制开关与 provider：local 用 faster-whisper 本地跑，免费、不需要任何 API key（base 模型约 150 MB，首次使用自动下载）；也可以接 groq / openai / mistral / xai。',
+  body: '用户发来语音，音频附件自动进入 STT pipeline（run.py 的 _event_media_is_stt_input 判断），转录文本再交给 agent——agent 看到的始终是文字。config.yaml 的 stt: 段控制开关与 provider：local 用 faster-whisper 本地跑，免费、不需要任何 API key（base 模型约 150 MB，首次使用自动下载）；云端可接 groq / openai / mistral / xai / elevenlabs / deepinfra，provider 缺省时按 local → groq → openai → … 自动探测。',
   code: `# config.yaml
 stt:
   enabled: true        # false 则跳过自动转录
-  provider: "local"    # "local"(免费) | "groq" | "openai" | "mistral" | "xai"
-  # model: "whisper-1" # 旧式写法：未设 provider 时使用`,
+  # provider: "local"  # "local"(免费) | "groq" | "openai" | "mistral" |
+                       # "xai" | "elevenlabs" | "deepinfra"；缺省自动探测
+  local:
+    model: "base"      # tiny | base | small | medium | large-v3 | turbo`,
   codeFile: 'config.yaml',
   codeLines: 'stt: 段',
   points: [
@@ -162,7 +158,7 @@ stt:
 
 const HANDOFF_NOTE = {
   title: '跨平台连续性：/handoff 与 /resume',
-  body: '会话不锁死在某个平台上。CLI 会话里输入 /handoff <platform>，网关会把 live 会话移交到目标平台的 home channel——同一个 session id、完整的角色感知 transcript、连工具调用记录都在。网关先让目标 adapter 开一个新线程锚点：Telegram 开 forum topic，Discord 建 1440 分钟自动归档 thread，Slack 以一条 seed 消息的 ts 作锚，WhatsApp / Signal / Matrix / SMS 没有原生线程则回落到 home channel。随后网关把目标 key 重新绑定到原 session id，对话就地继续。想回桌面，/resume <title> 随时接回来。',
+  body: '会话不锁死在某个平台上。CLI 会话里输入 /handoff <platform>，网关会把 live 会话移交到目标平台的 home channel——同一个 session id、完整的角色感知 transcript、连工具调用记录都在。网关先让目标 adapter 开一个新线程锚点：Telegram 开 forum topic，Discord 建 1440 分钟自动归档 thread，Slack 以一条 seed 消息的 ts 作锚，Matrix 与 Slack 同款（发 seed 消息、用 event_id 作线程锚），WhatsApp / Signal / SMS 没有原生线程则回落到 home channel。随后网关把目标 key 重新绑定到原 session id，对话就地继续。想回桌面，/resume <title> 随时接回来。',
   code: `# 在 CLI 会话里
 /handoff telegram
 
@@ -177,7 +173,8 @@ const HANDOFF_NOTE = {
 };
 
 const BG_NOTIFY_MODES = [
-  { id: 'all', name: 'all（默认）', desc: '运行中输出更新 + 最终完成消息，全量播报' },
+  { id: 'concise', name: 'concise（默认）', desc: '一行简报；失败时追加输出尾巴' },
+  { id: 'all', name: 'all', desc: '运行中输出更新 + 最终完成消息，全量播报' },
   { id: 'result', name: 'result', desc: '只发最终完成消息，过程不打扰' },
   { id: 'error', name: 'error', desc: '只在退出码非 0 时发最终消息——安静但不错过失败' },
   { id: 'off', name: 'off', desc: '完全不发 watcher 消息' },
@@ -185,7 +182,7 @@ const BG_NOTIFY_MODES = [
 
 const BG_NOTIFY_BODY =
   'terminal(background=true, notify_on_complete=true) 启动的后台进程，由网关 watcher 盯着：进程一结束就触发一个新的 agent 回合汇报结果。' +
-  '吵不吵由 config.yaml 的 display.background_process_notifications（或环境变量 HERMES_BACKGROUND_NOTIFICATIONS）控制，四档可选。';
+  '吵不吵由 config.yaml 的 display.background_process_notifications（或环境变量 HERMES_BACKGROUND_NOTIFICATIONS）控制，五档可选。';
 
 /* ── 英文版（结构与上方中文常量一一对应） ──────────────────────── */
 
@@ -224,14 +221,12 @@ const FLOW_STEPS_EN: FlowStep[] = [
       file: 'gateway/session.py',
       lines: 'class SessionSource',
       snippet: `class SessionSource:
-    """Describes where a message originated from.
-
-    1. Route responses back to the right place
-    2. Inject context into the system prompt
-    3. Track origin for cron job delivery
-    """
+    """Where a message originated: routes responses, feeds the
+    system-prompt context block, and records origin for cron
+    delivery."""
     platform: Platform
     chat_id: str
+    chat_name: Optional[str] = None
     chat_type: str = "dm"   # "dm", "group", "channel", "thread"
     thread_id: Optional[str] = None
     scope_id: Optional[str] = None  # Discord guild / Slack workspace / Matrix server`,
@@ -251,11 +246,7 @@ const FLOW_STEPS_EN: FlowStep[] = [
       file: 'hermes_cli/commands.py',
       lines: 'ACTIVE_SESSION_BYPASS_COMMANDS',
       snippet: `ACTIVE_SESSION_BYPASS_COMMANDS: frozenset[str] = frozenset(
-    {
-        "agents", "approve", "background", "commands", "deny",
-        "help", "new", "profile", "queue", "restart",
-        "status", "steer", "stop", "update", "version",
-    }
+    cmd.name for cmd in COMMAND_REGISTRY if cmd.busy_policy != "reject"
 )
 # 真正的 bypass 集更大：should_bypass_active_session()
 # 对任何可解析的 slash 命令都返回 True——排队对命令永远是错的`,
@@ -301,8 +292,8 @@ const FLOW_STEPS_EN: FlowStep[] = [
     ...
 ) -> bool:
     """Append a delivery-mirror message to the target session's
-    transcript — the receiving-side agent has context about
-    what was sent."""`,
+    SQLite transcript so the receiving-side agent knows what was
+    sent."""`,
     },
     points: [
       'Reply target = SessionSource (platform + chat_id + thread_id)',
@@ -314,12 +305,14 @@ const FLOW_STEPS_EN: FlowStep[] = [
 
 const STT_NOTE_EN: typeof STT_NOTE = {
   title: 'Voice message transcription (stt)',
-  body: "When a user sends a voice message, the audio attachment automatically enters the STT pipeline (run.py's _event_media_is_stt_input decides), and the transcribed text is handed to the agent — the agent always sees text. The stt: section in config.yaml controls the switch and the provider: local runs faster-whisper locally, free, no API key needed (the base model is ~150 MB, downloaded automatically on first use); groq / openai / mistral / xai are also supported.",
+  body: "When a user sends a voice message, the audio attachment automatically enters the STT pipeline (run.py's _event_media_is_stt_input decides), and the transcribed text is handed to the agent — the agent always sees text. The stt: section in config.yaml controls the switch and the provider: local runs faster-whisper locally, free, no API key needed (the base model is ~150 MB, downloaded automatically on first use); cloud providers groq / openai / mistral / xai / elevenlabs / deepinfra are also supported, and when provider is unset it auto-detects local → groq → openai → …",
   code: `# config.yaml
 stt:
   enabled: true        # false 则跳过自动转录
-  provider: "local"    # "local"(免费) | "groq" | "openai" | "mistral" | "xai"
-  # model: "whisper-1" # 旧式写法：未设 provider 时使用`,
+  # provider: "local"  # "local"(免费) | "groq" | "openai" | "mistral" |
+                       # "xai" | "elevenlabs" | "deepinfra"；缺省自动探测
+  local:
+    model: "base"      # tiny | base | small | medium | large-v3 | turbo`,
   codeFile: 'config.yaml',
   codeLines: 'stt: section',
   points: [
@@ -331,7 +324,7 @@ stt:
 
 const HANDOFF_NOTE_EN: typeof HANDOFF_NOTE = {
   title: 'Cross-platform continuity: /handoff and /resume',
-  body: "A session is not locked to one platform. Type /handoff <platform> in a CLI session and the gateway moves the live session to the target platform's home channel — same session id, full role-aware transcript, tool-call records included. The gateway first has the target adapter open a new thread anchor: Telegram opens a forum topic, Discord creates a 1440-minute auto-archive thread, Slack anchors on the ts of a seed message, and WhatsApp / Signal / Matrix / SMS, having no native threads, fall back to the home channel. The gateway then rebinds the target key to the original session id and the conversation continues in place. To go back to the desktop, /resume <title> brings it back anytime.",
+  body: "A session is not locked to one platform. Type /handoff <platform> in a CLI session and the gateway moves the live session to the target platform's home channel — same session id, full role-aware transcript, tool-call records included. The gateway first has the target adapter open a new thread anchor: Telegram opens a forum topic, Discord creates a 1440-minute auto-archive thread, Slack anchors on the ts of a seed message, Matrix does it Slack-style (a seed message whose event_id becomes the thread anchor), and WhatsApp / Signal / SMS, having no native threads, fall back to the home channel. The gateway then rebinds the target key to the original session id and the conversation continues in place. To go back to the desktop, /resume <title> brings it back anytime.",
   code: `# 在 CLI 会话里
 /handoff telegram
 
@@ -347,8 +340,13 @@ const HANDOFF_NOTE_EN: typeof HANDOFF_NOTE = {
 
 const BG_NOTIFY_MODES_EN: typeof BG_NOTIFY_MODES = [
   {
+    id: 'concise',
+    name: 'concise (default)',
+    desc: 'A one-line summary; failures append an output tail',
+  },
+  {
     id: 'all',
-    name: 'all (default)',
+    name: 'all',
     desc: 'Output updates while running + the final completion message — full reporting',
   },
   { id: 'result', name: 'result', desc: 'Only the final completion message; no mid-run noise' },
@@ -362,7 +360,7 @@ const BG_NOTIFY_MODES_EN: typeof BG_NOTIFY_MODES = [
 
 const BG_NOTIFY_BODY_EN =
   'Background processes started with terminal(background=true, notify_on_complete=true) are watched by the gateway watcher: the moment a process exits, a new agent turn is triggered to report the result. ' +
-  'How chatty it gets is controlled by display.background_process_notifications in config.yaml (or the HERMES_BACKGROUND_NOTIFICATIONS environment variable), with four levels.';
+  'How chatty it gets is controlled by display.background_process_notifications in config.yaml (or the HERMES_BACKGROUND_NOTIFICATIONS environment variable), with five levels.';
 
 // 本章专属 UI 文案（组件硬编码部分）。
 const FLOW_UI = {
@@ -496,7 +494,7 @@ export default function GatewayFlowLab() {
       <p className="mt-4 max-w-3xl text-sm leading-relaxed text-ink/75">
         {lang === 'en' ? BG_NOTIFY_BODY_EN : BG_NOTIFY_BODY}
       </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         {bgModes.map((m) => (
           <div key={m.id} className="rounded-lg border border-line bg-white p-4">
             <p className="font-mono text-sm text-ember">{m.name}</p>

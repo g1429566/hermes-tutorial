@@ -1,6 +1,6 @@
 // Chapter 15「CLI 架构」数据源：CommandDef 字段 / 命令树 / 注册表消费者 / 添加命令四步。
-// 内容对齐 hermes-agent/AGENTS.md 的「CLI Architecture (cli.py)」与
-// 「Slash Command Registry (hermes_cli/commands.py)」两节；代码片段逐字摘自真实源码。
+// 内容对齐 hermes-agent/hermes_cli/AGENTS.md 的「CLI architecture」与
+// 「Slash command registry (hermes_cli/commands.py)」两节；代码片段逐字摘自真实源码。
 
 export interface CommandFieldDoc {
   id: string;
@@ -39,7 +39,8 @@ export const CLI_INTRO =
   '但真正的主角是 hermes_cli/commands.py 里的 COMMAND_REGISTRY——一份 CommandDef 列表，' +
   '它是所有斜杠命令的单一事实来源：CLI 分发、网关分发、Telegram 菜单、Slack 子命令、' +
   '自动补全、两端的 help，全部从它自动派生。process_command() 只做一件事：' +
-  '用 resolve_command() 把别名解析成规范名，然后分发。';
+  '用 resolve_command() 把别名解析成规范名，再按 _SLASH_DISPATCH 表分发' +
+  '（表外命令由 _handle_<name>_command 命名约定兜底）。';
 
 /* ── ① CommandDef 字段（hermes_cli/commands.py 的 frozen dataclass） ── */
 export const COMMAND_DEF_FIELDS: CommandFieldDoc[] = [
@@ -55,13 +56,13 @@ export const COMMAND_DEF_FIELDS: CommandFieldDoc[] = [
     name: 'description',
     type: 'str',
     desc: '人类可读描述，出现在 CLI help、网关 /help、Telegram 菜单里。',
-    example: '"Run a prompt in the background"',
+    example: '"Run a prompt in a separate background session"',
   },
   {
     id: 'category',
     name: 'category',
     type: 'str',
-    desc: '五个分类之一，决定 help 里的分组（COMMANDS_BY_CATEGORY）。',
+    desc: '五个分类之一，决定 help 与命令面板里的分组（COMMANDS_BY_CATEGORY）。',
     example: '"Session" | "Configuration" | "Tools & Skills" | "Info" | "Exit"',
   },
   {
@@ -69,7 +70,7 @@ export const COMMAND_DEF_FIELDS: CommandFieldDoc[] = [
     name: 'aliases',
     type: 'tuple[str, ...]',
     desc: '别名元组。加一个别名只需改这里——分发、help、菜单、补全自动同步。',
-    example: '("bg", "btw")',
+    example: '("learning", "memory-graph")',
   },
   {
     id: 'args_hint',
@@ -132,22 +133,22 @@ export const CLI_COMMANDS: Record<string, CliCommand[]> = {
            aliases=("compact",), args_hint="[here [N] | focus topic | --preview|--dry-run]"),`,
     },
     {
-      id: 'background',
-      desc: '后台运行一个 prompt',
-      aliases: 'bg, btw',
+      id: 'bg',
+      desc: '在独立的后台会话中运行一个 prompt',
       argsHint: '<prompt>',
       flags: [],
-      snippet: `CommandDef("background", "Run a prompt in the background", "Session",
-           aliases=("bg", "btw"), args_hint="<prompt>"),`,
+      snippet: `CommandDef("bg", "Run a prompt in a separate background session", "Session",
+           args_hint="<prompt>"),`,
     },
     {
       id: 'queue',
-      desc: '把 prompt 排队到下一轮（不打断当前轮）',
+      desc: '把 prompt 排到下一轮，或列出 / 编辑 / 删除 / 调整已排队的 prompt',
       aliases: 'q',
-      argsHint: '<prompt>',
+      argsHint: '[<prompt>|list|edit N <prompt>|rm N|move A B|clear]',
       flags: [],
-      snippet: `CommandDef("queue", "Queue a prompt for the next turn (doesn't interrupt)", "Session",
-           aliases=("q",), args_hint="<prompt>"),`,
+      snippet: `CommandDef("queue", "Queue a prompt for the next turn, or list/edit/rm/move/clear queued prompts",
+           "Session", aliases=("q",),
+           args_hint="[<prompt>|list|edit N <prompt>|rm N|move A B|clear]", ...),`,
     },
     {
       id: 'status',
@@ -166,11 +167,11 @@ export const CLI_COMMANDS: Record<string, CliCommand[]> = {
     },
     {
       id: 'model',
-      desc: '切换模型（默认持久化）',
-      argsHint: '[model] [--provider name] [--global|--session] [--refresh]',
+      desc: '切换模型（默认仅当前会话；--global 持久化）',
+      argsHint: '[model] [--provider name] [--reasoning level] [--global|--session] [--refresh]',
       flags: [],
-      snippet: `CommandDef("model", "Switch model (persists by default)", "Configuration",
-           args_hint="[model] [--provider name] [--global|--session] [--refresh]"),`,
+      snippet: `CommandDef("model", "Switch model (session-scoped; --global to persist)", "Configuration",
+           args_hint="[model] [--provider name] [--reasoning level] [--global|--session] [--refresh]", ...),`,
     },
     {
       id: 'statusbar',
@@ -192,9 +193,9 @@ export const CLI_COMMANDS: Record<string, CliCommand[]> = {
     },
     {
       id: 'verbose',
-      desc: '循环工具进度显示：off → new → all → verbose → log',
+      desc: '循环工具进度显示：off → new → all → verbose',
       flags: ['cli_only', 'gateway_config_gate="display.tool_progress_command"'],
-      snippet: `CommandDef("verbose", "Cycle tool progress display: off -> new -> all -> verbose -> log",
+      snippet: `CommandDef("verbose", "Cycle tool progress display: off -> new -> all -> verbose",
            "Configuration", cli_only=True,
            gateway_config_gate="display.tool_progress_command"),`,
     },
@@ -272,8 +273,8 @@ export const REGISTRY_CONSUMERS: RegistryConsumer[] = [
   {
     id: 'cli',
     name: 'CLI 分发',
-    deriver: 'process_command() + resolve_command()',
-    body: 'cli.py 的 HermesCLI.process_command() 用 resolve_command() 把别名解析为规范名，再按规范名分发到对应处理器。',
+    deriver: 'process_command() + _SLASH_DISPATCH + resolve_command()',
+    body: 'cli.py 的 HermesCLI.process_command() 用 resolve_command() 把别名解析为规范名，再按 _SLASH_DISPATCH 表（canonical → (方法名, 是否传参)）查表分发；表外命令由 _handle_<name>_command 命名约定兜底。',
   },
   {
     id: 'gateway',
@@ -308,8 +309,8 @@ export const REGISTRY_CONSUMERS: RegistryConsumer[] = [
   {
     id: 'cli-help',
     name: 'CLI 帮助',
-    deriver: 'COMMANDS_BY_CATEGORY → show_help()',
-    body: 'COMMANDS_BY_CATEGORY dict 按 category 分组，喂给 CLI 的 show_help()。',
+    deriver: 'COMMAND_REGISTRY → show_help()',
+    body: 'CLI 的 show_help() 直接遍历 COMMAND_REGISTRY，按 category 与 HELP_SESSION_SUBGROUPS 分组渲染帮助；COMMANDS_BY_CATEGORY 则喂给 TUI / Desktop 的命令面板。',
   },
 ];
 
@@ -333,23 +334,24 @@ export const ADD_COMMAND_STEPS: AddCommandStep[] = [
   {
     id: 'handler',
     label: '② CLI handler',
-    title: '在 HermesCLI.process_command() 里加处理器',
-    body: 'cli.py 的 process_command() 按 resolve_command() 解析出的规范名分发。在这里接上你的处理逻辑。',
+    title: '加一个 _handle_<name>_command 处理器',
+    body: 'cli.py 的 process_command() 按 _SLASH_DISPATCH 表分发，表外命令回落到 _handle_<name>_command 命名约定。在合适的 hermes_cli/cli_*_mixin.py 里实现这个方法即可被自动找到。',
     code: {
-      file: 'cli.py',
-      snippet: `elif canonical == "mycommand":
-    self._handle_mycommand(cmd_original)`,
+      file: 'hermes_cli/cli_*_mixin.py',
+      snippet: `def _handle_mycommand_command(self, cmd_original):
+    ...  # 命名约定：_handle_<name>_command`,
+      note: '命名或传参特殊时，再在 cli.py 的 _SLASH_DISPATCH 里加显式条目',
     },
   },
   {
     id: 'gateway',
     label: '③ Gateway handler',
     title: '若命令在网关可用，再加网关处理器',
-    body: '如果这条命令也要在 Telegram / Slack 等平台可用，在 gateway/run.py 里加对应的异步处理器。',
+    body: '如果这条命令也要在 Telegram / Slack 等平台可用，在 gateway/slash_commands_*.py 里加异步处理器，并登记进 gateway/run_busy.py 的 _IDLE_COMMANDS（需要运行中可用就放 _PLAIN_COMMANDS）。',
     code: {
-      file: 'gateway/run.py',
-      snippet: `if canonical == "mycommand":
-    return await self._handle_mycommand(event)`,
+      file: 'gateway/slash_commands_*.py',
+      snippet: `async def _handle_mycommand_command(self, event):
+    ...  # 再登记进 run_busy.py 的 _IDLE_COMMANDS`,
     },
   },
   {
@@ -373,7 +375,8 @@ export const CLI_INTRO_EN =
   'a list of CommandDef entries that is the single source of truth for every slash command: ' +
   'CLI dispatch, gateway dispatch, the Telegram menu, Slack subcommands, autocomplete, and help ' +
   'on both ends are all derived from it automatically. process_command() does one thing: ' +
-  'resolve aliases to canonical names with resolve_command(), then dispatch.';
+  'resolve aliases to canonical names with resolve_command(), then dispatch through the ' +
+  '_SLASH_DISPATCH table (with a _handle_<name>_command naming-convention fallback).';
 
 export const COMMAND_DEF_FIELDS_EN: CommandFieldDoc[] = [
   {
@@ -388,13 +391,13 @@ export const COMMAND_DEF_FIELDS_EN: CommandFieldDoc[] = [
     name: 'description',
     type: 'str',
     desc: 'Human-readable description, shown in CLI help, gateway /help, and the Telegram menu.',
-    example: '"Run a prompt in the background"',
+    example: '"Run a prompt in a separate background session"',
   },
   {
     id: 'category',
     name: 'category',
     type: 'str',
-    desc: 'One of five categories; determines the grouping in help (COMMANDS_BY_CATEGORY).',
+    desc: 'One of five categories; determines the grouping in help and the command palette (COMMANDS_BY_CATEGORY).',
     example: '"Session" | "Configuration" | "Tools & Skills" | "Info" | "Exit"',
   },
   {
@@ -402,7 +405,7 @@ export const COMMAND_DEF_FIELDS_EN: CommandFieldDoc[] = [
     name: 'aliases',
     type: 'tuple[str, ...]',
     desc: 'Alias tuple. Adding an alias only requires editing here — dispatch, help, menus, and autocomplete all sync automatically.',
-    example: '("bg", "btw")',
+    example: '("learning", "memory-graph")',
   },
   {
     id: 'args_hint',
@@ -462,22 +465,22 @@ export const CLI_COMMANDS_EN: Record<string, CliCommand[]> = {
            aliases=("compact",), args_hint="[here [N] | focus topic | --preview|--dry-run]"),`,
     },
     {
-      id: 'background',
-      desc: 'Run a prompt in the background',
-      aliases: 'bg, btw',
+      id: 'bg',
+      desc: 'Run a prompt in a separate background session',
       argsHint: '<prompt>',
       flags: [],
-      snippet: `CommandDef("background", "Run a prompt in the background", "Session",
-           aliases=("bg", "btw"), args_hint="<prompt>"),`,
+      snippet: `CommandDef("bg", "Run a prompt in a separate background session", "Session",
+           args_hint="<prompt>"),`,
     },
     {
       id: 'queue',
-      desc: "Queue a prompt for the next turn (doesn't interrupt the current one)",
+      desc: 'Queue a prompt for the next turn, or list/edit/rm/move/clear queued prompts',
       aliases: 'q',
-      argsHint: '<prompt>',
+      argsHint: '[<prompt>|list|edit N <prompt>|rm N|move A B|clear]',
       flags: [],
-      snippet: `CommandDef("queue", "Queue a prompt for the next turn (doesn't interrupt)", "Session",
-           aliases=("q",), args_hint="<prompt>"),`,
+      snippet: `CommandDef("queue", "Queue a prompt for the next turn, or list/edit/rm/move/clear queued prompts",
+           "Session", aliases=("q",),
+           args_hint="[<prompt>|list|edit N <prompt>|rm N|move A B|clear]", ...),`,
     },
     {
       id: 'status',
@@ -496,11 +499,11 @@ export const CLI_COMMANDS_EN: Record<string, CliCommand[]> = {
     },
     {
       id: 'model',
-      desc: 'Switch model (persists by default)',
-      argsHint: '[model] [--provider name] [--global|--session] [--refresh]',
+      desc: 'Switch model (session-scoped; --global to persist)',
+      argsHint: '[model] [--provider name] [--reasoning level] [--global|--session] [--refresh]',
       flags: [],
-      snippet: `CommandDef("model", "Switch model (persists by default)", "Configuration",
-           args_hint="[model] [--provider name] [--global|--session] [--refresh]"),`,
+      snippet: `CommandDef("model", "Switch model (session-scoped; --global to persist)", "Configuration",
+           args_hint="[model] [--provider name] [--reasoning level] [--global|--session] [--refresh]", ...),`,
     },
     {
       id: 'statusbar',
@@ -522,9 +525,9 @@ export const CLI_COMMANDS_EN: Record<string, CliCommand[]> = {
     },
     {
       id: 'verbose',
-      desc: 'Cycle tool progress display: off → new → all → verbose → log',
+      desc: 'Cycle tool progress display: off → new → all → verbose',
       flags: ['cli_only', 'gateway_config_gate="display.tool_progress_command"'],
-      snippet: `CommandDef("verbose", "Cycle tool progress display: off -> new -> all -> verbose -> log",
+      snippet: `CommandDef("verbose", "Cycle tool progress display: off -> new -> all -> verbose",
            "Configuration", cli_only=True,
            gateway_config_gate="display.tool_progress_command"),`,
     },
@@ -601,8 +604,8 @@ export const REGISTRY_CONSUMERS_EN: RegistryConsumer[] = [
   {
     id: 'cli',
     name: 'CLI dispatch',
-    deriver: 'process_command() + resolve_command()',
-    body: "cli.py's HermesCLI.process_command() resolves aliases to canonical names with resolve_command(), then dispatches to the matching handler by canonical name.",
+    deriver: 'process_command() + _SLASH_DISPATCH + resolve_command()',
+    body: "cli.py's HermesCLI.process_command() resolves aliases to canonical names with resolve_command(), then dispatches through the _SLASH_DISPATCH table (canonical -> (method name, pass_arg?)); commands missing from the table fall back to the _handle_<name>_command naming convention.",
   },
   {
     id: 'gateway',
@@ -637,8 +640,8 @@ export const REGISTRY_CONSUMERS_EN: RegistryConsumer[] = [
   {
     id: 'cli-help',
     name: 'CLI help',
-    deriver: 'COMMANDS_BY_CATEGORY → show_help()',
-    body: "The COMMANDS_BY_CATEGORY dict groups commands by category and feeds the CLI's show_help().",
+    deriver: 'COMMAND_REGISTRY → show_help()',
+    body: "The CLI's show_help() iterates COMMAND_REGISTRY directly, rendering groups by category and HELP_SESSION_SUBGROUPS; COMMANDS_BY_CATEGORY instead feeds the TUI / Desktop command palette.",
   },
 ];
 
@@ -662,23 +665,24 @@ export const ADD_COMMAND_STEPS_EN: AddCommandStep[] = [
   {
     id: 'handler',
     label: '② CLI handler',
-    title: 'Add a handler in HermesCLI.process_command()',
-    body: "cli.py's process_command() dispatches by the canonical name resolved by resolve_command(). Wire up your handling logic here.",
+    title: 'Add a _handle_<name>_command handler',
+    body: "cli.py's process_command() dispatches through the _SLASH_DISPATCH table, falling back to the _handle_<name>_command naming convention. Implement that method on the right hermes_cli/cli_*_mixin.py and it is picked up automatically.",
     code: {
-      file: 'cli.py',
-      snippet: `elif canonical == "mycommand":
-    self._handle_mycommand(cmd_original)`,
+      file: 'hermes_cli/cli_*_mixin.py',
+      snippet: `def _handle_mycommand_command(self, cmd_original):
+    ...  # naming convention: _handle_<name>_command`,
+      note: 'If the name or arg-passing differs, add an explicit entry in _SLASH_DISPATCH (cli.py)',
     },
   },
   {
     id: 'gateway',
     label: '③ Gateway handler',
     title: 'If the command works on the gateway, add a gateway handler too',
-    body: 'If this command should also work on platforms like Telegram / Slack, add the corresponding async handler in gateway/run.py.',
+    body: 'If this command should also work on platforms like Telegram / Slack, add the async handler in a gateway/slash_commands_*.py mixin and register it in _IDLE_COMMANDS in gateway/run_busy.py (use _PLAIN_COMMANDS if it must work mid-run).',
     code: {
-      file: 'gateway/run.py',
-      snippet: `if canonical == "mycommand":
-    return await self._handle_mycommand(event)`,
+      file: 'gateway/slash_commands_*.py',
+      snippet: `async def _handle_mycommand_command(self, event):
+    ...  # then list "mycommand" in run_busy.py's _IDLE_COMMANDS`,
     },
   },
   {
@@ -697,7 +701,7 @@ export const ADD_COMMAND_STEPS_EN: AddCommandStep[] = [
 /* ── 组件专属 UI 文案 ─────────────────────────────────────────── */
 export const CLI_UI = {
   fieldsKicker: { zh: '单一事实来源', en: 'Single source of truth' },
-  fieldsTitle: { zh: 'CommandDef 的八个字段', en: 'The eight fields of CommandDef' },
+  fieldsTitle: { zh: 'CommandDef 的核心字段', en: 'The core fields of CommandDef' },
   fieldsDesc: {
     zh: 'COMMAND_REGISTRY 是一个 frozen dataclass 列表。点击每个字段，看它的含义与真实示例。',
     en: 'COMMAND_REGISTRY is a list of frozen dataclasses. Click each field to see what it means with a real example.',

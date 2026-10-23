@@ -117,7 +117,10 @@ export default function SkillFormatLab() {
             {pick(lang, SKILL_FORMAT_UI.realFrontmatterHeading)}
           </h4>
           <div className="mt-3">
-            <CodeBlock file="skills/github/github-auth/SKILL.md" code={SKILL_EXAMPLE_YAML} />
+            <CodeBlock
+              file="skills/software-development/github/SKILL.md"
+              code={SKILL_EXAMPLE_YAML}
+            />
           </div>
         </div>
         <div>

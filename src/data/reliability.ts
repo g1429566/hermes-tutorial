@@ -1,7 +1,7 @@
 // Chapter 27「可靠性设计」数据源：故障注入实验室。
 // 事实来源：hermes-agent/AGENTS.md（Agent Loop / Cron / Kanban / Delegation /
-// Prompt Caching / Wrong-Premise Patterns）与真实源码
-// （run_agent.py、model_tools.py、cron/scheduler.py、tools/delegate_tool.py）。
+// Prompt Caching / verify-the-premise）与真实源码
+// （run_agent.py、agent/conversation_loop.py、model_tools.py、cron/scheduler.py、tools/delegate_tool*.py）。
 
 /* ── 四层防线 ─────────────────────────────────────────────────────── */
 export type DefenseLayer = 'retry' | 'circuit' | 'compensate' | 'audit';
@@ -59,7 +59,7 @@ export const FAILURE_MODES: FailureMode[] = [
       '是最常见的「外部」故障——代码没有任何 bug，但路被堵了。',
     response:
       'Hermes 不把鸡蛋放在一个 key 里：credential_pool 维护一组凭证，撞上限流就换下一个；' +
-      '换完凭证还不行，fallback_model 把请求降级到备选模型。AGENTS.md 还记录了一条熔断纪律：' +
+      '换完凭证还不行，fallback_model 把请求降级到备选模型。website/docs/developer-guide/contributing.md 还记录了一条熔断纪律：' +
       'rate-limit breaker 只在「确认空了」的账户桶上跳闸——冷却期内反复试探（re-probe）' +
       '只是空锤一个已证明为空的桶，这类「重试优化」PR 会被直接关掉。',
     mechanisms: [
@@ -73,14 +73,14 @@ export const FAILURE_MODES: FailureMode[] = [
       },
       {
         name: 'breaker 冷却纪律',
-        desc: 'AGENTS.md §Wrong-Premise Patterns：只对 confirmed-empty 桶跳闸，禁止冷却期 re-probe',
+        desc: 'website/docs/developer-guide/contributing.md「Before you call it a bug — verify the premise」：只对 confirmed-empty 桶跳闸，禁止冷却期 re-probe',
       },
     ],
     layer: 'circuit',
     layerNote:
       '换凭证、降级模型、跳闸冷却，本质都是「发现这条路不通就先封路」，属于熔断层；' +
       '重试只发生在确认有新凭证可用之后。',
-    source: 'run_agent.py · AGENTS.md §Wrong-Premise Patterns',
+    source: 'run_agent.py · website/docs/developer-guide/contributing.md（verify the premise）',
   },
   {
     id: 'context-overflow',
@@ -93,15 +93,16 @@ export const FAILURE_MODES: FailureMode[] = [
       'Hermes 的第一设计约束是 per-conversation prompt caching：对话中途绝不改写历史、' +
       '不换工具集、不重建系统提示——唯一的例外就是上下文压缩。压缩把对话「折叠」成更短的形式后' +
       '继续循环（agent/context_compressor.py、agent/conversation_compression.py）。' +
-      '大工具结果在写回消息流之前也会被截断或摘要，从源头减缓膨胀。',
+      '大工具结果在写回消息流之前会被溢出到磁盘、只留受限引用（maybe_persist_tool_result），' +
+      '从源头减缓膨胀。',
     mechanisms: [
       {
         name: 'context compression',
-        desc: 'agent/context_compressor.py：唯一被允许中途改变上下文的时刻（AGENTS.md §Prompt Caching Must Not Break）',
+        desc: 'agent/context_compressor.py：唯一被允许中途改变上下文的时刻（agent/AGENTS.md 消息流不变量：Prompt caching must not break）',
       },
       {
-        name: '结果截断 / 摘要',
-        desc: 'run_agent.py：大结果写回消息流前先瘦身，保护上下文窗口',
+        name: '结果溢出（spill）',
+        desc: 'tools/tool_result_storage.py（maybe_persist_tool_result）：超大结果落盘、流内只留受限引用，保护上下文窗口',
       },
       {
         name: '缓存纪律',
@@ -122,29 +123,30 @@ export const FAILURE_MODES: FailureMode[] = [
       'agent 正在第 N 次迭代里调工具，用户按下 Esc 要求立刻停止。' +
       '粗暴地 kill 会留下写到一半的文件、未保存的会话和悬空的工具调用。',
     response:
-      '中断在 Hermes 里不是异常，而是循环条件的一部分：run_conversation() 的 while 循环' +
-      '每次迭代开头先检查 _interrupt_requested，发现标志就 break，而不是等异常炸出来。' +
-      '正在运行的 agent 可通过 running_agent.interrupt() 收到中断；预算耗尽时还有' +
-      ' one-turn grace call——给模型最后一轮机会把话讲完、把状态收好，再退出并把会话落盘。',
+      '中断在 Hermes 里不是异常，而是循环条件的一部分：run_conversation()（实现在 ' +
+      'agent/conversation_loop.py）的 while 循环每次迭代开头先检查 _interrupt_requested，' +
+      '发现标志就 break，而不是等异常炸出来。正在运行的 agent 可通过 AIAgent.interrupt() 收到中断；' +
+      '预算耗尽时还有 one-turn grace call——给模型最后一轮机会把话讲完、把状态收好，' +
+      '再退出并把会话落盘。',
     mechanisms: [
       {
         name: '_interrupt_requested',
-        desc: 'run_agent.py：每次迭代开头检查，中断是循环条件而非异常',
+        desc: 'agent/conversation_loop.py：每次迭代开头检查，中断是循环条件而非异常',
       },
       {
-        name: 'running_agent.interrupt()',
-        desc: 'AGENTS.md：外部命令向正在运行的 runner 发中断信号',
+        name: 'AIAgent.interrupt()',
+        desc: 'agent/interrupt_control.py（InterruptControlMixin）：外部线程向正在运行的 agent 发中断信号',
       },
       {
         name: 'one-turn grace call',
-        desc: 'run_agent.py（_budget_grace_call）：收尾机会——总结、保存、体面退出',
+        desc: 'agent/conversation_loop.py（循环条件里的 _budget_grace_call）：收尾机会——总结、保存、体面退出',
       },
     ],
     layer: 'compensate',
     layerNote:
       'abort 不可避免也无需熔断——用户永远有权停止。要做的是补偿：' +
       '把中断变成一次有收尾、有落盘的正常退出。',
-    source: 'run_agent.py',
+    source: 'agent/conversation_loop.py · run_agent.py',
   },
   {
     id: 'partial-tool-failure',
@@ -170,7 +172,7 @@ export const FAILURE_MODES: FailureMode[] = [
       },
       {
         name: '追加不改写',
-        desc: 'run_agent.py：错误结果同样以 tool 消息 append，prompt cache 不受影响',
+        desc: 'agent/conversation_loop.py：错误结果同样以 tool 消息 append，prompt cache 不受影响',
       },
     ],
     layer: 'compensate',
@@ -187,16 +189,18 @@ export const FAILURE_MODES: FailureMode[] = [
       '凌晨三点，定时任务里的 agent 陷入死循环：反复调工具、迭代数疯涨。' +
       '没有用户在场按 Esc，它会一直烧 token，还把调度器死死占住，其他任务全部饿死。',
     response:
-      'cron 会话带一组硬编码的加固不变量（hardening invariants）：3 分钟硬中断——' +
-      '失控的 agent 循环不可能独占调度器；~/.hermes/cron/.tick.lock 文件锁防止多个进程重复 tick；' +
+      'cron 会话带一组硬编码的加固不变量（hardening invariants）：不活动看门狗——' +
+      '默认 600 秒空闲计时（非墙钟；HERMES_CRON_TIMEOUT 可调，0=不限），卡死的 agent 会话被硬中断，' +
+      '长而活跃的任务不误杀，失控循环不可能独占调度器；~/.hermes/cron/.tick.lock 文件锁防止多个进程重复 tick；' +
       '错过触发时间的任务按 catchup window（周期的一半，钳制在 120s–2h）与 120s grace window' +
-      '（一次性任务）有界补跑，而不是疯狂追跑。cron 会话还默认 skip_memory=True，' +
-      '记忆系统刻意不入场。看板侧另有一道闸：kanban.failure_limit（默认 2）次连续失败后，' +
+      '（一次性任务）有界补跑，而不是疯狂追跑。cron 会话如今正常加载记忆（skip_memory=False）；' +
+      '要禁记忆就在 agent.disabled_toolsets 里加 memory，挂载脚本另有 3600 秒限时。' +
+      '看板侧另有一道闸：kanban.failure_limit（默认 2）次连续失败后，' +
       'dispatcher 自动 block 该任务，防止 spin loop。',
     mechanisms: [
       {
-        name: '3 分钟硬中断',
-        desc: 'cron/scheduler.py：AGENTS.md 明文的 hardening invariant，时间到就断电',
+        name: '600s 不活动看门狗',
+        desc: 'cron/scheduler.py（_cron_inactivity_seconds）：默认 600s 空闲计时，卡死即硬中断；HERMES_CRON_TIMEOUT 可调，0=不限',
       },
       {
         name: '文件锁',
@@ -213,7 +217,7 @@ export const FAILURE_MODES: FailureMode[] = [
     ],
     layer: 'circuit',
     layerNote:
-      '无人值守场景里熔断必须是机制而非约定：时间到就断电、失败到数就锁任务——' +
+      '无人值守场景里熔断必须是机制而非约定：空闲到限就断电、失败到数就锁任务——' +
       '不指望循环自己醒过来。',
     source: 'cron/scheduler.py · cron/jobs.py',
   },
@@ -226,23 +230,25 @@ export const FAILURE_MODES: FailureMode[] = [
       '父 agent 停在原地等汇总，整个委派树一起僵死。',
     response:
       '委派的隔离不只是上下文隔离，也是故障隔离：子 agent 跑在独立的 context + terminal session 里，' +
-      '由 delegation.child_timeout_seconds 兜底超时；delegation.max_concurrent_children（默认 3）' +
-      '与 max_spawn_depth（默认 2）把爆炸半径限制在委派树内。等不起的场景可以 background=true：' +
-      '立即返回 delegation id，结果稍后通过 async-delegation completion queue 回到会话，' +
-      '父 agent 继续自己的循环。需要扛进程重启的长活则该用 cronjob 或' +
-      ' terminal(background=True)，而不是 background 委派。',
+      '默认不设墙钟超时——卡死的子 agent 由心跳停滞监视器发现，需要硬兜底时再开 ' +
+      'delegation.child_timeout_seconds（>0 才启用，按「无进展秒数」计，下限 30s）；' +
+      'delegation.max_concurrent_children（默认 10）' +
+      '与 max_spawn_depth（默认 1，扁平）把爆炸半径限制在委派树内。模型发起的顶层委派总是异步：' +
+      'dispatch 立即返回 handle（live transcript 路径），结果稍后通过 async-delegation completion queue 回灌到会话，' +
+      '父 agent 不阻塞、继续自己的循环——background 参数已被弃用（DEPRECATED, ignored），不用显式传递。' +
+      '需要扛进程重启的长活则该用 cronjob 或 terminal(background=True)，而不是委派。',
     mechanisms: [
       {
         name: 'child_timeout_seconds',
-        desc: 'tools/delegate_tool.py（config: delegation.*）：子 agent 超时兜底',
+        desc: 'tools/delegate_tool_config.py（delegation.*，默认关闭）：无进展超时兜底，>0 才启用（下限 30s）',
       },
       {
         name: '隔离模型',
-        desc: 'delegate_task：独立 context + terminal session，并发 ≤3、嵌套深度 ≤2',
+        desc: 'delegate_task：独立 context + terminal session，并发默认 ≤10、嵌套深度默认 1',
       },
       {
         name: '异步完成队列',
-        desc: 'background=true：结果经 completion queue 回流，父 agent 不死等',
+        desc: '顶层委派总是异步：结果经 completion queue 回流，父 agent 不死等',
       },
     ],
     layer: 'circuit',
@@ -341,7 +347,7 @@ export const FAILURE_MODES_EN: FailureMode[] = [
     response:
       'Hermes doesn’t put all its eggs in one key: credential_pool maintains a set of credentials and ' +
       'rotates to the next one when a limit is hit; if that still fails, fallback_model degrades the ' +
-      'request to a backup model. AGENTS.md also records a circuit-breaking discipline: the rate-limit ' +
+      'request to a backup model. website/docs/developer-guide/contributing.md also records a circuit-breaking discipline: the rate-limit ' +
       'breaker only trips on account buckets confirmed empty — re-probing during the cooldown just ' +
       'hammers a bucket already proven empty, and PRs for this kind of “retry optimization” get closed ' +
       'on sight.',
@@ -356,7 +362,7 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       },
       {
         name: 'breaker cooldown discipline',
-        desc: 'AGENTS.md §Wrong-Premise Patterns: trip only on confirmed-empty buckets; no re-probing during cooldown',
+        desc: 'website/docs/developer-guide/contributing.md "Before you call it a bug — verify the premise": trip only on confirmed-empty buckets; no re-probing during cooldown',
       },
     ],
     layer: 'circuit',
@@ -364,7 +370,7 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       'Rotating credentials, degrading the model, tripping into cooldown — all are “close the road once ' +
       'it’s confirmed dead,” which is the circuit-break layer; retrying only happens after a fresh ' +
       'credential is confirmed available.',
-    source: 'run_agent.py · AGENTS.md §Wrong-Premise Patterns',
+    source: 'run_agent.py · website/docs/developer-guide/contributing.md (verify the premise)',
   },
   {
     id: 'context-overflow',
@@ -379,16 +385,16 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       'toolsets, or rebuild the system prompt mid-conversation — the sole exception is context ' +
       'compression. Compression folds the conversation into a shorter form and the loop continues ' +
       '(agent/context_compressor.py, agent/conversation_compression.py). Large tool results are also ' +
-      'truncated or summarized before being written back into the message stream, slowing the bloat at ' +
-      'the source.',
+      'spilled to disk before write-back, leaving only a bounded reference in the stream ' +
+      '(maybe_persist_tool_result), slowing the bloat at the source.',
     mechanisms: [
       {
         name: 'context compression',
-        desc: 'agent/context_compressor.py: the only moment allowed to change context mid-conversation (AGENTS.md §Prompt Caching Must Not Break)',
+        desc: 'agent/context_compressor.py: the only moment allowed to change context mid-conversation (agent/AGENTS.md message-flow invariants: Prompt caching must not break)',
       },
       {
-        name: 'result truncation / summarization',
-        desc: 'run_agent.py: slim large results before writing them back, protecting the context window',
+        name: 'result spilling',
+        desc: 'tools/tool_result_storage.py (maybe_persist_tool_result): oversized results land on disk with only a bounded reference in the stream, protecting the context window',
       },
       {
         name: 'caching discipline',
@@ -410,30 +416,30 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       'A hard kill leaves half-written files, unsaved sessions, and dangling tool calls behind.',
     response:
       'In Hermes, interruption is not an exception but part of the loop condition: the while loop in ' +
-      'run_conversation() checks _interrupt_requested at the top of every iteration and breaks when the ' +
-      'flag is set, rather than waiting for an exception to blow up. A running agent can receive the ' +
-      'interrupt via running_agent.interrupt(); when the budget runs out there’s also a one-turn grace ' +
-      'call — a final turn for the model to finish speaking and pack up state, then exit and persist ' +
-      'the session.',
+      'run_conversation() (implemented in agent/conversation_loop.py) checks _interrupt_requested at ' +
+      'the top of every iteration and breaks when the flag is set, rather than waiting for an exception ' +
+      'to blow up. A running agent can receive the interrupt via AIAgent.interrupt(); when the budget ' +
+      'runs out there’s also a one-turn grace call — a final turn for the model to finish speaking and ' +
+      'pack up state, then exit and persist the session.',
     mechanisms: [
       {
         name: '_interrupt_requested',
-        desc: 'run_agent.py: checked at the top of every iteration — interruption is a loop condition, not an exception',
+        desc: 'agent/conversation_loop.py: checked at the top of every iteration — interruption is a loop condition, not an exception',
       },
       {
-        name: 'running_agent.interrupt()',
-        desc: 'AGENTS.md: an external command sends the interrupt signal to the running runner',
+        name: 'AIAgent.interrupt()',
+        desc: 'agent/interrupt_control.py (InterruptControlMixin): an external thread sends the interrupt signal to the running agent',
       },
       {
         name: 'one-turn grace call',
-        desc: 'run_agent.py (_budget_grace_call): a wrap-up chance — summarize, save, exit gracefully',
+        desc: 'agent/conversation_loop.py (_budget_grace_call in the loop condition): a wrap-up chance — summarize, save, exit gracefully',
       },
     ],
     layer: 'compensate',
     layerNote:
       'Abort is inevitable and needs no breaker — the user always has the right to stop. What’s needed ' +
       'is compensation: turn the interrupt into a normal exit with wrap-up and persistence.',
-    source: 'run_agent.py',
+    source: 'agent/conversation_loop.py · run_agent.py',
   },
   {
     id: 'partial-tool-failure',
@@ -461,7 +467,7 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       },
       {
         name: 'append, never rewrite',
-        desc: 'run_agent.py: error results are appended as tool messages too, leaving the prompt cache intact',
+        desc: 'agent/conversation_loop.py: error results are appended as tool messages too, leaving the prompt cache intact',
       },
     ],
     layer: 'compensate',
@@ -480,18 +486,21 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       'over, iteration count skyrocketing. With no user to press Esc, it burns tokens forever and holds ' +
       'the scheduler hostage while every other job starves.',
     response:
-      'Cron sessions carry a set of hardcoded hardening invariants: a 3-minute hard interrupt — a ' +
-      'runaway agent loop can never monopolize the scheduler; the ~/.hermes/cron/.tick.lock file lock ' +
+      'Cron sessions carry a set of hardcoded hardening invariants: an inactivity watchdog — 600 ' +
+      'seconds of idle time by default (not wall-clock; HERMES_CRON_TIMEOUT overrides, 0 = unlimited), ' +
+      'so a stalled session is hard-interrupted while a long-but-active job is never cut off, and a ' +
+      'runaway loop can never monopolize the scheduler; the ~/.hermes/cron/.tick.lock file lock ' +
       'prevents duplicate ticks across processes; jobs that miss their fire time get a bounded catch-up ' +
       'via a catchup window (half the period, clamped to 120s–2h) and a 120s grace window (one-shot ' +
-      'jobs) instead of frantic replaying. Cron sessions also default to skip_memory=True — the memory ' +
-      'system deliberately stays out. The kanban side adds another gate: after kanban.failure_limit ' +
+      'jobs) instead of frantic replaying. Cron sessions now load memory as usual (skip_memory=False); ' +
+      'to keep memory out, add memory to agent.disabled_toolsets, and attached scripts get their own ' +
+      '3600s timeout. The kanban side adds another gate: after kanban.failure_limit ' +
       '(default 2) consecutive failures, the dispatcher automatically blocks the task to prevent spin ' +
       'loops.',
     mechanisms: [
       {
-        name: '3-minute hard interrupt',
-        desc: 'cron/scheduler.py: a hardening invariant spelled out in AGENTS.md — power is cut when time is up',
+        name: '600s inactivity watchdog',
+        desc: 'cron/scheduler.py (_cron_inactivity_seconds): 600s of idle time by default — stalled sessions are hard-interrupted; HERMES_CRON_TIMEOUT overrides, 0 = unlimited',
       },
       {
         name: 'file lock',
@@ -508,8 +517,9 @@ export const FAILURE_MODES_EN: FailureMode[] = [
     ],
     layer: 'circuit',
     layerNote:
-      'In unattended scenarios the breaker must be a mechanism, not a convention: cut power when time ' +
-      'is up, lock the task when failures hit the limit — don’t count on the loop waking itself up.',
+      'In unattended scenarios the breaker must be a mechanism, not a convention: cut power when idle ' +
+      'time hits the limit, lock the task when failures hit the limit — don’t count on the loop waking ' +
+      'itself up.',
     source: 'cron/scheduler.py · cron/jobs.py',
   },
   {
@@ -522,24 +532,27 @@ export const FAILURE_MODES_EN: FailureMode[] = [
       'tree freezes.',
     response:
       'Delegation isolation is not just context isolation — it’s fault isolation: the child runs in its ' +
-      'own context + terminal session, backstopped by delegation.child_timeout_seconds; ' +
-      'delegation.max_concurrent_children (default 3) and max_spawn_depth (default 2) confine the blast ' +
-      'radius to the delegation tree. When waiting isn’t an option there’s background=true: it returns ' +
-      'a delegation id immediately, the result comes back later through the async-delegation completion ' +
-      'queue, and the parent keeps running its own loop. Long jobs that must survive process restarts ' +
-      'should use cronjob or terminal(background=True) instead of background delegation.',
+      'own context + terminal session with no wall-clock timeout by default — a stuck child is caught ' +
+      'by the heartbeat staleness monitor, and delegation.child_timeout_seconds (>0 to opt in, counted ' +
+      'as seconds without progress, floor 30s) is the optional backstop; ' +
+      'delegation.max_concurrent_children (default 10) and max_spawn_depth (default 1, flat) confine ' +
+      'the blast radius to the delegation tree. Top-level model dispatches are always async: dispatch ' +
+      'returns a handle (live transcript paths) immediately, and the result flows back later through the ' +
+      'async-delegation completion queue, so the parent never blocks and keeps running its own loop — the ' +
+      'background parameter is deprecated (DEPRECATED, ignored) and never needs to be passed. Long jobs that ' +
+      'must survive process restarts should use cronjob or terminal(background=True) instead of delegation.',
     mechanisms: [
       {
         name: 'child_timeout_seconds',
-        desc: 'tools/delegate_tool.py (config: delegation.*): timeout backstop for child agents',
+        desc: 'tools/delegate_tool_config.py (delegation.*, default off): no-progress timeout backstop — only active when >0 (floor 30s)',
       },
       {
         name: 'isolation model',
-        desc: 'delegate_task: separate context + terminal session, concurrency ≤3, nesting depth ≤2',
+        desc: 'delegate_task: separate context + terminal session, concurrency ≤10 by default, nesting depth 1 by default',
       },
       {
         name: 'async completion queue',
-        desc: 'background=true: results flow back via the completion queue — the parent never blocks',
+        desc: 'top-level dispatches always async: results flow back via the completion queue — the parent never blocks',
       },
     ],
     layer: 'circuit',

@@ -1,7 +1,8 @@
 // Chapter 24「多 Agent 协作设计题」数据源：五种多 agent 拓扑 + 场景题。
-// 「Hermes 对应物」一栏对齐 AGENTS.md：§Delegation（delegate_task 的 leaf/orchestrator、
-// batch tasks、max_concurrent_children）、§Kanban（dispatcher、failure_limit、board/tenant
-// 隔离）、§Cron（context_from 链式作业）、§Curator（LLM review pass）。
+// 「Hermes 对应物」一栏对齐各区域 AGENTS.md：tools/AGENTS.md §Delegation（delegate_task 的
+// leaf/orchestrator——角色现由深度推导、capped by max_spawn_depth；batch tasks、
+// max_concurrent_children）、cron/AGENTS.md §Kanban（dispatcher、failure_limit、board/tenant
+// 隔离）与 §Cron（context_from 链式作业）、skills/AGENTS.md §Curator（LLM review pass）。
 
 export interface Topology {
   id: string;
@@ -43,7 +44,7 @@ export const TOPOLOGIES: Topology[] = [
       'worker 级隔离：单个 worker 失败不拖垮其他 worker，manager 可以重派或降级；manager 本身是单点。',
     useCases: '可清晰分解的并行任务：多文件重构、并行调研、批量生成后汇总。',
     hermes:
-      'delegate_task：默认 role="leaf" 的 worker 不能再委派；role="orchestrator" 保留 delegate_task 可再派工人（受 delegation.max_spawn_depth=2 限制）；batch tasks 数组并行，并发上限 delegation.max_concurrent_children（默认 3）。',
+      'delegate_task：子 agent 默认是 role="leaf" 的 worker，不能再委派；能否再派如今由深度推导（调用方的 role 参数已废弃、被忽略）——delegation.orchestrator_enabled 打开（默认开）且子 agent 深度 < delegation.max_spawn_depth（默认 1，即默认一层摊平）时才是 orchestrator；batch tasks 数组并行，并发上限 delegation.max_concurrent_children（默认 10）。',
   },
   {
     id: 'handoff',
@@ -114,7 +115,7 @@ export const TOPOLOGY_SCENARIOS: TopologyScenario[] = [
       '你要把公司 100 个仓库从旧 CI 迁移到新平台：每个仓库的操作相同（改配置、跑迁移脚本、验证、提 PR），仓库之间互不依赖，单个失败可以重试。你会选哪种拓扑？',
     recommended: 'swarm',
     reasoning:
-      '海量同质 + 互不依赖 + 失败可重试，是 Swarm 的完美形状：任务进队列，worker 抢占式领取，原子 claim 防重复，挂掉的 claim 被 reclaim 重派。Hermes 里对应 kanban dispatcher 的回收-提升-认领循环；规模小一点也可以直接用 delegate_task 的 batch tasks（并发上限默认 3）。Manager 也能做，但中心派发在 100 个同质任务前是不必要的协调成本。',
+      '海量同质 + 互不依赖 + 失败可重试，是 Swarm 的完美形状：任务进队列，worker 抢占式领取，原子 claim 防重复，挂掉的 claim 被 reclaim 重派。Hermes 里对应 kanban dispatcher 的回收-提升-认领循环；规模小一点也可以直接用 delegate_task 的 batch tasks（并发上限默认 10）。Manager 也能做，但中心派发在 100 个同质任务前是不必要的协调成本。',
   },
   {
     id: 'long-form-writing',
@@ -132,7 +133,7 @@ export const TOPOLOGY_SCENARIOS: TopologyScenario[] = [
       '用户丢来一句话需求：「给我们的 CLI 加一个导出命令」。需要有人调研现有代码、有人写实现、有人跑测试修 bug，最后有人把结果整合成一次交付。你会选哪种拓扑？',
     recommended: 'manager',
     reasoning:
-      '任务可分解但子任务性质不同、还需要最终整合，Manager 的中心辐射最合身：orchestrator 拆解并派发，leaf worker 各自执行（leaf 不能再用 delegate_task，边界天然清晰），orchestrator 汇总。Hermes 里就是 delegate_task 的 role="orchestrator" + role="leaf"，配合 max_spawn_depth=2 锁住委派树深度，max_concurrent_children 控制并行。子任务全部同形时才是 Swarm 的战场，这里不是。',
+      '任务可分解但子任务性质不同、还需要最终整合，Manager 的中心辐射最合身：父 agent 拆解任务填进 delegate_task 的 tasks 数组并发派发，每个子 agent 默认是 leaf（不能再委派，边界天然清晰），父 agent 汇总。子 agent 能否再派由深度推导：delegation.orchestrator_enabled（默认开）+ max_spawn_depth（默认 1，调大才有更深的树），max_concurrent_children（默认 10）控并行。子任务全部同形时才是 Swarm 的战场，这里不是。',
   },
 ];
 
@@ -161,7 +162,7 @@ export const TOPOLOGIES_EN: Topology[] = [
     useCases:
       'Cleanly decomposable parallel tasks: multi-file refactors, parallel research, batch generation followed by aggregation.',
     hermes:
-      'delegate_task: workers with the default role="leaf" cannot delegate further; role="orchestrator" keeps delegate_task and can spawn its own workers (capped by delegation.max_spawn_depth=2); the batch tasks array runs in parallel with the concurrency cap delegation.max_concurrent_children (default 3).',
+      'delegate_task: children default to role="leaf" and cannot delegate further; whether a child may delegate is now depth-derived (the caller-side role argument is legacy and ignored) — it becomes an orchestrator only when delegation.orchestrator_enabled is on (default true) AND the child depth is below delegation.max_spawn_depth (default 1, i.e. flat by default); the batch tasks array runs in parallel with the concurrency cap delegation.max_concurrent_children (default 10).',
   },
   {
     id: 'handoff',
@@ -240,7 +241,7 @@ export const TOPOLOGY_SCENARIOS_EN: TopologyScenario[] = [
       'You need to migrate 100 company repos from the old CI to a new platform: the operations are identical for each repo (edit config, run the migration script, verify, open a PR), repos are independent, and a single failure can be retried. Which topology do you choose?',
     recommended: 'swarm',
     reasoning:
-      "Massive + homogeneous + independent + retriable is the perfect shape for Swarm: tasks go into a queue, workers claim preemptively, atomic claim prevents duplicates, and dead claims get reclaimed and reassigned. In Hermes this maps to the kanban dispatcher's reclaim-promote-claim loop; at a smaller scale, delegate_task batch tasks (default concurrency cap 3) also works. Manager could do it too, but central dispatch is unnecessary coordination overhead for 100 identical tasks.",
+      "Massive + homogeneous + independent + retriable is the perfect shape for Swarm: tasks go into a queue, workers claim preemptively, atomic claim prevents duplicates, and dead claims get reclaimed and reassigned. In Hermes this maps to the kanban dispatcher's reclaim-promote-claim loop; at a smaller scale, delegate_task batch tasks (default concurrency cap 10) also works. Manager could do it too, but central dispatch is unnecessary coordination overhead for 100 identical tasks.",
   },
   {
     id: 'long-form-writing',
@@ -258,7 +259,7 @@ export const TOPOLOGY_SCENARIOS_EN: TopologyScenario[] = [
       'The user drops a one-line requirement: "add an export command to our CLI". Someone has to research the existing code, someone has to write the implementation, someone has to run tests and fix bugs, and finally someone has to integrate it all into one delivery. Which topology do you choose?',
     recommended: 'manager',
     reasoning:
-      'The task is decomposable but the subtasks differ in nature and the results need final integration — Manager hub-and-spoke fits best: the orchestrator decomposes and dispatches, leaf workers each execute (leaves cannot call delegate_task again, so the boundary is naturally clean), and the orchestrator aggregates. In Hermes this is exactly delegate_task with role="orchestrator" + role="leaf", with max_spawn_depth=2 locking the delegation tree depth and max_concurrent_children controlling parallelism. Swarm territory is only when all subtasks are identical — not the case here.',
+      "The task is decomposable but the subtasks differ in nature and the results need final integration — Manager hub-and-spoke fits best: the parent agent decomposes the task into delegate_task's tasks array and dispatches them concurrently; each subagent defaults to leaf (it cannot delegate again, so the boundary is naturally clean), and the parent aggregates. Whether a subagent may delegate is depth-derived in Hermes: delegation.orchestrator_enabled (default true) plus max_spawn_depth (default 1 — raise it for a deeper tree), with max_concurrent_children (default 10) controlling parallelism. Swarm territory is only when all subtasks are identical — not the case here.",
   },
 ];
 

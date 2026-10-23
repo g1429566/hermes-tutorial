@@ -1,5 +1,5 @@
 // Chapter 14「TUI 架构」数据源：进程模型 / Key Surfaces / 斜杠命令流 / render(width) 演示。
-// 内容对齐 hermes-agent/AGENTS.md 的「TUI Architecture (ui-tui + tui_gateway)」一节，
+// 内容对齐 hermes-agent/tui_gateway/AGENTS.md 的「Process model / Key surfaces / Slash command flow」，
 // 组件名与 RPC 方法均可在 ui-tui/src/ 与 tui_gateway/ 真实源码中找到。
 
 export interface TuiProcessNode {
@@ -30,7 +30,8 @@ export interface SlashFlowStep {
 export const TUI_INTRO =
   'hermes --tui（或 HERMES_TUI=1）会启动一个完整替代经典 prompt_toolkit CLI 的终端界面。' +
   '它不是一个进程，而是两个：Node 跑的 Ink 前端负责「屏幕」，Python 跑的 tui_gateway 后端负责「会话」。' +
-  '两者之间用换行分隔的 JSON-RPC over stdio 通信——请求从 Ink 发出，事件从 Python 推回。' +
+  '两者之间用换行分隔的 JSON-RPC over stdio 通信——请求从 Ink 发出，事件从 Python 推回；' +
+  '当 Python 有事要问（审批、澄清、sudo、密钥）时，改发一条 server→client 请求下行，前端用响应帧回答。' +
   '点击下面进程图中的每个节点，看看谁拥有什么。';
 
 /* ── ① 进程模型 ─────────────────────────────────────────────────── */
@@ -46,7 +47,8 @@ export const TUI_PROCESS_NODES: TuiProcessNode[] = [
       '斜杠命令与路径的自动补全（useCompletion hook）',
     ],
     files: [
-      { path: 'ui-tui/src/app.tsx', note: '前端入口与本地斜杠命令处理' },
+      { path: 'ui-tui/src/entry.tsx', note: '进程入口' },
+      { path: 'ui-tui/src/app/slash/', note: '本地斜杠命令注册表与处理' },
       { path: 'ui-tui/src/components/messageLine.tsx', note: '对话行渲染' },
       { path: 'ui-tui/src/components/prompts.tsx', note: '审批 / 澄清弹层' },
       { path: 'ui-tui/src/theme.ts', note: '主题（skin 数据落地处）' },
@@ -57,8 +59,9 @@ export const TUI_PROCESS_NODES: TuiProcessNode[] = [
     name: 'stdio JSON-RPC',
     role: '换行分隔的 JSON-RPC over stdio',
     owns: [
-      '请求从 Ink 发出（如 prompt.submit、approval.respond）',
-      '事件从 Python 推回（如 message.delta、tool.start、approval.request）',
+      '请求从 Ink 发出（如 prompt.submit、session.list）',
+      '事件从 Python 推回（如 message.delta、tool.start、gateway.ready）',
+      'Python 也能直接提问：approval / clarify / sudo / secret 是 server→client 请求，send() 阻塞到响应帧返回',
       '完整的方法 / 事件目录见 tui_gateway/server.py',
     ],
     files: [
@@ -110,27 +113,27 @@ export const KEY_SURFACES: KeySurface[] = [
     id: 'tool',
     surface: 'Tool activity',
     ink: 'thinking.tsx',
-    gateway: 'tool.start/progress/complete',
-    note: '工具生命周期事件驱动「正在执行」活动区：开始、进度、完成。',
+    gateway: 'tool.start/generating/complete',
+    note: '工具生命周期事件驱动「正在执行」活动区：开始、生成参数、完成。',
   },
   {
     id: 'approval',
     surface: 'Approvals',
     ink: 'prompts.tsx',
-    gateway: 'approval.respond ← approval.request',
-    note: '危险命令审批：方向与聊天相反——Python 发 approval.request 事件下行，前端用 approval.respond 上行回答。',
+    gateway: 'server→client 请求 approval → 响应帧 {choice}',
+    note: '危险命令审批：方向与聊天相反——Python 发一条 server→client 请求（approval）下行，send() 阻塞 agent 线程，直到前端用响应帧回答 {choice}。',
   },
   {
     id: 'clarify',
     surface: 'Clarify/sudo/secret',
     ink: 'prompts.tsx, maskedPrompt.tsx',
-    gateway: 'clarify/sudo/secret.respond',
-    note: '澄清提问、sudo、密钥输入共用一个弹层族；maskedPrompt.tsx 负责密钥的掩码输入。',
+    gateway: 'server→client 请求 clarify / sudo / secret',
+    note: '澄清提问、sudo、密钥输入是三条 server→client 请求，共用一个弹层族；maskedPrompt.tsx 负责密钥的掩码输入。',
   },
   {
     id: 'session',
     surface: 'Session picker',
-    ink: 'sessionPicker.tsx',
+    ink: 'activeSessionSwitcher.tsx',
     gateway: 'session.list/resume',
     note: '会话选择器：列出历史会话并恢复其中一条。',
   },
@@ -162,12 +165,12 @@ export const SLASH_FLOW_STEPS: SlashFlowStep[] = [
   {
     id: 'local',
     label: '本地内建',
-    title: '第一步：app.tsx 本地处理',
+    title: '第一步：前端本地处理（app/slash）',
     body: '/help、/quit、/clear、/resume、/copy、/paste 等内建命令完全在 Ink 前端本地处理——不序列化、不出进程、不等 Python。这些命令操作的是「屏幕」本身（清屏、复制、退出），而屏幕归 TypeScript 所有，所以根本不需要后端参与。',
     code: {
-      file: 'ui-tui/src/app.tsx',
+      file: 'ui-tui/src/app/slash/commands/',
       snippet: `// 内建命令：/help /quit /clear /resume /copy /paste ...
-// 在 app.tsx 本地处理，不发 RPC`,
+// 在 app/slash/commands/ 本地处理，不发 RPC`,
       note: '操作屏幕的命令留在屏幕的拥有者手里',
     },
     points: ['零 RPC 往返，即时响应', '只覆盖「纯界面」语义的命令'],
@@ -213,7 +216,7 @@ export const WIDTH_DEMO = {
     '把每个终端组件理解成一个纯函数：render(width) → 行数组。终端没有「词」的概念，' +
     '折行发生在显示单元格边界——所以上面的文本是按字符硬折行的。' +
     '当终端宽度变化（或任何状态变化），已排好版的行缓存被 invalidate（失效），' +
-    '组件请求一次 requestRender，按新宽度重新执行 render(width)。' +
+    '组件随即请求重渲染，按新宽度重新执行 render(width)。' +
     'ui-tui 源码里是同一思想：useVirtualHistory.ts 用 offsetVersion 失效偏移缓存，' +
     '宽度一变，历史行的偏移全部重算。',
 };
@@ -234,6 +237,8 @@ export const TUI_INTRO_EN =
   'prompt_toolkit CLI. It is not one process but two: a Node Ink frontend owns the "screen", ' +
   'a Python tui_gateway backend owns the "session". They communicate over newline-delimited ' +
   'JSON-RPC on stdio — requests go out from Ink, events stream back from Python. ' +
+  'When Python has a question (approval, clarification, sudo, secret), it sends a ' +
+  'server-to-client request downstream instead, and the frontend answers with a response frame. ' +
   'Click each node in the process diagram below to see who owns what.';
 
 /* ── ① 进程模型 ─────────────────────────────────────────────────── */
@@ -249,7 +254,8 @@ export const TUI_PROCESS_NODES_EN: TuiProcessNode[] = [
       'Autocomplete for slash commands and paths (useCompletion hook)',
     ],
     files: [
-      { path: 'ui-tui/src/app.tsx', note: 'Frontend entry and local slash-command handling' },
+      { path: 'ui-tui/src/entry.tsx', note: 'Process entry' },
+      { path: 'ui-tui/src/app/slash/', note: 'Local slash-command registry and handling' },
       { path: 'ui-tui/src/components/messageLine.tsx', note: 'Conversation line rendering' },
       { path: 'ui-tui/src/components/prompts.tsx', note: 'Approval / clarification overlays' },
       { path: 'ui-tui/src/theme.ts', note: 'Theme (where skin data lands)' },
@@ -260,8 +266,9 @@ export const TUI_PROCESS_NODES_EN: TuiProcessNode[] = [
     name: 'stdio JSON-RPC',
     role: 'Newline-delimited JSON-RPC over stdio',
     owns: [
-      'Requests go out from Ink (e.g. prompt.submit, approval.respond)',
-      'Events stream back from Python (e.g. message.delta, tool.start, approval.request)',
+      'Requests go out from Ink (e.g. prompt.submit, session.list)',
+      'Events stream back from Python (e.g. message.delta, tool.start, gateway.ready)',
+      'Python can also ask questions: approval / clarify / sudo / secret are server-to-client requests, and send() blocks until the response frame returns',
       'Full method / event catalog in tui_gateway/server.py',
     ],
     files: [
@@ -313,27 +320,27 @@ export const KEY_SURFACES_EN: KeySurface[] = [
     id: 'tool',
     surface: 'Tool activity',
     ink: 'thinking.tsx',
-    gateway: 'tool.start/progress/complete',
-    note: 'Tool lifecycle events drive the "running" activity area: start, progress, complete.',
+    gateway: 'tool.start/generating/complete',
+    note: 'Tool lifecycle events drive the "running" activity area: start, generating (the model streams the tool-call arguments), complete.',
   },
   {
     id: 'approval',
     surface: 'Approvals',
     ink: 'prompts.tsx',
-    gateway: 'approval.respond ← approval.request',
-    note: 'Dangerous-command approvals: the direction is reversed from chat — Python sends the approval.request event downstream, the frontend answers upstream with approval.respond.',
+    gateway: 'server→client request approval → response frame {choice}',
+    note: 'Dangerous-command approvals: the direction is reversed from chat — Python sends a server-to-client request (approval) downstream, and send() blocks the agent thread until the frontend answers with a response frame {choice}.',
   },
   {
     id: 'clarify',
     surface: 'Clarify/sudo/secret',
     ink: 'prompts.tsx, maskedPrompt.tsx',
-    gateway: 'clarify/sudo/secret.respond',
-    note: 'Clarifications, sudo, and secret input share one overlay family; maskedPrompt.tsx handles masked secret input.',
+    gateway: 'server→client requests clarify / sudo / secret',
+    note: 'Clarifications, sudo, and secret input are three server-to-client requests sharing one overlay family; maskedPrompt.tsx handles masked secret input.',
   },
   {
     id: 'session',
     surface: 'Session picker',
-    ink: 'sessionPicker.tsx',
+    ink: 'activeSessionSwitcher.tsx',
     gateway: 'session.list/resume',
     note: 'Session picker: list past sessions and resume one.',
   },
@@ -365,12 +372,12 @@ export const SLASH_FLOW_STEPS_EN: SlashFlowStep[] = [
   {
     id: 'local',
     label: 'Local built-ins',
-    title: 'Step 1: handled locally in app.tsx',
+    title: 'Step 1: handled locally in the frontend (app/slash)',
     body: 'Built-in commands like /help, /quit, /clear, /resume, /copy, /paste are handled entirely in the Ink frontend — no serialization, no process hop, no waiting on Python. These commands operate on the "screen" itself (clear, copy, quit), and the screen belongs to TypeScript, so the backend is simply not involved.',
     code: {
-      file: 'ui-tui/src/app.tsx',
+      file: 'ui-tui/src/app/slash/commands/',
       snippet: `// 内建命令：/help /quit /clear /resume /copy /paste ...
-// 在 app.tsx 本地处理，不发 RPC`,
+// 在 app/slash/commands/ 本地处理，不发 RPC`,
       note: "Commands that operate on the screen stay with the screen's owner",
     },
     points: [
@@ -427,7 +434,7 @@ export const WIDTH_DEMO_EN: typeof WIDTH_DEMO = {
     'Terminals have no concept of "words" — wrapping happens at display-cell boundaries, ' +
     'which is why the text above is hard-wrapped per character. ' +
     'When the terminal width changes (or any state changes), the laid-out line cache is ' +
-    'invalidated, the component requests a requestRender, and render(width) re-runs at the new width. ' +
+    'invalidated, the component asks for a re-render, and render(width) re-runs at the new width. ' +
     'The ui-tui source applies the same idea: useVirtualHistory.ts invalidates the offset cache ' +
     'with offsetVersion — change the width and every history line offset is recomputed.',
 };

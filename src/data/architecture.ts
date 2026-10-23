@@ -1,5 +1,5 @@
 // Chapter 01「读懂仓库地图」数据源：hermes-agent 仓库的六大组成部分。
-// 内容对齐 hermes-agent/AGENTS.md 的 Project Structure 与 File Dependency Chain。
+// 内容对齐 hermes-agent/AGENTS.md 的 Project Structure。
 
 export interface ArchComponent {
   id: string;
@@ -24,10 +24,10 @@ export const ARCH_COMPONENTS: ArchComponent[] = [
       '记忆、缓存、上下文压缩等内部机制',
     ],
     keyFiles: [
-      { path: 'run_agent.py', note: 'AIAgent 类 —— 核心对话循环（~12k LOC）' },
+      { path: 'run_agent.py', note: 'AIAgent 门面类；对话主循环在 agent/turn_*.py' },
       {
         path: 'model_tools.py',
-        note: '工具编排：discover_builtin_tools() / handle_function_call()',
+        note: '工具编排：handle_function_call()；工具发现 discover_builtin_tools() 在 tools/registry.py',
       },
       { path: 'toolsets.py', note: 'toolset 定义与 _HERMES_CORE_TOOLS 列表' },
       { path: 'agent/', note: 'provider 适配、记忆、缓存、压缩等内部实现' },
@@ -46,10 +46,16 @@ export const ARCH_COMPONENTS: ArchComponent[] = [
       '配置向导与诊断（hermes setup / hermes doctor）',
     ],
     keyFiles: [
-      { path: 'cli.py', note: 'HermesCLI 类 —— 交互式 CLI 编排器（~11k LOC）' },
+      {
+        path: 'cli.py',
+        note: 'HermesCLI 门面（REPL + 斜杠分发）；交互逻辑在 hermes_cli/cli_*_mixin.py',
+      },
       { path: 'hermes_cli/', note: 'CLI 子命令、setup 向导、插件加载器' },
       { path: 'ui-tui/src/', note: 'Ink 终端 UI：entry.tsx / app.tsx / gatewayClient.ts' },
-      { path: 'tui_gateway/', note: 'TUI 的 Python JSON-RPC 后端' },
+      {
+        path: 'tui_gateway/',
+        note: 'TUI / Desktop 的 Python JSON-RPC 后端（server.py + methods_*.py）',
+      },
     ],
     dependsOn: ['core'],
   },
@@ -59,19 +65,23 @@ export const ARCH_COMPONENTS: ArchComponent[] = [
     tagline: '20+ 平台统一接入',
     role: '单一 gateway 进程把 Telegram、Discord、Slack、WhatsApp、Signal 等平台的消息适配成统一会话，转发给 agent 核心，再把回复路由回原平台。',
     responsibilities: [
-      '每个平台一个 adapter（gateway/platforms/）',
+      '每个平台一个 adapter（plugins/platforms/ 等）',
       '会话管理：跨平台连续性、消息路由',
       '语音消息转录',
       '平台扩展规范（ADDING_A_PLATFORM.md）',
     ],
     keyFiles: [
-      { path: 'gateway/run.py', note: '网关入口与主循环' },
+      { path: 'gateway/run.py', note: '网关门面：入口与主循环（run_*.py 各阶段）' },
       { path: 'gateway/session.py', note: '会话状态与消息流转' },
       {
         path: 'gateway/platforms/',
-        note: 'telegram / discord / slack / whatsapp / signal / feishu / …',
+        note: 'adapter 基类与共享件；内置仅 api_server / webhook / msgraph_webhook，其余平台 adapter 在 plugins/platforms/ 捆绑插件',
       },
-      { path: 'gateway/ADDING_A_PLATFORM.md', note: '新增平台 adapter 的官方指南' },
+      {
+        path: 'plugins/platforms/',
+        note: 'telegram / discord / slack / whatsapp / feishu 等平台 adapter（捆绑插件）',
+      },
+      { path: 'gateway/platforms/ADDING_A_PLATFORM.md', note: '新增平台 adapter 的官方指南' },
     ],
     dependsOn: ['core'],
   },
@@ -79,17 +89,17 @@ export const ARCH_COMPONENTS: ArchComponent[] = [
     id: 'tools',
     name: '工具与执行环境',
     tagline: 'agent 的「手」',
-    role: 'tools/ 下的工具实现通过 registry.py 自动发现；tools/environments/ 提供 6 种终端后端，让同一份工具代码跑在本地、Docker、SSH 或 serverless 环境里。',
+    role: 'tools/ 下的工具实现通过 registry.py 自动发现；tools/environments/ 提供 6 种内置终端后端（Singularity 自 2026-10 起转为官方插件），让同一份工具代码跑在本地、Docker、SSH 或 serverless 环境里。',
     responsibilities: [
       '文件读写、搜索、bash 等工具实现',
       '工具自动发现与注册（tools/registry.py，零依赖）',
-      '终端后端：local / Docker / SSH / Singularity / Modal / Daytona',
-      'serverless 后端的休眠 / 唤醒',
+      '终端后端：local / Docker / SSH / Modal / Daytona / Vercel Sandbox（Singularity 走 plugin-catalog 插件）',
+      'Modal / Daytona 的 serverless 休眠 / 唤醒',
     ],
     keyFiles: [
       { path: 'tools/registry.py', note: '工具注册表 —— 被所有工具文件导入，本身无依赖' },
       { path: 'tools/', note: '工具实现：自动发现' },
-      { path: 'tools/environments/', note: '6 种终端后端' },
+      { path: 'tools/environments/', note: '6 种内置终端后端' },
     ],
     dependsOn: [],
   },
@@ -99,7 +109,7 @@ export const ARCH_COMPONENTS: ArchComponent[] = [
     tagline: '能力长在边缘，核心保持窄腰',
     role: '新能力主要以插件和技能的形式加入，而不是膨胀核心。插件覆盖记忆 provider、模型 provider、kanban、可观测性等；技能是 agent 可学习、可复用的任务知识。',
     responsibilities: [
-      'memory 插件：honcho / mem0 / supermemory',
+      'memory 插件：内置仅 byterover / retaindb；mem0、holographic、openviking、honcho、supermemory 等均在 plugin-catalog',
       'model-providers 插件：openrouter / anthropic / gmi',
       'kanban：多 agent 看板调度',
       '内置技能与可选技能（agentskills.io 开放标准）',
@@ -150,10 +160,13 @@ export const ARCH_COMPONENTS_EN: ArchComponent[] = [
       'Internal machinery: memory, caching, context compression',
     ],
     keyFiles: [
-      { path: 'run_agent.py', note: 'AIAgent class — the core conversation loop (~12k LOC)' },
+      {
+        path: 'run_agent.py',
+        note: 'AIAgent facade class; the conversation loop lives in agent/turn_*.py',
+      },
       {
         path: 'model_tools.py',
-        note: 'Tool orchestration: discover_builtin_tools() / handle_function_call()',
+        note: 'Tool orchestration: handle_function_call(); discovery (discover_builtin_tools) lives in tools/registry.py',
       },
       { path: 'toolsets.py', note: 'Toolset definitions and the _HERMES_CORE_TOOLS list' },
       {
@@ -175,10 +188,16 @@ export const ARCH_COMPONENTS_EN: ArchComponent[] = [
       'Setup wizard and diagnostics (hermes setup / hermes doctor)',
     ],
     keyFiles: [
-      { path: 'cli.py', note: 'HermesCLI class — interactive CLI orchestrator (~11k LOC)' },
+      {
+        path: 'cli.py',
+        note: 'HermesCLI facade (REPL + slash dispatch); interaction logic in hermes_cli/cli_*_mixin.py',
+      },
       { path: 'hermes_cli/', note: 'CLI subcommands, setup wizard, plugin loader' },
       { path: 'ui-tui/src/', note: 'Ink terminal UI: entry.tsx / app.tsx / gatewayClient.ts' },
-      { path: 'tui_gateway/', note: "The TUI's Python JSON-RPC backend" },
+      {
+        path: 'tui_gateway/',
+        note: 'Python JSON-RPC backend for TUI + Desktop (server.py + methods_*.py)',
+      },
     ],
     dependsOn: ['core'],
   },
@@ -188,19 +207,29 @@ export const ARCH_COMPONENTS_EN: ArchComponent[] = [
     tagline: 'Unified onboarding for 20+ platforms',
     role: 'A single gateway process adapts messages from Telegram, Discord, Slack, WhatsApp, Signal, and other platforms into unified sessions, forwards them to the agent core, and routes replies back to the originating platform.',
     responsibilities: [
-      'One adapter per platform (gateway/platforms/)',
+      'One adapter per platform (plugins/platforms/, …)',
       'Session management: cross-platform continuity, message routing',
       'Voice message transcription',
       'Platform extension spec (ADDING_A_PLATFORM.md)',
     ],
     keyFiles: [
-      { path: 'gateway/run.py', note: 'Gateway entry point and main loop' },
+      {
+        path: 'gateway/run.py',
+        note: 'Gateway facade: entry point and main loop (run_*.py phases)',
+      },
       { path: 'gateway/session.py', note: 'Session state and message flow' },
       {
         path: 'gateway/platforms/',
-        note: 'telegram / discord / slack / whatsapp / signal / feishu / …',
+        note: 'Adapter base classes and shared helpers; built-in only api_server / webhook / msgraph_webhook — other platform adapters live in plugins/platforms/ bundled plugins',
       },
-      { path: 'gateway/ADDING_A_PLATFORM.md', note: 'Official guide to adding a platform adapter' },
+      {
+        path: 'plugins/platforms/',
+        note: 'Adapters for telegram / discord / slack / whatsapp / feishu / … (bundled plugins)',
+      },
+      {
+        path: 'gateway/platforms/ADDING_A_PLATFORM.md',
+        note: 'Official guide to adding a platform adapter',
+      },
     ],
     dependsOn: ['core'],
   },
@@ -208,12 +237,12 @@ export const ARCH_COMPONENTS_EN: ArchComponent[] = [
     id: 'tools',
     name: 'Tools & Execution Environments',
     tagline: 'The agent\'s "hands"',
-    role: 'Tool implementations under tools/ are auto-discovered via registry.py; tools/environments/ provides 6 terminal backends, letting the same tool code run locally, in Docker, over SSH, or in serverless environments.',
+    role: 'Tool implementations under tools/ are auto-discovered via registry.py; tools/environments/ provides 6 built-in terminal backends (Singularity became an official plugin in 2026-10), letting the same tool code run locally, in Docker, over SSH, or in serverless environments.',
     responsibilities: [
       'Tool implementations: file read/write, search, bash, etc.',
       'Tool auto-discovery and registration (tools/registry.py, zero dependencies)',
-      'Terminal backends: local / Docker / SSH / Singularity / Modal / Daytona',
-      'Hibernation / wake-up for serverless backends',
+      'Terminal backends: local / Docker / SSH / Modal / Daytona / Vercel Sandbox (Singularity via plugin-catalog)',
+      'Serverless hibernation / wake-up (Modal, Daytona)',
     ],
     keyFiles: [
       {
@@ -221,7 +250,7 @@ export const ARCH_COMPONENTS_EN: ArchComponent[] = [
         note: 'Tool registry — imported by every tool file, itself dependency-free',
       },
       { path: 'tools/', note: 'Tool implementations: auto-discovered' },
-      { path: 'tools/environments/', note: '6 terminal backends' },
+      { path: 'tools/environments/', note: '6 built-in terminal backends' },
     ],
     dependsOn: [],
   },
@@ -231,7 +260,7 @@ export const ARCH_COMPONENTS_EN: ArchComponent[] = [
     tagline: 'Capabilities grow at the edges; the core stays a narrow waist',
     role: 'New capabilities arrive mainly as plugins and skills rather than bloating the core. Plugins cover memory providers, model providers, kanban, observability, and more; skills are learnable, reusable task knowledge for the agent.',
     responsibilities: [
-      'memory plugins: honcho / mem0 / supermemory',
+      'memory plugins: built-in only byterover / retaindb; mem0, holographic, openviking, honcho, supermemory etc. are all in the plugin catalog',
       'model-providers plugins: openrouter / anthropic / gmi',
       'kanban: multi-agent board scheduling',
       'Built-in and optional skills (agentskills.io open standard)',

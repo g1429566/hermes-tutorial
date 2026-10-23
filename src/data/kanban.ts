@@ -1,16 +1,20 @@
 // Chapter 13「Kanban 工作队列」数据源：模拟任务卡、dispatcher 循环、隔离模型。
-// 内容对齐 hermes-agent/AGENTS.md「Kanban (multi-agent work queue)」（1087–1126 行）。
+// 内容对齐 hermes-agent/cron/AGENTS.md 的「Kanban (multi-agent work queue)」一节
+// 与 website/docs/user-guide/features/kanban.md（手动摘录）。
 
 export const KANBAN_INTRO =
   'kanban 是一块 SQLite 持久化的看板，让多个 profile / worker 在同一批任务上协作：' +
   '用户用 hermes kanban <verb> 驱动，dispatcher 催生的 worker 用专用 kanban_* toolset 驱动——' +
   '不在 kanban 任务里时，这些工具的 schema 占用为零。先在下面的模拟面板上亲手移几张卡。';
 
-export type KanbanColumn = 'ready' | 'claimed' | 'blocked' | 'done';
+// 真实 board 的状态机是 triage/todo/scheduled/ready/running/blocked/review/done/archived
+//（hermes_cli/kanban_db.py VALID_STATUSES）；模拟面板取主干四列——running 即"已认领执行中"，
+// 认领本身由 claim_lock 字段记录。
+export type KanbanColumn = 'ready' | 'running' | 'blocked' | 'done';
 
 export const KANBAN_COLUMNS: { id: KanbanColumn; name: string; desc: string }[] = [
   { id: 'ready', name: 'Ready', desc: '就绪，等待 dispatcher 认领' },
-  { id: 'claimed', name: 'Claimed', desc: '已被 worker 原子认领，执行中' },
+  { id: 'running', name: 'Running', desc: '已被 worker 原子认领，执行中' },
   { id: 'blocked', name: 'Blocked', desc: '被阻塞（或连续失败自动阻塞）' },
   { id: 'done', name: 'Done', desc: '完成' },
 ];
@@ -25,8 +29,8 @@ export interface KanbanCard {
 export const INITIAL_CARDS: KanbanCard[] = [
   { id: 'T-101', title: '给网关加飞书 adapter 的骨架', assignee: 'coder', column: 'ready' },
   { id: 'T-102', title: '重写技能加载的缓存策略', assignee: 'coder', column: 'ready' },
-  { id: 'T-103', title: '审计 plugins/ 的第三方依赖', assignee: 'reviewer', column: 'claimed' },
-  { id: 'T-104', title: '修复 cron catchup 窗口计算', assignee: 'coder', column: 'claimed' },
+  { id: 'T-103', title: '审计 plugins/ 的第三方依赖', assignee: 'reviewer', column: 'running' },
+  { id: 'T-104', title: '修复 cron catchup 窗口计算', assignee: 'coder', column: 'running' },
   { id: 'T-105', title: '等待上游 API 开放配额', assignee: 'ops', column: 'blocked' },
   { id: 'T-106', title: '补齐 TUI 补全的测试', assignee: 'reviewer', column: 'done' },
 ];
@@ -38,9 +42,9 @@ export const CARD_ACTIONS: {
   from: KanbanColumn[];
   to: KanbanColumn;
 }[] = [
-  { action: '认领', tool: 'dispatcher 原子认领', from: ['ready'], to: 'claimed' },
-  { action: '完成', tool: 'kanban_complete', from: ['claimed'], to: 'done' },
-  { action: '阻塞', tool: 'kanban_block', from: ['claimed', 'ready'], to: 'blocked' },
+  { action: '认领', tool: 'dispatcher 原子认领', from: ['ready'], to: 'running' },
+  { action: '完成', tool: 'kanban_complete', from: ['running'], to: 'done' },
+  { action: '阻塞', tool: 'kanban_block', from: ['running', 'ready'], to: 'blocked' },
   { action: '解阻', tool: 'kanban_unblock', from: ['blocked'], to: 'ready' },
 ];
 
@@ -102,7 +106,7 @@ export const KANBAN_INTRO_EN =
 
 export const KANBAN_COLUMNS_EN: { id: KanbanColumn; name: string; desc: string }[] = [
   { id: 'ready', name: 'Ready', desc: 'Ready, waiting for a dispatcher to claim' },
-  { id: 'claimed', name: 'Claimed', desc: 'Atomically claimed by a worker, in progress' },
+  { id: 'running', name: 'Running', desc: 'Atomically claimed by a worker, in progress' },
   { id: 'blocked', name: 'Blocked', desc: 'Blocked (or auto-blocked after repeated failures)' },
   { id: 'done', name: 'Done', desc: 'Done' },
 ];
@@ -124,13 +128,13 @@ export const INITIAL_CARDS_EN: KanbanCard[] = [
     id: 'T-103',
     title: 'Audit third-party dependencies in plugins/',
     assignee: 'reviewer',
-    column: 'claimed',
+    column: 'running',
   },
   {
     id: 'T-104',
     title: 'Fix the cron catchup window computation',
     assignee: 'coder',
-    column: 'claimed',
+    column: 'running',
   },
   { id: 'T-105', title: 'Waiting for upstream API quota', assignee: 'ops', column: 'blocked' },
   { id: 'T-106', title: 'Backfill tests for TUI completion', assignee: 'reviewer', column: 'done' },
@@ -142,9 +146,9 @@ export const CARD_ACTIONS_EN: {
   from: KanbanColumn[];
   to: KanbanColumn;
 }[] = [
-  { action: 'Claim', tool: 'atomic claim by dispatcher', from: ['ready'], to: 'claimed' },
-  { action: 'Complete', tool: 'kanban_complete', from: ['claimed'], to: 'done' },
-  { action: 'Block', tool: 'kanban_block', from: ['claimed', 'ready'], to: 'blocked' },
+  { action: 'Claim', tool: 'atomic claim by dispatcher', from: ['ready'], to: 'running' },
+  { action: 'Complete', tool: 'kanban_complete', from: ['running'], to: 'done' },
+  { action: 'Block', tool: 'kanban_block', from: ['running', 'ready'], to: 'blocked' },
   { action: 'Unblock', tool: 'kanban_unblock', from: ['blocked'], to: 'ready' },
 ];
 

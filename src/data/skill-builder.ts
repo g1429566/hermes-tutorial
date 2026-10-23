@@ -1,6 +1,6 @@
 // Chapter 18「写一个新技能」数据源：技能构建器。
-// 字段与硬标准对齐 hermes-agent/AGENTS.md「SKILL.md frontmatter」（870–880 行）
-// 与「Skill authoring standards (HARDLINE)」（882–955 行）；
+// 字段与硬标准对齐 hermes-agent/skills/AGENTS.md「SKILL.md frontmatter」（16–22 行）
+// 与「Authoring standards (HARDLINE)」（24–56 行）；
 // frontmatter 形状对齐真实技能 skills/apple/apple-reminders/SKILL.md。
 
 import { SKILL_PLATFORMS } from '@/lib/skill-validate';
@@ -20,7 +20,7 @@ export const SKILL_BUILDER_INTRO =
   'reviewer 会直接拒掉违反的 PR。下面这个构建器把最硬的字段规则做成了实时校验：' +
   '左边填表，右边立刻看到生成的 SKILL.md frontmatter 和校验结果。';
 
-// 可选分类：AGENTS.md 862–864 行列出的 optional-skills 类目
+// 可选分类：skills/AGENTS.md 11–12 行列出的 optional-skills 类目
 export const SKILL_CATEGORIES = [
   'autonomous-ai-agents',
   'blockchain',

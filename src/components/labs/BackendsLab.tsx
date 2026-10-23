@@ -17,7 +17,7 @@ import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
 import { pick, useLang } from '@/lib/i18n';
 
-// Chapter 16「终端后端」：6 种后端 CompareSelect + serverless 休眠/唤醒 Stepper + 对比表。
+// Chapter 16「终端后端」：6 种内置后端 + Singularity 插件卡 CompareSelect + serverless 休眠/唤醒 Stepper + 对比表。
 export default function BackendsLab() {
   const { lang } = useLang();
   const intro = lang === 'en' ? BACKENDS_INTRO_EN : BACKENDS_INTRO;
@@ -46,7 +46,7 @@ export default function BackendsLab() {
     <section className="mt-10">
       <p className="max-w-3xl leading-relaxed text-ink/75">{intro}</p>
 
-      {/* ── ① 六种后端对比 ─────────────────────────────────────── */}
+      {/* ── ① 六种内置后端 + 插件后端对比 ─────────────────────── */}
       <SectionHeading
         kicker={pick(lang, BACKENDS_UI.backendsKicker)}
         title={pick(lang, BACKENDS_UI.backendsTitle)}
