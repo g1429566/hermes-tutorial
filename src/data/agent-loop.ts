@@ -68,6 +68,8 @@ export const LOOP_STEPS: LoopStep[] = [
       '工具 schema 随 messages 一起发出：tool_schemas',
       'reasoning 内容存在 assistant_msg["reasoning"]',
       '改技能/工具默认「下次会话生效」，--now 才立即失效缓存',
+      '严格 role alternation：永不连续两条同 role 消息、循环中不注入合成 user 消息——与 append-only 一样是缓存与协议双重不变量；唯一例外 /steer：作为独立 user 行跟在 tool result 之后（assistant(tool_calls)→tool→user 在所有 provider 路径合法），且不得涂抹已持久化的 tool 行',
+      'context files 只在启动时从当前工作目录加载（AGENTS.md 等），有长度上限（CONTEXT_FILE_MAX_CHARS = 20_000 量级），绝不加载安装树自带的 AGENTS.md',
     ],
   },
   {
@@ -170,6 +172,7 @@ api_call_count += 1`,
       '子 agent 由 delegation.max_iterations 单独限制（示例默认 250）',
       '会话落盘 hermes_state.py（SessionDB），支撑跨会话搜索',
       'cron 会话有 600 秒闲置看门狗硬中断（HERMES_CRON_TIMEOUT 可调）——调度器不被单个任务拖死',
+      'cron 投递住在自己的 session 正是为了守 role alternation：镜像以 user 轮追加在回合边界（turn-boundary 追加才同时 alternation- 与 cache-safe）',
     ],
   },
 ];
@@ -236,6 +239,8 @@ export const LOOP_STEPS_EN: LoopStep[] = [
       'Tool schemas are sent along with messages: tool_schemas',
       'Reasoning content lives in assistant_msg["reasoning"]',
       'Skill/tool changes take effect "next session" by default; --now busts the cache immediately',
+      'Strict role alternation: never two same-role messages in a row, never a synthetic user message injected mid-loop — a cache-and-protocol invariant just like append-only. The one exception is /steer: a standalone user row after a tool result (assistant(tool_calls) → tool → user is legal on every provider path), never smeared onto the already-persisted tool row',
+      'Context files load from the current working directory only at startup (AGENTS.md etc.), with a length cap (CONTEXT_FILE_MAX_CHARS = 20_000 order of magnitude); an install-tree AGENTS.md is never loaded as project context',
     ],
   },
   {
@@ -338,6 +343,7 @@ api_call_count += 1`,
       'Subagents are capped separately by delegation.max_iterations (250 in the shipped example)',
       'Sessions persist via hermes_state.py (SessionDB), powering cross-session search',
       'Cron sessions have a 600-second idle watchdog hard interrupt (HERMES_CRON_TIMEOUT overrides) — the scheduler never gets stuck on one task',
+      'Cron deliveries live in their own session precisely to preserve role alternation: the mirror appends as a user turn at a turn boundary (turn-boundary appends are what make it alternation- and cache-safe)',
     ],
   },
 ];

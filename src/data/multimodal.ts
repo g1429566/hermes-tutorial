@@ -32,6 +32,7 @@ export const MODALITIES: Modality[] = [
       '输入是图片 URL + 自定义 prompt（另支持 region 局部裁剪放大）',
       '自定义/本地 endpoint 的模型可用 model.supports_vision 声明视觉能力，native 路径同样可用',
       '图片过大时由压缩层做重编码自救（第 29 章）',
+      'native 快速路径的隐性成本：图片嵌入是历史消息的一部分，之后每次 API 调用都重发——尺寸与重复预算集中在 tools/vision_tools_history_budget.py 按 (session, source) 计数管理（vision.embed_target_bytes / vision.max_calls_per_image）',
     ],
   },
   {
@@ -126,6 +127,7 @@ export const MODALITIES_EN: Modality[] = [
       'Input is an image URL + a custom prompt (plus an optional region crop to zoom)',
       'Models on custom/local endpoints can declare vision capability via model.supports_vision — the native path works for them too',
       'Oversized images are self-rescued by the compression layer via re-encoding (Chapter 29)',
+      'The hidden cost of the native fast path: the image embed becomes part of history and is re-sent on every later API call — size and repeat budgets are managed centrally in tools/vision_tools_history_budget.py, counted per (session, source) (vision.embed_target_bytes / vision.max_calls_per_image)',
     ],
   },
   {

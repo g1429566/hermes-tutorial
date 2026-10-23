@@ -196,6 +196,28 @@ process_registry.completion_queue.put(evt)  # type="async_delegation"
     ],
   },
   {
+    id: 'rpc',
+    kicker: 'RPC 脚本',
+    title: 'tools/code_execution_rpc.py：沙箱脚本直调工具的零上下文回合',
+    body: '委派并行之外还有第二条「省上下文」路径：execute_code 沙箱里的 Python 脚本可以不回模型、直接调工具。tools/code_execution_rpc.py 在宿主侧起 RPC server——本地走 UDS/TCP socket（_rpc_server_loop），远程环境轮询请求文件（_rpc_poll_loop），两条传输共享同一条流水线：token 校验（常量时间比较，空 token fail closed）→ allow-list → call budget → 静默分发 → 记日志。只有真正 dispatch 的调用才消耗预算，拒绝是免费的。多步流水线由此压成不花模型 round-trip 的「零上下文成本回合」——模型只在首尾出场，中间步骤全在沙箱脚本里完成。',
+    code: {
+      file: 'tools/code_execution_rpc.py',
+      snippet: `"""Host-side RPC servers for execute_code sandboxes.
+
+Two transports share one request pipeline (token check → allow-list → call
+budget → dispatch under output silence → log): _rpc_server_loop serves the
+local UDS/TCP socket, _rpc_poll_loop polls a remote filesystem for request
+files via env.execute().
+"""`,
+      note: '沙箱脚本 = 不花模型 round-trip 的多步流水线；与委派并行互补的第二种省上下文路径',
+    },
+    points: [
+      '脚本直调工具，多步流水线零模型 round-trip',
+      'token 校验 → allow-list → call budget → dispatch：同一条流水线两种传输共用',
+      '只有 dispatch 消耗 call budget，refusals are free',
+    ],
+  },
+  {
     id: 'batch',
     kicker: '并行 fan-out',
     title: 'batch tasks:[]：一次调用，N 个子 agent 并行',
@@ -423,6 +445,29 @@ process_registry.completion_queue.put(evt)  # type="async_delegation"
       'The parent neither waits nor polls — it just keeps talking to the user',
       'Batch background tasks re-enter the session as one aggregated completion event by default (independent_completions can split them)',
       'Persistence rule: work that must outlive a process restart goes to cronjob, not to background delegation',
+    ],
+  },
+  {
+    id: 'rpc',
+    kicker: 'RPC scripts',
+    title:
+      'tools/code_execution_rpc.py: sandbox scripts calling tools directly, a zero-context turn',
+    body: 'Besides delegation parallelism there is a second "context-saving" path: a Python script inside an execute_code sandbox can call tools directly without going back to the model. tools/code_execution_rpc.py runs a host-side RPC server — locally over a UDS/TCP socket (_rpc_server_loop), on remote environments by polling request files (_rpc_poll_loop) — and both transports share one request pipeline: token check (constant-time compare, empty token fails closed) → allow-list → call budget → dispatch under output silence → log. Only a dispatched call consumes budget; refusals are free. A multi-step pipeline is compressed into a "zero-context-cost turn" that spends no model round-trips — the model only shows up at the first and last step, with everything in between executed inside the sandbox script.',
+    code: {
+      file: 'tools/code_execution_rpc.py',
+      snippet: `"""Host-side RPC servers for execute_code sandboxes.
+
+Two transports share one request pipeline (token check → allow-list → call
+budget → dispatch under output silence → log): _rpc_server_loop serves the
+local UDS/TCP socket, _rpc_poll_loop polls a remote filesystem for request
+files via env.execute().
+"""`,
+      note: 'Sandbox script = a multi-step pipeline with zero model round-trips; the second context-saving path, complementing delegation parallelism',
+    },
+    points: [
+      'Scripts call tools directly: multi-step pipelines with zero model round-trips',
+      'token check → allow-list → call budget → dispatch: one pipeline shared by both transports',
+      'Only dispatches consume the call budget — refusals are free',
     ],
   },
   {

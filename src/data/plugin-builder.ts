@@ -1,5 +1,6 @@
 // Chapter 21「写一个 Plugin」数据源：Plugin 构建器。
-// 扩展面与铁律对齐 hermes-agent/plugins/AGENTS.md（铁律 7–15 行、发现时机坑 77–80 行）；
+// 扩展面与铁律对齐 hermes-agent/plugins/AGENTS.md（铁律 7–15 行、发现时机坑 77–80 行、
+// 目录安全模型 57–74 行、host 边界 110–135 行）；
 // 生成的 plugin.yaml / __init__.py 形状对齐真实插件 plugins/disk-cleanup/，
 // ctx API 签名对齐 hermes_cli/plugins.py 的 PluginContext。
 
@@ -60,6 +61,27 @@ export const PLUGIN_DISCOVERY_PITFALL = {
     'discover_plugins() 只作为 import model_tools.py 的副作用运行。' +
     '任何「没先 import model_tools.py 就读插件状态」的代码路径，都必须显式调用 discover_plugins()——' +
     '它是幂等的，显式调用零代价。',
+};
+
+// 插件目录安全模型（plugins/AGENTS.md 57–74 行）
+export const PLUGIN_CATALOG_SECURITY = {
+  title: '插件目录安全模型',
+  body:
+    'plugin-catalog/ 是树外插件的唯一发现系统：一插件一 YAML，40-hex SHA 钉死 commit，人审 PR 合入。' +
+    'removed.yaml 是黑名单——所有安装路径（CLI / dashboard / TUI）按 host/owner/repo 拒绝上榜插件。' +
+    'provenance 只写在 installer 维护的 .install-metadata.json（catalog 块，sha = 检出的 commit）：' +
+    '树内 .hermes-catalog.json 只是 Desktop「Install here」的便利副本，Python 永不信任（仓库可能自带伪造副本）。',
+};
+
+// Host 隔离（plugins/AGENTS.md 110–135 行）
+export const PLUGIN_HOST_ISOLATION = {
+  title: 'Host 隔离：plugins.isolation: host',
+  body:
+    'in_process（默认）把用户插件 import 进 Hermes；plugins.isolation: host 让每个非 bundled 插件跑在 ' +
+    'per-profile host 进程（hermes_cli/plugin_host.py 父侧 + plugin_host_wire.py framed JSON 协议），' +
+    '插件拿到的是 RemotePluginContext。跨进程唯一不能穿越的是一张表：' +
+    'plugin_isolation.HOST_UNSUPPORTED_CTX_METHODS（活的 gateway / adapter 对象）——' +
+    '运行时拒绝与静态审计（plugin_isolation_audit.py，hermes plugins validate/show 展示）都读它。',
 };
 
 function pluginName(form: PluginForm): string {
@@ -210,6 +232,25 @@ export const PLUGIN_DISCOVERY_PITFALL_EN: typeof PLUGIN_DISCOVERY_PITFALL = {
     'it is idempotent, so an explicit call costs nothing.',
 };
 
+export const PLUGIN_CATALOG_SECURITY_EN: typeof PLUGIN_CATALOG_SECURITY = {
+  title: 'Plugin catalog security model',
+  body:
+    'plugin-catalog/ is the ONLY discovery system for out-of-tree plugins: one YAML per entry, a 40-hex SHA pinning the commit, merged via human-reviewed PR. ' +
+    'removed.yaml is the kill list — every install path (CLI / dashboard / TUI) refuses matches by host/owner/repo. ' +
+    'Provenance lives only on the installer-owned .install-metadata.json (catalog block, sha = checked-out commit): ' +
+    'the in-tree .hermes-catalog.json is a convenience copy for the Desktop "Install here" button — Python never trusts it (a repo can ship a forged one).',
+};
+
+export const PLUGIN_HOST_ISOLATION_EN: typeof PLUGIN_HOST_ISOLATION = {
+  title: 'Host isolation: plugins.isolation: host',
+  body:
+    'in_process (the default) imports user plugins into Hermes; plugins.isolation: host runs every non-bundled plugin in a ' +
+    'per-profile host process (hermes_cli/plugin_host.py on the parent side + the plugin_host_wire.py framed JSON protocol), ' +
+    'and plugins receive a RemotePluginContext. The one thing that cannot cross the process boundary is a single table: ' +
+    'plugin_isolation.HOST_UNSUPPORTED_CTX_METHODS (live gateway / adapter objects) — ' +
+    'both the runtime refusal and the static audit (plugin_isolation_audit.py, shown by hermes plugins validate/show) read it.',
+};
+
 // 本章专属 UI 文案（表单标签、错误提示、说明 note 等）
 export const PLUGIN_UI = {
   nameLabel: { zh: '插件名', en: 'Plugin name' },
@@ -223,6 +264,6 @@ export const PLUGIN_UI = {
     zh: 'PluginManager 从 ~/.hermes/plugins/、./.hermes/plugins/ 与 pip entry points 发现插件',
     en: 'PluginManager discovers plugins from ~/.hermes/plugins/, ./.hermes/plugins/, and pip entry points',
   },
-  rulesKicker: { zh: '两条红线', en: 'Two red lines' },
+  rulesKicker: { zh: '红线与边界', en: 'Red lines and boundaries' },
   rulesTitle: { zh: '写插件前必须知道的事', en: 'What you must know before writing a plugin' },
 };

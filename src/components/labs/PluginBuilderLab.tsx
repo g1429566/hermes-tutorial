@@ -11,6 +11,10 @@ import {
   LIFECYCLE_HOOKS_EN,
   PLUGIN_DISCOVERY_PITFALL,
   PLUGIN_DISCOVERY_PITFALL_EN,
+  PLUGIN_CATALOG_SECURITY,
+  PLUGIN_CATALOG_SECURITY_EN,
+  PLUGIN_HOST_ISOLATION,
+  PLUGIN_HOST_ISOLATION_EN,
   PLUGIN_INTRO,
   PLUGIN_INTRO_EN,
   PLUGIN_IRON_RULE,
@@ -34,8 +38,18 @@ export default function PluginBuilderLab() {
   const capabilities = lang === 'en' ? CAPABILITY_POINTS_EN : CAPABILITY_POINTS;
   const redLines =
     lang === 'en'
-      ? [PLUGIN_IRON_RULE_EN, PLUGIN_DISCOVERY_PITFALL_EN]
-      : [PLUGIN_IRON_RULE, PLUGIN_DISCOVERY_PITFALL];
+      ? [
+          PLUGIN_IRON_RULE_EN,
+          PLUGIN_DISCOVERY_PITFALL_EN,
+          PLUGIN_CATALOG_SECURITY_EN,
+          PLUGIN_HOST_ISOLATION_EN,
+        ]
+      : [
+          PLUGIN_IRON_RULE,
+          PLUGIN_DISCOVERY_PITFALL,
+          PLUGIN_CATALOG_SECURITY,
+          PLUGIN_HOST_ISOLATION,
+        ];
   const progress = useProgress();
   const saved = progress.labResults['lab:plugin-builder'];
   const [form, setForm] = useState<PluginForm>(() => {

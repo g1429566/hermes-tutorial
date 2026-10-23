@@ -62,6 +62,10 @@ export const COMPRESSION_EXTRAS: { title: string; body: string }[] = [
     title: '为什么唯独它可以改上下文',
     body: 'prompt 缓存的失效单位是前缀。压缩把「前缀本身」换掉是有意为之的一次性失效：付一次全量重算的钱，换回后续每轮都便宜的短上下文。其他改动（换工具、改历史）只亏不赚。',
   },
+  {
+    title: 'Micro-compaction：长会话的常态保鲜',
+    body: '全量压缩之外还有一条增量路径：把一次 batch 压缩的大账单分期付款——每个回合结束后只把最老的一个未吸收 exchange 折进 rolling summary（cursor 前进；摘要超过 2000 token 时 defrag 重整摘要本身），上下文占用常年压低，batch 压缩很少再触发；两种压缩产出同一格式的摘要标记，可直接交互。用户自己的消息永不参与压缩：exchange 从 assistant 消息开始，你输入的话整场会话逐字保留。代价是每回合打破一次缓存前缀，所以 compression.micro_compact 默认关闭（来源：website/docs/developer-guide/micro-compaction.md）。',
+  },
 ];
 
 export const CHECKPOINT_INTRO =
@@ -83,6 +87,10 @@ export const CHECKPOINT_FACTS: { title: string; body: string }[] = [
   {
     title: '自动清理',
     body: 'prune_checkpoints 删掉工作目录已不存在（孤儿）或超过 retention_days（过期）的引用，跑 git gc 回收对象；另有容量上限 pass：总库超过 max_total_size_mb 时按项目从旧到新丢弃。',
+  },
+  {
+    title: '用户命令 /rollback',
+    body: 'checkpoint 不只是 LLM 不可见的自动快照——用户可经 /rollback 回滚：/rollback 列出全部快照（含变更统计），/rollback <N> 回滚到第 N 个（保留你的手工改动，同时撤销最后一轮对话），--all 全量还原（连手工改动也覆盖），diff <N> 预览差异，/rollback <N> <file> 还原单个文件。checkpoints 本身是 opt-in（checkpoints.enabled 或 --checkpoints）。来源：website/docs/user-guide/checkpoints-and-rollback.md。',
   },
 ];
 
@@ -149,6 +157,10 @@ export const COMPRESSION_EXTRAS_EN: typeof COMPRESSION_EXTRAS = [
     title: 'Why it alone may change the context',
     body: 'Prompt cache invalidates by prefix. Compression deliberately swaps out “the prefix itself” as a one-time invalidation: pay one full recompute, and get back a short context that stays cheap every turn after. Any other change (swapping tools, rewriting history) is pure loss.',
   },
+  {
+    title: 'Micro-compaction: continuous freshness for long sessions',
+    body: 'Beyond full compression there is an incremental path: it pays the batch bill in instalments — after each turn it folds only the oldest un-absorbed exchange into a rolling summary (the cursor advances; past 2000 tokens a defrag pass re-summarizes the summary itself), keeping occupancy low so batch compaction rarely fires — the identical marker format lets the two interoperate. Your own messages are never compacted: an exchange starts at the assistant message, so what you typed stays verbatim for the entire session. The cost is a cache-prefix break every turn, which is why compression.micro_compact stays off by default (source: website/docs/developer-guide/micro-compaction.md).',
+  },
 ];
 
 export const CHECKPOINT_INTRO_EN =
@@ -172,6 +184,10 @@ export const CHECKPOINT_FACTS_EN: typeof CHECKPOINT_FACTS = [
   {
     title: 'Automatic cleanup',
     body: 'prune_checkpoints deletes refs whose working directory no longer exists (orphaned) or that exceed retention_days (expired), then runs git gc to reclaim objects; there’s also a capacity pass: when the store exceeds max_total_size_mb, projects are dropped oldest-first.',
+  },
+  {
+    title: 'The /rollback command',
+    body: 'A checkpoint is more than an automatic snapshot the LLM never sees — the user can roll back via /rollback: bare /rollback lists every checkpoint with change stats; /rollback <N> restores checkpoint N (keeping your hand-edits, and also undoing the last chat turn); --all restores fully (hand-edits included); diff <N> previews the delta; /rollback <N> <file> restores a single file. Checkpoints themselves are opt-in (checkpoints.enabled or --checkpoints). Source: website/docs/user-guide/checkpoints-and-rollback.md.',
   },
 ];
 
