@@ -183,7 +183,7 @@ export const SKILL_BUILDER_UI = {
     zh: '复杂技能目标约 200 行、简单技能约 100 行；砍掉营销式引言和在 Prerequisites 里已经讲过的环境变量复读。',
     en: 'Target ~200 lines for complex skills, ~100 for simple ones; cut marketing-style intros and env-var repetition already covered in Prerequisites.',
   },
-  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookKicker: { zh: '要点回顾', en: 'Key idea' },
   hookTitle: { zh: '一句话记住技能 frontmatter', en: 'Skill frontmatter in one sentence' },
   hookBody: {
     zh: '60 字符、一句话、句号结尾、没有营销词、不重复技能名——description 是技能的脸，也是模型注意力的税。',

@@ -166,24 +166,22 @@ export const SLASH_FLOW_STEPS: SlashFlowStep[] = [
     id: 'local',
     label: '本地内建',
     title: '第一步：前端本地处理（app/slash）',
-    body: '/help、/quit、/clear、/resume、/copy、/paste 等内建命令完全在 Ink 前端本地处理——不序列化、不出进程、不等 Python。这些命令操作的是「屏幕」本身（清屏、复制、退出），而屏幕归 TypeScript 所有，所以根本不需要后端参与。',
+    body: '前端可以识别本地命令处理器。纯显示操作可留在本地；会话选择等处理器仍可能请求后端数据或动作。本地分发不等于零 RPC。',
     code: {
-      file: 'ui-tui/src/app/slash/commands/',
-      snippet: `// 内建命令：/help /quit /clear /resume /copy /paste ...
-// 在 app/slash/commands/ 本地处理，不发 RPC`,
-      note: '操作屏幕的命令留在屏幕的拥有者手里',
+      file: 'ui-tui/src/app/slash/',
+      snippet: '前端处理器 → 本地状态和/或后端请求',
     },
-    points: ['零 RPC 往返，即时响应', '只覆盖「纯界面」语义的命令'],
+    points: ['区分在哪里识别命令，与动作需要访问哪里。', '会话操作仍由后端拥有。'],
   },
   {
     id: 'worker',
     label: 'slash.exec',
     title: '第二步：_SlashWorker 子进程执行',
-    body: '其余所有斜杠命令通过 slash.exec 发给 Python。tui_gateway 不在自己的主进程里跑它们，而是交给一个持久的 _SlashWorker 子进程（定义在 tui_gateway/server.py，子进程入口 tui_gateway/slash_worker.py）——命令再慢也不会阻塞网关主循环。',
+    body: '部分命令使用持久的 _SlashWorker，当前客户端位于 slash_worker_client.py。应按实际分发核对，不把全部命令一概画进这条路径。',
     code: {
       file: 'tui_gateway/server.py',
-      snippet: `# slash.exec → 持久 _SlashWorker 子进程
-# （子进程入口：tui_gateway/slash_worker.py）`,
+      snippet:
+        '# slash.exec → 持久 _SlashWorker 子进程\n# （子进程入口：tui_gateway/slash_worker.py）',
       note: 'worker 是持久的：命令之间不用反复起进程',
     },
     points: ['主网关进程不被命令执行拖住', 'worker 随会话创建、随会话回收'],
@@ -195,8 +193,7 @@ export const SLASH_FLOW_STEPS: SlashFlowStep[] = [
     body: 'slash.exec 处理不了的，回退到 command.dispatch——由网关把命令解析为 skill / alias / exec 指令。技能命令会被解析成一条普通 prompt 提交给 agent，这也是为什么技能斜杠命令在所有前端（TUI、桌面端）里行为一致。',
     code: {
       file: 'tui_gateway/server.py',
-      snippet: `# slash.exec 不成 → command.dispatch 兜底
-# 网关解析为 skill / alias / exec 指令`,
+      snippet: '# slash.exec 不成 → command.dispatch 兜底\n# 网关解析为 skill / alias / exec 指令',
       note: '同一套兜底逻辑也服务桌面端（apps/desktop/）',
     },
     points: ['技能命令 = 注入为普通 user 消息', '解析规则集中在网关，前端不各写一份'],
@@ -373,27 +370,25 @@ export const SLASH_FLOW_STEPS_EN: SlashFlowStep[] = [
     id: 'local',
     label: 'Local built-ins',
     title: 'Step 1: handled locally in the frontend (app/slash)',
-    body: 'Built-in commands like /help, /quit, /clear, /resume, /copy, /paste are handled entirely in the Ink frontend — no serialization, no process hop, no waiting on Python. These commands operate on the "screen" itself (clear, copy, quit), and the screen belongs to TypeScript, so the backend is simply not involved.',
+    body: 'The front end recognizes local slash-command handlers. Pure display actions can stay local; handlers such as session selection may still request backend data or actions. Local dispatch does not mean zero RPC.',
     code: {
-      file: 'ui-tui/src/app/slash/commands/',
-      snippet: `// 内建命令：/help /quit /clear /resume /copy /paste ...
-// 在 app/slash/commands/ 本地处理，不发 RPC`,
-      note: "Commands that operate on the screen stay with the screen's owner",
+      file: 'ui-tui/src/app/slash/',
+      snippet: 'front-end handler → local state and/or backend request',
     },
     points: [
-      'Zero RPC round-trips, instant response',
-      'Covers only commands with pure-UI semantics',
+      'Separate command recognition from its effects.',
+      'Session operations still belong to the backend.',
     ],
   },
   {
     id: 'worker',
     label: 'slash.exec',
     title: 'Step 2: executed in the _SlashWorker subprocess',
-    body: 'All other slash commands go to Python via slash.exec. tui_gateway does not run them in its own main process — it hands them to a persistent _SlashWorker subprocess (defined in tui_gateway/server.py, subprocess entry tui_gateway/slash_worker.py), so however slow a command is, it never blocks the gateway main loop.',
+    body: 'Some slash commands use a persistent _SlashWorker; current client code lives in slash_worker_client.py. Inspect the actual routing before assuming all commands use this path.',
     code: {
       file: 'tui_gateway/server.py',
-      snippet: `# slash.exec → 持久 _SlashWorker 子进程
-# （子进程入口：tui_gateway/slash_worker.py）`,
+      snippet:
+        '# slash.exec → 持久 _SlashWorker 子进程\n# （子进程入口：tui_gateway/slash_worker.py）',
       note: 'The worker is persistent: no process startup cost between commands',
     },
     points: [
@@ -408,8 +403,7 @@ export const SLASH_FLOW_STEPS_EN: SlashFlowStep[] = [
     body: 'Whatever slash.exec cannot handle falls back to command.dispatch — the gateway parses the command into a skill / alias / exec directive. Skill commands are resolved into an ordinary prompt submitted to the agent, which is why skill slash commands behave identically across all frontends (TUI, desktop).',
     code: {
       file: 'tui_gateway/server.py',
-      snippet: `# slash.exec 不成 → command.dispatch 兜底
-# 网关解析为 skill / alias / exec 指令`,
+      snippet: '# slash.exec 不成 → command.dispatch 兜底\n# 网关解析为 skill / alias / exec 指令',
       note: 'The same fallback logic also serves the desktop app (apps/desktop/)',
     },
     points: [

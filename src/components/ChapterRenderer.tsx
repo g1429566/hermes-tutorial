@@ -14,6 +14,8 @@ import { markChapterComplete, setChapterStatus } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
 import { useLang, type Lang } from '@/lib/i18n';
 import { t } from '@/data/ui-strings';
+import { SOURCE_REVISION, SOURCE_REVIEWED_AT, type CourseLessons } from '@/data/lesson-types';
+import LessonProse from './LessonProse';
 import HeroChapter from './labs/HeroChapter';
 import ArchitectureLab from './labs/ArchitectureLab';
 import FeatureMatrixLab from './labs/FeatureMatrixLab';
@@ -47,24 +49,27 @@ import CompressionLab from './labs/CompressionLab';
 import RoutingLab from './labs/RoutingLab';
 import MultimodalLab from './labs/MultimodalLab';
 import EvaluationLab from './labs/EvaluationLab';
+import EvolutionLab from './labs/EvolutionLab';
 
 interface ChapterRendererProps {
   chapterId: string;
   onNavigate: (id: string) => void;
+  lessons: CourseLessons;
 }
 
-// 章节 → 实验室组件注册表（28 章全部就位；start 走 HeroChapter 特例）。
+// Stable chapter IDs keep existing links and saved progress valid as the reading order changes.
 const LAB_COMPONENTS: Record<string, ComponentType> = {
   // M0
   map: ArchitectureLab,
   features: FeatureMatrixLab,
   install: InstallLab,
-  // M1
+  // Core mechanisms and learning
   'agent-loop': AgentLoopLab,
   'skills-1': SkillFormatLab,
   'skills-2': SkillCuratorLab,
   tools: ToolRoutingLab,
   memory: MemoryLab,
+  evolution: EvolutionLab,
   delegation: DelegationLab,
   'gateway-1': GatewayLab,
   'gateway-2': GatewayFlowLab,
@@ -74,40 +79,53 @@ const LAB_COMPONENTS: Record<string, ComponentType> = {
   cli: CliLab,
   backends: BackendsLab,
   profiles: ProfilesLab,
-  // M2
+  // Extension labs
   'build-skill': SkillBuilderLab,
   'build-tool': ToolBuilderLab,
   'build-provider': ProviderLab,
   'build-plugin': PluginBuilderLab,
   'design-agent': AgentDesignLab,
-  // M3
+  // Design and self-assessment
   'interview-loop': InterviewLab,
   'interview-multi': TopologyLab,
   'interview-design': DesignDocLab,
   'interview-checklist': SelfAssessmentLab,
-  // M4
+  // Failure and protocol labs
   reliability: ReliabilityLab,
   interop: InteropLab,
-  // M5
+  // Additional execution mechanisms
   compression: CompressionLab,
   routing: RoutingLab,
   multimodal: MultimodalLab,
   evaluation: EvaluationLab,
 };
 
-// 每章 = kicker + 讲解 + 交互实验室 + 要点 + 完成按钮。
-// 阶段 1 仅 M0 四章有完整内容，其余章节渲染建设占位。
-export default function ChapterRenderer({ chapterId, onNavigate }: ChapterRendererProps) {
+export default function ChapterRenderer({ chapterId, onNavigate, lessons }: ChapterRendererProps) {
   const { lang } = useLang();
   const chapter = CHAPTER_BY_ID.get(chapterId);
   if (!chapter) return null;
 
-  // Chapter 00 是全屏 Hero，自带布局，不走标准章节框架
-  if (chapterId === 'start') return <HeroChapter onNavigate={onNavigate} />;
+  if (chapterId === 'start') {
+    return (
+      <>
+        <HeroChapter onNavigate={onNavigate} />
+        <article className="chapter">
+          <LessonProse lesson={lessons.start} lang={lang} />
+          <ChapterFooter chapter={chapter} onNavigate={onNavigate} lang={lang} />
+        </article>
+      </>
+    );
+  }
 
   return (
     <article className="chapter">
       <ChapterHeader chapter={chapter} lang={lang} />
+      <LessonProse lesson={lessons[chapterId]} lang={lang} />
+      <p className="mt-12 max-w-3xl border-t border-line pt-6 font-mono text-sm text-muted">
+        {lang === 'zh'
+          ? '交互练习与源码对照 · 模拟使用给定条件，本机步骤需要你在实际环境中执行。'
+          : 'Practice and source exploration · simulations use stated assumptions; local steps require your own environment.'}
+      </p>
       <ChapterBody chapterId={chapterId} chapter={chapter} lang={lang} />
       <ChapterFooter chapter={chapter} onNavigate={onNavigate} lang={lang} />
     </article>
@@ -126,6 +144,15 @@ function ChapterHeader({ chapter, lang }: { chapter: Chapter; lang: Lang }) {
         <h2 className="font-serif text-4xl leading-tight md:text-5xl">{text.title}</h2>
       </div>
       <p className="mt-2 font-mono text-xs text-muted">{text.meta}</p>
+      <a
+        className="mt-3 inline-block font-mono text-xs text-blue hover:underline"
+        href={`https://github.com/NousResearch/hermes-agent/tree/${SOURCE_REVISION}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {lang === 'zh' ? '源码核对' : 'Source checked'} {SOURCE_REVIEWED_AT} ·{' '}
+        {SOURCE_REVISION.slice(0, 10)}
+      </a>
       <p className="mt-5 text-lg leading-relaxed text-ink/80">{text.description}</p>
       <hr className="mt-8 border-line" />
     </header>
@@ -183,7 +210,7 @@ function ChapterFooter({
   const prev = prevChapter(chapter.id);
   const next = nextChapter(chapter.id);
   const complete = progress.chapters[chapter.id] === 'complete';
-  const implemented = chapter.id in LAB_COMPONENTS;
+  const implemented = chapter.id === 'start' || chapter.id in LAB_COMPONENTS;
 
   return (
     <footer className="mt-14 max-w-3xl">

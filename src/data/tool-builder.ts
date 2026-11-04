@@ -244,7 +244,7 @@ export const TOOL_BUILDER_UI = {
     zh: '运行时：Pyodide（CPython WebAssembly），本地 vendored，完全离线',
     en: 'Runtime: Pyodide (CPython WebAssembly), vendored locally, fully offline',
   },
-  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookKicker: { zh: '要点回顾', en: 'Key idea' },
   hookTitle: { zh: '一句话记住加工具', en: 'Adding a tool in one sentence' },
   hookBody: {
     zh: 'import 即注册，toolset 才暴露；handler 永远返回 json.dumps。——文件会被自动发现， 但暴露给 agent 是你的手动决定。',

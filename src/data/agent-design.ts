@@ -30,16 +30,14 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
         id: 'sync-while',
         name: '同步 while 循环',
         desc: '一个 while 包住「调模型 → 执行工具 → 追加结果」，直到模型返回纯文本。',
-        tradeoff:
-          'Hermes 的选择。简单、可单步调试、中断只是循环条件；代价是并发要靠委派另起循环，而不是在循环里异步。',
+        tradeoff: '按阶段推进便于追踪依赖；请求流式与符合条件的工具并行仍可发生在相应执行路径。',
         hermesChoice: true,
       },
       {
         id: 'event-driven',
         name: '事件驱动状态机',
         desc: '一切皆事件：llm.response、tool.result 进队列，状态机推进。',
-        tradeoff:
-          '天然支持并发与可视化追踪，但状态机复杂度爆炸，prompt 缓存的前缀稳定性更难保证——Hermes 只在网关层用事件，循环本体保持同步。',
+        tradeoff: '适合事件协调，但要处理状态与顺序；不能仅由控制形式推断缓存一定更好或更差。',
       },
     ],
   },
@@ -52,8 +50,7 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
         id: 'narrow-core',
         name: '窄核心 + 插件边缘',
         desc: '核心工具极少且高门槛，新能力以插件/技能/toolset 形式长在边缘。',
-        tradeoff:
-          'Hermes 的选择（narrow waist）。每个核心工具每次 API 调用都占 schema 体积；插件 toolset 可启停，schema 占用为零。',
+        tradeoff: '未暴露能力不进入本次工具清单；启用并暴露的插件工具同样占输入空间。',
         hermesChoice: true,
       },
       {
@@ -72,10 +69,9 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
     options: [
       {
         id: 'sqlite-fts5',
-        name: '自建 SQLite + FTS5',
-        desc: '会话落本地 SQLite，FTS5 全文索引，LLM 摘要做跨会话召回。',
-        tradeoff:
-          'Hermes 的选择（hermes_state.py SessionDB）。零外部依赖、离线可用；代价是语义检索要靠摘要而不是向量。',
+        name: '内置记忆与本地历史',
+        desc: 'MEMORY.md/USER.md 保存少量稳定事实；SQLite 历史由 session_search 按需读取。',
+        tradeoff: '内置文件与历史不要求外部记忆服务；语义检索和用户建模可由可选 provider 扩展。',
         hermesChoice: true,
       },
       {
@@ -112,7 +108,7 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
         id: 'static',
         name: '静态技能库',
         desc: '只加载人工编写的技能，不自动创建。',
-        tradeoff: '可控、可评审，但 agent 不会变聪明——等于砍掉了学习循环的一半。',
+        tradeoff: '人工评审的技能可以通过明确修订持续改进，自动复盘是另一种更新方式。',
       },
       {
         id: 'none',
@@ -147,7 +143,7 @@ export const DESIGN_DIMENSIONS: DesignDimension[] = [
         name: 'Serverless 后端',
         desc: '执行环境放 Modal/Daytona，空闲休眠、任务唤醒。',
         tradeoff:
-          'Hermes 支持（tools/environments/）。闲置近零成本，代价是冷启动延迟与休眠/唤醒时序的复杂度。',
+          'Hermes 支持（tools/environments/）。减少闲置计算，仍需核对存储与服务费用，代价是冷启动延迟与休眠/唤醒时序的复杂度。',
         hermesChoice: true,
       },
     ],
@@ -173,7 +169,7 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
         name: 'Synchronous while loop',
         desc: 'One while wraps "call model → execute tools → append results" until the model returns plain text.',
         tradeoff:
-          "Hermes' choice. Simple, step-debuggable, and interruption is just a loop condition; the cost is that concurrency requires spinning up another loop via delegation, not async inside the loop.",
+          'Ordered phases make dependencies explicit. Streaming and eligible concurrent tool batches still occur inside supported execution paths.',
         hermesChoice: true,
       },
       {
@@ -181,7 +177,7 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
         name: 'Event-driven state machine',
         desc: 'Everything is an event: llm.response and tool.result go into a queue, and a state machine advances.',
         tradeoff:
-          'Naturally supports concurrency and visual tracing, but state machine complexity explodes and prefix stability for prompt caching is harder to guarantee — Hermes uses events only at the gateway layer; the loop body stays synchronous.',
+          'Useful for event coordination, with state and ordering complexity. Neither this nor a synchronous loop automatically guarantees better caching.',
       },
     ],
   },
@@ -195,7 +191,7 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
         name: 'Narrow core + plugin edge',
         desc: 'Very few core tools with a high bar; new capabilities grow at the edge as plugins/skills/toolsets.',
         tradeoff:
-          "Hermes' choice (narrow waist). Every core tool costs schema volume on every API call; plugin toolsets can be toggled, costing zero schema when off.",
+          'Unexposed capabilities avoid per-request definitions; enabled plugin tools still add schema input.',
         hermesChoice: true,
       },
       {
@@ -214,10 +210,10 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
     options: [
       {
         id: 'sqlite-fts5',
-        name: 'Self-hosted SQLite + FTS5',
-        desc: 'Sessions land in local SQLite with an FTS5 full-text index; LLM summaries power cross-session recall.',
+        name: 'Local memory and history',
+        desc: 'Bounded MEMORY.md/USER.md snapshots plus SQLite history retrieved by session_search.',
         tradeoff:
-          "Hermes' choice (hermes_state.py SessionDB). Zero external dependencies, works offline; the cost is that semantic retrieval relies on summaries rather than vectors.",
+          'No external memory service is needed for built-in files and history; semantic providers are optional.',
         hermesChoice: true,
       },
       {
@@ -255,7 +251,7 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
         name: 'Static skill library',
         desc: 'Only load hand-written skills; no automatic creation.',
         tradeoff:
-          "Controllable and reviewable, but the agent never gets smarter — that's half the learning loop cut off.",
+          'Human-reviewed skills can improve through deliberate revisions; automatic review is another update path.',
       },
       {
         id: 'none',
@@ -291,7 +287,7 @@ export const DESIGN_DIMENSIONS_EN: DesignDimension[] = [
         name: 'Serverless backend',
         desc: 'Execution environments on Modal/Daytona: dormant when idle, woken by tasks.',
         tradeoff:
-          'Supported by Hermes (tools/environments/). Near-zero idle cost, at the price of cold-start latency and sleep/wake timing complexity.',
+          'Supported by Hermes (tools/environments/). Reduced idle compute with service-specific storage and resource charges, at the price of cold-start latency and sleep/wake timing complexity.',
         hermesChoice: true,
       },
     ],

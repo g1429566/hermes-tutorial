@@ -60,6 +60,12 @@ export const FEATURES: Feature[] = [
     desc: 'Nous Portal、OpenRouter、OpenAI、自有 endpoint；`hermes model` 一键切换。',
     sourceRef: 'providers/',
   },
+  {
+    id: 'memory',
+    name: '记忆与历史',
+    desc: '内置记忆保存稳定事实，session_search 检索历史；外部 provider 是可选扩展。',
+    sourceRef: 'tools/memory_tool.py',
+  },
 ];
 
 export const SCENARIOS: Scenario[] = [
@@ -69,7 +75,7 @@ export const SCENARIOS: Scenario[] = [
     description: '丢给 Hermes 一个没见过的代码库，让它讲清架构和关键路径。',
     featureIds: ['skills', 'delegation', 'models'],
     explanation:
-      '读仓库主要靠文件工具与搜索（M1 第 07 章）；读到的架构结论会沉淀为技能（第 05/06 章），大型仓库可以委派子 agent 分头探索（第 09 章）。',
+      '读仓库主要靠文件工具与搜索（M1 第 05 章）；读到的架构结论会沉淀为技能（第 06/09 章），大型仓库可以委派子 agent 分头探索（第 12 章）。',
   },
   {
     id: 'modify-code',
@@ -77,7 +83,7 @@ export const SCENARIOS: Scenario[] = [
     description: '让 Hermes 改 bug、写测试、跑构建，而不是只给建议。',
     featureIds: ['backends', 'tui', 'delegation'],
     explanation:
-      '改代码在终端后端里执行（第 16 章）：本地、Docker 或 serverless；TUI 里可以实时看到工具输出并随时中断重定向（第 14 章）。',
+      '改代码在终端后端里执行（第 17 章）：本地、Docker 或 serverless；TUI 里可以实时看到工具输出并随时中断重定向（第 18 章）。',
   },
   {
     id: 'remote-control',
@@ -85,7 +91,7 @@ export const SCENARIOS: Scenario[] = [
     description: '出门在外，通过 Telegram 让跑在云 VM 上的 Hermes 继续干活。',
     featureIds: ['gateway', 'backends', 'cron'],
     explanation:
-      '网关把手机消息适配成统一会话（第 10/11 章），agent 实际在云端的 Docker / Modal 后端里执行（第 16 章）——设备不绑定你的笔记本。',
+      '网关把手机消息适配成统一会话（第 13/14 章），agent 实际在云端的 Docker / Modal 后端里执行（第 17 章）——设备不绑定你的笔记本。',
   },
   {
     id: 'scheduled',
@@ -93,22 +99,34 @@ export const SCENARIOS: Scenario[] = [
     description: '每天早上自动检查服务状态、汇总日志，异常时推送消息。',
     featureIds: ['cron', 'gateway', 'skills'],
     explanation:
-      'cron 调度器按自然语言描述触发任务（第 12 章），结果经网关推送到你的聊天平台（第 10 章）；巡检流程可以固化为技能反复复用（第 05 章）。',
+      'cron 调度器按自然语言描述触发任务（第 15 章），结果经网关推送到你的聊天平台（第 13 章）；巡检流程可以固化为技能反复复用（第 06 章）。',
   },
 ];
 
 export const FEATURES_QUIZ: QuizItem = {
   id: 'what-is-hermes-1',
-  question: 'Hermes Agent 最核心的差异化能力是什么？',
+  question: '哪一组机制能支持跨会话积累并复用经验？',
   options: [
-    { key: 'a', text: '它支持很多 LLM provider' },
-    { key: 'b', text: '内置自进化学习循环：从经验创建并改进技能、跨会话记忆' },
-    { key: 'c', text: '它有一个 TUI 界面' },
-    { key: 'd', text: '它可以跑在 Docker 里' },
+    {
+      key: 'a',
+      text: '它支持很多 LLM provider',
+    },
+    {
+      key: 'b',
+      text: '内置自进化学习循环：从经验创建并改进技能、跨会话记忆',
+    },
+    {
+      key: 'c',
+      text: '它有一个 TUI 界面',
+    },
+    {
+      key: 'd',
+      text: '它可以跑在 Docker 里',
+    },
   ],
   correct: ['b'],
   explanation:
-    'provider 多样、TUI、Docker 都是不错的特性，但核心差异化是「自进化学习循环」——技能自创建/自改进 + 跨会话记忆 + 用户建模。',
+    '内置记忆保存少量稳定事实，技能保存可复用流程，历史搜索补充过去的具体证据。是否产生改进仍要验证。',
 };
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
@@ -156,6 +174,12 @@ export const FEATURES_EN: Feature[] = [
     desc: 'Nous Portal, OpenRouter, OpenAI, your own endpoint; switch with one `hermes model` command.',
     sourceRef: 'providers/',
   },
+  {
+    id: 'memory',
+    name: 'Memory and history',
+    desc: 'Built-in notes retain durable facts; session_search retrieves history; external providers are optional.',
+    sourceRef: 'tools/memory_tool.py',
+  },
 ];
 
 export const SCENARIOS_EN: Scenario[] = [
@@ -166,7 +190,7 @@ export const SCENARIOS_EN: Scenario[] = [
       'Hand Hermes a codebase it has never seen and have it explain the architecture and key paths.',
     featureIds: ['skills', 'delegation', 'models'],
     explanation:
-      'Reading a repo relies mainly on file tools and search (M1 Chapter 07); the architectural conclusions it reaches get distilled into skills (Chapters 05/06), and large repos can be explored by delegated sub-agents in parallel (Chapter 09).',
+      'Reading a repo relies mainly on file tools and search (M1 Chapter 05); the architectural conclusions it reaches get distilled into skills (Chapters 06/09), and large repos can be explored by delegated sub-agents in parallel (Chapter 12).',
   },
   {
     id: 'modify-code',
@@ -174,7 +198,7 @@ export const SCENARIOS_EN: Scenario[] = [
     description: 'Have Hermes fix bugs, write tests, and run builds — not just give advice.',
     featureIds: ['backends', 'tui', 'delegation'],
     explanation:
-      'Code changes run inside a terminal backend (Chapter 16): local, Docker, or serverless; in the TUI you can watch tool output live and interrupt-and-redirect at any time (Chapter 14).',
+      'Code changes run inside a terminal backend (Chapter 17): local, Docker, or serverless; in the TUI you can watch tool output live and interrupt-and-redirect at any time (Chapter 18).',
   },
   {
     id: 'remote-control',
@@ -182,7 +206,7 @@ export const SCENARIOS_EN: Scenario[] = [
     description: 'While away from your desk, use Telegram to keep Hermes working on a cloud VM.',
     featureIds: ['gateway', 'backends', 'cron'],
     explanation:
-      'The gateway adapts phone messages into unified sessions (Chapters 10/11), while the agent actually executes in a Docker / Modal backend in the cloud (Chapter 16) — the work is not tied to your laptop.',
+      'The gateway adapts phone messages into unified sessions (Chapters 13/14), while the agent actually executes in a Docker / Modal backend in the cloud (Chapter 17) — the work is not tied to your laptop.',
   },
   {
     id: 'scheduled',
@@ -191,25 +215,34 @@ export const SCENARIOS_EN: Scenario[] = [
       'Every morning, automatically check service status and summarize logs; push a message when something is wrong.',
     featureIds: ['cron', 'gateway', 'skills'],
     explanation:
-      'The cron scheduler triggers jobs from natural-language descriptions (Chapter 12) and pushes results to your chat platform via the gateway (Chapter 10); the inspection routine can be codified as a skill and reused (Chapter 05).',
+      'The cron scheduler triggers jobs from natural-language descriptions (Chapter 15) and pushes results to your chat platform via the gateway (Chapter 13); the inspection routine can be codified as a skill and reused (Chapter 06).',
   },
 ];
 
 export const FEATURES_QUIZ_EN: QuizItem = {
   id: 'what-is-hermes-1',
-  question: "What is Hermes Agent's most core differentiating capability?",
+  question: 'Which mechanisms support reusing experience across sessions?',
   options: [
-    { key: 'a', text: 'It supports many LLM providers' },
+    {
+      key: 'a',
+      text: 'It supports many LLM providers',
+    },
     {
       key: 'b',
       text: 'A built-in self-evolving learning loop: creates and improves skills from experience, remembers across sessions',
     },
-    { key: 'c', text: 'It has a TUI' },
-    { key: 'd', text: 'It can run in Docker' },
+    {
+      key: 'c',
+      text: 'It has a TUI',
+    },
+    {
+      key: 'd',
+      text: 'It can run in Docker',
+    },
   ],
   correct: ['b'],
   explanation:
-    'Provider variety, the TUI, and Docker are all nice features, but the core differentiator is the "self-evolving learning loop" — self-created/self-improved skills + cross-session memory + user modeling.',
+    'Built-in memory carries compact durable facts, skills carry procedures, and history search retrieves past evidence. Improvement still needs evaluation.',
 };
 
 // 本章实验室专属 UI 文案（组件里用 pick(lang, FEATURES_UI.xxx) 取值）。
@@ -222,50 +255,58 @@ export interface IntroSegment {
 export const FEATURES_UI = {
   introP1: {
     zh: [
-      { text: 'Hermes Agent', strong: true },
       {
-        text: ' 是 Nous Research 开发的自进化 AI agent，用 Python 实现、开源（MIT）。它是目前唯一内置',
+        text: 'Hermes 将工具执行、技能复用、记忆与自动化连接到个人 agent 中。功能是否可用取决于当前版本、配置和会话条件。',
+        strong: false,
       },
-      { text: '学习循环', strong: true },
-      {
-        text: '的 agent：从经验中创建技能、在使用中改进技能、主动持久化知识、搜索自己的历史会话，并跨会话逐步建立对你的深度理解。',
-      },
-    ] as IntroSegment[],
+    ],
     en: [
-      { text: 'Hermes Agent', strong: true },
       {
-        text: ' is a self-evolving AI agent developed by Nous Research, written in Python and open source (MIT). It is currently the only agent with a built-in ',
+        text: 'Hermes combines tool execution, reusable skills, memory, and automation. Availability depends on version, configuration, and session conditions.',
+        strong: false,
       },
-      { text: 'learning loop', strong: true },
-      {
-        text: ': it creates skills from experience, improves them through use, proactively persists knowledge, searches its own session history, and builds a deep understanding of you across sessions.',
-      },
-    ] as IntroSegment[],
+    ],
   },
   introP2: {
     zh: [
-      { text: '大多数 AI agent 用完即弃、每次从零开始；Hermes 的核心差异在于它会' },
-      { text: '积累', strong: true },
-      { text: '。下面这张矩阵是它全部能力的地图——每一行都对应 M1 的一章。' },
-    ] as IntroSegment[],
+      {
+        text: '先选一个具体任务，再判断哪些能力是必要条件。下面的矩阵用于探索，不需要一次启用全部能力。',
+        strong: false,
+      },
+    ],
     en: [
       {
-        text: 'Most AI agents are disposable, starting from scratch every time; the core difference of Hermes is that it ',
+        text: 'Start from a concrete task and identify its requirements. Explore the matrix without enabling every capability.',
+        strong: false,
       },
-      { text: 'accumulates', strong: true },
-      {
-        text: '. The matrix below is a map of all its capabilities — each row corresponds to a chapter in M1.',
-      },
-    ] as IntroSegment[],
+    ],
   },
-  thCapability: { zh: '能力', en: 'Capability' },
-  thDesc: { zh: '说明', en: 'Description' },
-  thSource: { zh: '源码位置', en: 'Source' },
-  scenarioKicker: { zh: '场景选择器', en: 'SCENARIO PICKER' },
+  thCapability: {
+    zh: '能力',
+    en: 'Capability',
+  },
+  thDesc: {
+    zh: '说明',
+    en: 'Description',
+  },
+  thSource: {
+    zh: '源码位置',
+    en: 'Source',
+  },
+  scenarioKicker: {
+    zh: '场景选择器',
+    en: 'SCENARIO PICKER',
+  },
   scenarioTitle: {
     zh: '你的用法会调动哪些能力？',
     en: 'Which capabilities does your use case exercise?',
   },
-  scenarioBreakdown: { zh: '场景拆解', en: 'Scenario breakdown' },
-  mainlyUses: { zh: '主要调动：', en: 'Mainly exercises: ' },
+  scenarioBreakdown: {
+    zh: '场景拆解',
+    en: 'Scenario breakdown',
+  },
+  mainlyUses: {
+    zh: '主要调动：',
+    en: 'Mainly exercises: ',
+  },
 };

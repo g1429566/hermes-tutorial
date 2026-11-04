@@ -3,9 +3,7 @@
 // checkpoint 部分对齐 tools/checkpoint_manager.py 的模块 docstring（存储布局/触发/清理）。
 
 export const COMPRESSION_INTRO =
-  '第 04 章立过铁律：会话中途绝不改 past context——唯一的例外就是上下文压缩。' +
-  '这一章拆开这个「唯一例外」：什么时候触发、怎么压、为什么它动上下文是安全的；' +
-  '以及它的隐形搭档 checkpoint——agent 改你文件之前悄悄拍的快照。';
+  '先区分模型窗口、前缀缓存与会话历史。压缩为继续任务保留必要信息；文件 checkpoint 保护的是另一种状态。';
 
 export interface CompressionStep {
   id: string;
@@ -59,8 +57,8 @@ export const COMPRESSION_EXTRAS: { title: string; body: string }[] = [
     body: 'try_shrink_image_parts_in_messages：当 provider 报「图片太大」（如 Anthropic 的 5 MB 上限），把消息里的 data:image/...;base64 部分重新编码成更小尺寸再重试——不动文字历史，只瘦身图片。',
   },
   {
-    title: '为什么唯独它可以改上下文',
-    body: 'prompt 缓存的失效单位是前缀。压缩把「前缀本身」换掉是有意为之的一次性失效：付一次全量重算的钱，换回后续每轮都便宜的短上下文。其他改动（换工具、改历史）只亏不赚。',
+    title: '压缩的成本与边界',
+    body: '压缩有意改变历史表示，可能影响缓存并丢失细节。核对摘要是否保留目标、规则、已完成与待解决问题；实际费用取决于模型、服务与输入。',
   },
   {
     title: 'Micro-compaction：长会话的常态保鲜',
@@ -69,7 +67,7 @@ export const COMPRESSION_EXTRAS: { title: string; body: string }[] = [
 ];
 
 export const CHECKPOINT_INTRO =
-  'checkpoint 不是工具——LLM 根本看不见它。它是透明的基础设施：agent 每次要动你的文件之前，系统悄悄给工作目录拍一张快照，随时可回滚。';
+  '文件 checkpoint 是可选基础设施，在启用且操作受支持时准备可恢复快照；它不能撤销所有外部副作用，也不等同于上下文压缩。';
 
 export const CHECKPOINT_FACTS: { title: string; body: string }[] = [
   {
@@ -82,7 +80,7 @@ export const CHECKPOINT_FACTS: { title: string; body: string }[] = [
   },
   {
     title: '不污染你的项目',
-    body: '用 GIT_DIR + GIT_WORK_TREE + GIT_INDEX_FILE 三件套操作，任何 git 状态都不会泄漏进你的项目目录——你的 .git 完全感知不到快照的存在。',
+    body: '用 GIT_DIR + GIT_WORK_TREE + GIT_INDEX_FILE 三件套操作，任何 git 状态都不会泄漏进你的项目目录——你的 .git 不使用项目原有索引和提交历史。',
   },
   {
     title: '自动清理',
@@ -105,10 +103,7 @@ export const CHECKPOINT_LAYOUT = `~/.hermes/checkpoints/
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const COMPRESSION_INTRO_EN =
-  'Chapter 04 laid down an iron rule: never change past context mid-conversation — the sole ' +
-  'exception is context compression. This chapter takes that “sole exception” apart: when it ' +
-  'triggers, how it compresses, and why touching the context is safe here; plus its invisible ' +
-  'partner, the checkpoint — the snapshot quietly taken before the agent touches your files.';
+  'Distinguish the context window, prefix caching, and stored history. Compression retains continuation information; file checkpoints protect a different state.';
 
 export const COMPRESSION_STEPS_EN: CompressionStep[] = [
   {
@@ -154,8 +149,8 @@ export const COMPRESSION_EXTRAS_EN: typeof COMPRESSION_EXTRAS = [
     body: 'try_shrink_image_parts_in_messages: when a provider reports “image too large” (e.g. Anthropic’s 5 MB limit), re-encode the data:image/...;base64 parts in the messages to a smaller size and retry — the text history is untouched, only the images are slimmed down.',
   },
   {
-    title: 'Why it alone may change the context',
-    body: 'Prompt cache invalidates by prefix. Compression deliberately swaps out “the prefix itself” as a one-time invalidation: pay one full recompute, and get back a short context that stays cheap every turn after. Any other change (swapping tools, rewriting history) is pure loss.',
+    title: 'Compression costs and limits',
+    body: 'Compression deliberately changes history representation, can affect caching, and may lose detail. Check goals, rules, completed scope, and pending work; billing depends on provider and input.',
   },
   {
     title: 'Micro-compaction: continuous freshness for long sessions',
@@ -164,9 +159,7 @@ export const COMPRESSION_EXTRAS_EN: typeof COMPRESSION_EXTRAS = [
 ];
 
 export const CHECKPOINT_INTRO_EN =
-  'A checkpoint is not a tool — the LLM never sees it. It is transparent infrastructure: every ' +
-  'time the agent is about to touch your files, the system quietly snapshots the working ' +
-  'directory, ready to roll back at any moment.';
+  'File checkpoints are optional infrastructure for supported changes. They do not reverse all external effects and are distinct from context compression.';
 
 export const CHECKPOINT_FACTS_EN: typeof CHECKPOINT_FACTS = [
   {
@@ -193,14 +186,26 @@ export const CHECKPOINT_FACTS_EN: typeof CHECKPOINT_FACTS = [
 
 // CompressionLab 专属 UI 文案（中英对）。
 export const COMPRESSION_UI = {
-  stepsKicker: { zh: '压缩流程', en: 'COMPRESSION FLOW' },
-  stepsTitle: { zh: '唯一被允许的上下文变更', en: 'The only context change that’s allowed' },
-  checkpointKicker: { zh: '隐形搭档', en: 'THE INVISIBLE PARTNER' },
+  stepsKicker: {
+    zh: '压缩流程',
+    en: 'COMPRESSION FLOW',
+  },
+  stepsTitle: {
+    zh: '怎样在容量压力下继续',
+    en: 'Continue under context pressure',
+  },
+  checkpointKicker: {
+    zh: '隐形搭档',
+    en: 'THE INVISIBLE PARTNER',
+  },
   checkpointTitle: {
     zh: 'Checkpoint：改文件前的快照',
     en: 'Checkpoint: a snapshot before touching files',
   },
-  layoutLines: { zh: '存储布局', en: 'Storage layout' },
+  layoutLines: {
+    zh: '存储布局',
+    en: 'Storage layout',
+  },
   layoutNote: {
     zh: '单一共享对象库：git 内容寻址跨项目去重；GIT_DIR/GIT_WORK_TREE 隔离，不污染你的 .git',
     en: 'A single shared object store: git content addressing dedupes across projects; GIT_DIR/GIT_WORK_TREE isolation keeps your .git untouched',

@@ -17,20 +17,33 @@ export interface CliCommand {
 export const INSTALL_STEPS: InstallStep[] = [
   {
     id: 'install',
-    title: '① 运行安装脚本（Linux / macOS / WSL2 / Termux）',
+    title: '① Linux / macOS / WSL2 命令行安装',
     command: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
-    note: '安装器会自动处理 uv、Python 3.14、Node.js、ripgrep、ffmpeg 等依赖。',
+    note: '原生 Windows 选择官方桌面包或 PowerShell 安装器；Termux 使用专用 APT 指南，不套用下面的 shell 步骤。',
   },
   {
     id: 'reload-shell',
-    title: '② 重新加载 shell 配置',
-    command: 'source ~/.bashrc   # 或 source ~/.zshrc',
+    title: '② 新开一个终端窗口',
+    command: 'hermes --version',
+    note: '按安装器提示完成后重开终端。此命令应能找到 Hermes 并显示版本；找不到时先检查安装与命令路径。',
+  },
+  {
+    id: 'model',
+    title: '③ 选择模型并完成认证',
+    command: 'hermes model',
+    note: '跟随向导选择可访问的 provider 与模型，完成该服务要求的认证。',
+  },
+  {
+    id: 'doctor',
+    title: '④ 检查运行环境',
+    command: 'hermes doctor',
+    note: '先处理本次文字对话需要的项目；无需先接通全部可选集成。',
   },
   {
     id: 'first-chat',
-    title: '③ 启动第一次对话',
+    title: '⑤ 启动并核对首轮对话',
     command: 'hermes',
-    note: '启动交互式 CLI，开始第一次对话。',
+    note: '先发送一个简短问题，再在 Hermes 输入 /help。文字回答成功不等于全部工具已经验证。',
   },
 ];
 
@@ -71,20 +84,33 @@ export const INSTALL_QUIZ: QuizItem = {
 export const INSTALL_STEPS_EN: InstallStep[] = [
   {
     id: 'install',
-    title: '① Run the install script (Linux / macOS / WSL2 / Termux)',
+    title: '1. Install on Linux / macOS / WSL2',
     command: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
-    note: 'The installer automatically handles uv, Python 3.14, Node.js, ripgrep, ffmpeg, and other dependencies.',
+    note: 'Use the official Desktop package or PowerShell installer on native Windows; Termux has its own APT instructions.',
   },
   {
     id: 'reload-shell',
-    title: '② Reload your shell config',
-    command: 'source ~/.bashrc   # or source ~/.zshrc',
+    title: '2. Reopen the terminal',
+    command: 'hermes --version',
+    note: 'Follow the installer instructions. A new terminal should find the command and show its version.',
+  },
+  {
+    id: 'model',
+    title: '3. Select a model and authenticate',
+    command: 'hermes model',
+    note: 'Choose an accessible provider and model, then complete its authentication flow.',
+  },
+  {
+    id: 'doctor',
+    title: '4. Check the environment',
+    command: 'hermes doctor',
+    note: 'Check required failures first; optional integrations need not all be configured.',
   },
   {
     id: 'first-chat',
-    title: '③ Start your first conversation',
+    title: '5. Start a conversation',
     command: 'hermes',
-    note: 'Launches the interactive CLI and starts your first conversation.',
+    note: 'Ask a short question, then enter /help inside Hermes. A text reply does not verify every tool.',
   },
 ];
 
@@ -123,11 +149,23 @@ export const INSTALL_QUIZ_EN: QuizItem = {
 // 本章实验室专属 UI 文案（组件里用 pick(lang, INSTALL_UI.xxx) 取值）。
 export const INSTALL_UI = {
   intro: {
-    zh: '三步跑通 Hermes。每张卡片里的命令都可以直接复制到终端；跑完一步就勾上「我在终端跑过了」，勾选状态会保存在本地进度里。',
-    en: 'Get Hermes running in three steps. Every command card can be copied straight into your terminal; check "I ran this in my terminal" after each step — the state is saved in your local progress.',
+    zh: '按顺序完成五步。命令在系统终端执行；/help 等斜杠命令在 Hermes 会话中输入。此页面不会替你安装或运行命令。',
+    en: 'Complete five steps in order. System commands run in your terminal; slash commands run in Hermes. This page does not install or execute them for you.',
   },
-  copy: { zh: '复制', en: 'Copy' },
-  tryIt: { zh: '我在终端跑过了', en: 'I ran this in my terminal' },
-  commonCommands: { zh: '六个最常用命令', en: 'The six most-used commands' },
-  checklist: { zh: '安装检查清单', en: 'Install checklist' },
+  copy: {
+    zh: '复制',
+    en: 'Copy',
+  },
+  tryIt: {
+    zh: '我在终端跑过了',
+    en: 'I ran this in my terminal',
+  },
+  commonCommands: {
+    zh: '六个最常用命令',
+    en: 'The six most-used commands',
+  },
+  checklist: {
+    zh: '安装检查清单',
+    en: 'Install checklist',
+  },
 };

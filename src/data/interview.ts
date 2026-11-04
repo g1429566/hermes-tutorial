@@ -19,227 +19,98 @@ export interface SelfAssessmentTopic {
 }
 
 export const INTERVIEW_INTRO =
-  '面试官考察 agent 循环，不是要你背概念，而是看你能不能用真实系统的取舍讲道理。' +
-  '下面每张卡都是一道真实的循环设计题：先看问题和思考提示，在心里（或默念区里）组织自己的回答，' +
-  '再翻转对照以 Hermes 真实设计为参照的模范思路。答不上来不可怕——把追问链也过完，' +
-  '确认能讲清楚之后，标记「能答上来了」。';
+  '先给出机制与例子，再看参考思路。回答需要解释条件变化，不以背出内部字段为目标。';
 
 export const LOOP_QUESTIONS: LoopQuestion[] = [
   {
     id: 'sync-while',
-    question: '为什么 Hermes 的 agent 主循环是一个同步 while 循环，而不是事件驱动或 async 架构？',
-    hint: '想想单次会话内的依赖关系、调试成本，以及流式输出被放在了哪一层。',
+    question: '为什么顺序推进的主循环仍可处理流式和并行？',
+    hint: '先区分阶段依赖、传输与工具执行。',
     answer:
-      '主循环就在 run_conversation() 里，AGENTS.md 明确说它「entirely synchronous, with interrupt checks, ' +
-      'budget tracking, and a one-turn grace call」。同步 while 让控制流完全显式：每轮迭代就是' +
-      '「检查中断 → 调模型 → 有 tool_calls 就执行并 append → 计数」，预算和中断都是循环条件的一部分。' +
-      '单次会话内每一步都强依赖上一步的结果，事件驱动换来的并发收益几乎为零，却要把这条顺序链拆成回调状态机。' +
-      '感知层的复杂度被推到了显示层（CLI 的 spinner、TUI 的 message.delta 事件），不污染循环本体。' +
-      '真正的并发发生在循环之外：delegate_task 的 batch tasks、gateway 的多平台接入。',
-    followUps: [
-      '那并发需求怎么解决？——并发在 delegate_task 的 tasks 数组层做（受 delegation.max_concurrent_children 默认 10 限制），主循环保持串行。',
-      '人类介入（approval）卡在哪？——在工具执行前的钩子里同步等待，循环本身就是阻塞的，不需要额外状态机。',
-      '后台 delegate 完成的结果怎么回到会话？——通过 async-delegation completion queue，在后续轮次注入，而不是打断当前循环。',
-    ],
-    rubric: [
-      '说清「同步 ≠ 没有异步边界」，能指出异步发生在哪些层',
-      '知道流式输出在显示层处理，不进主循环',
-      '能分析事件驱动在这个场景的真实代价（状态机复杂度 vs 零并发收益）',
-    ],
+      '读取决定计算，结果决定回答，所以阶段按依赖推进。agent/turn_api_call.py 仍可消费流式响应，agent/tool_executor.py 则可并行执行符合条件的工具批次。同步控制流不等于全系统没有并发。',
+    followUps: ['举出独立读取与写后读取的不同安排。'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'append-only',
-    question: '为什么 Hermes 的消息流只 append、绝不改写历史消息？',
-    hint: '这和钱直接相关——想想 prompt cache 的失效条件是什么。',
+    question: '稳定的上下文前缀为什么有助于缓存？',
+    hint: '说明匹配范围与重新建立缓存的条件。',
     answer:
-      'Hermes 的第一设计约束是 per-conversation prompt caching（AGENTS.md「Prompt Caching Must Not Break」）：' +
-      '长对话每一轮都复用已缓存的前缀。任何对 past context 的 in-place 修改——改历史消息、中途换 toolset、' +
-      '重建 system prompt——都会让缓存整体失效，之后每轮全量重算，成本大幅上升。' +
-      '所以消息流只增长：工具结果以 role="tool" 消息 append，连技能斜杠命令都以 user 消息注入而不是改写 system prompt。' +
-      '唯一的例外是上下文压缩（context compression）：那是故意的、一次性的失效，用来换回上下文窗口空间。' +
-      '其他一切变更默认 deferred invalidation（下次会话生效），只有 /skills 系列提供 --now 立即失效。',
-    followUps: [
-      '用户中途 /skills install 怎么办？——默认写入配置、下次会话生效；加 --now 立即生效并接受缓存失效的代价。',
-      '压缩时不也改写了历史吗？——对，那是唯一被允许的例外：窗口耗尽的代价大于一次性缓存失效，压缩后的新前缀从下一轮起重新被缓存。',
-      '如果 provider 不支持缓存呢？——策略不变；append-only 对正确性和可审计性同样有好处。',
-    ],
-    rubric: [
-      '把 append-only 与缓存命中率的因果关系讲清楚',
-      '知道唯一例外是 context compression 及其理由',
-      '知道 --now / deferred invalidation 模式',
-    ],
+      '支持前缀缓存的服务可以复用已有相同输入。改早期内容会影响从该处起的复用；并非任何变化都永久破坏整个缓存，也没有固定费用倍数。新会话读取新的记忆快照，避免为每次写入重建当前提示。',
+    followUps: ['压缩为什么需要有意改变上下文？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'budget',
-    question:
-      'max_iterations（默认无上限）和 iteration budget 是怎么设计的？为什么不是简单的 for 循环计数？',
-    hint: '注意循环条件有三个部分，以及 grace call 存在的意义。',
+    question: '预算、迭代上限与空闲超时分别控制什么？',
+    hint: '考虑持续活动但没有完成的循环。',
     answer:
-      '循环条件是 `(api_call_count < max_iterations and iteration_budget.remaining > 0) or _budget_grace_call`。' +
-      'max_iterations 默认无上限（AIAgent 构造默认 sys.maxsize，CLI 解析链 TURN_LIMIT_UNLIMITED 同值；500 只是 TUI 网关会话工厂的默认值），是主循环的全局上限；子 agent 不再共享它——每个 subagent ' +
-      '有独立的迭代预算 delegation.max_iterations（默认 250），且调用方传入的 max_iterations 会被忽略、以 config 为准。' +
-      '委派树深度由 delegation.max_spawn_depth 锁住（默认 1，一层摊平）。iteration_budget 是更细的预算维度，预算先耗尽也会停。' +
-      'one-turn grace call 是关键细节：预算耗尽后仍给模型最后一轮，让它把手头信息收尾成最终回答，' +
-      '而不是硬切断留一个烂尾会话。循环的三个出口：模型返回纯文本（正常完成）、触碰上限（强制收尾）、用户中断。',
-    followUps: [
-      '子 agent 为什么不继承主循环的上限？——防递归失控：每个 subagent 有独立预算 delegation.max_iterations（默认 250）；调用方传入的值会被忽略，以 config 为准。',
-      '预算耗尽时用户看到什么？——grace call 产出的收尾回答，而不是一个截断的工具结果。',
-      '为什么不能没有上限？——agent 会陷入工具调用死循环；上限是成本控制，也是故障隔离。',
-    ],
-    rubric: [
-      '能复述循环条件的三个部分（迭代数 / 预算 / grace call）',
-      '理解 grace call 的动机：体面收尾而非硬切断',
-      '知道子 agent 有独立迭代预算（delegation.max_iterations），spawn depth 锁委派树深度',
-    ],
+      '预算和迭代上限限制消耗，空闲超时发现无进展的等待。子任务有自己的配置范围。某些路径给模型收尾机会，但收尾回答不能证明任务成功；明确报告已完成与未完成部分。',
+    followUps: ['为什么一个持续输出的错误循环可能不触发空闲超时？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'interrupt',
-    question: '用户在 TUI 里按 Esc 中断 agent，循环里是怎么处理的？为什么不用异常？',
-    hint: '中断标志在循环的哪个位置被检查？工具执行到一半会怎样？',
+    question: '用户中断后，如何保持工具与消息状态可解释？',
+    hint: '区分停止信号、请求取消与工具收尾。',
     answer:
-      '每次迭代开头检查 `self._interrupt_requested`，为真则 break——AGENTS.md 的循环伪代码第一行就是它。' +
-      '中断被设计成循环条件的一部分：Esc（TUI 走 session.interrupt RPC）只是设置标志位，agent 在下一个迭代边界这个「安全点」退出，' +
-      '而不是在工具执行中途被异常撕开。这保证消息流始终一致（没有半截的 tool_call 悬在空中），' +
-      '会话可以体面收尾、正常落盘。同一套机制也服务系统级中断：cron 会话有空闲看门狗' +
-      '（默认 600s 无进展即硬中断，HERMES_CRON_TIMEOUT 可调），失控的 agent 循环不能把调度器拖死。',
-    followUps: [
-      '为什么不在工具执行中间硬断？——会留下不成对的消息（有 tool_call 无 tool 结果），破坏消息流一致性，也破坏缓存前缀。',
-      '中断后还能继续这个会话吗？——消息流完整落盘（SessionDB），可以恢复。',
-      '系统级中断的例子？——cron 的空闲看门狗（默认 600s，空闲计时非墙钟），同一套标志机制，只是触发源从用户变成看门狗。',
-    ],
-    rubric: [
-      '标志位 + 迭代边界检查点，而非异常打断',
-      '能对比异常方案的状态一致性问题（半截 tool_call）',
-      '能举 cron 空闲看门狗（默认 600s）作为系统级中断的例子',
-    ],
+      '运行时接收中断并协调模型请求、工具执行与后续迭代。已发生的外部副作用不一定能撤销；需要整理每个调用的结果或中断状态，并保存可恢复信息。不能把它仅描述为下一轮 break。',
+    followUps: ['消息已经发出但响应丢失，能直接重发吗？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'json-results',
-    question: '为什么所有工具 handler 必须返回 JSON 字符串，而不是 Python 对象或自然语言段落？',
-    hint: '想想 registry 在不知道工具内部类型的情况下要做什么。',
+    question: '工具为什么需要明确的结果边界？',
+    hint: '区分 JSON 字符串与任意对象输出。',
     answer:
-      'tools/AGENTS.md 写明「All handlers return a JSON string」。registry 统一负责 schema 收集、分发、' +
-      '可用性检查和错误包装，它不该感知每个工具的内部类型——统一的字符串边界让它可以通用地做截断/摘要来保护上下文窗口。' +
-      '结果经 make_tool_result_message 包成 OpenAI role="tool" 消息 append。结构化 JSON（success/data/error 字段）' +
-      '让模型能稳定解析成败：错误也被包装成正常的结果消息而不是抛出，agent 能看到失败并自我纠正，' +
-      '循环不会因为一个工具的异常而崩掉。',
-    followUps: [
-      '如果工具内部抛异常呢？——registry 包装成错误 JSON 返回，agent 在下一轮看到并自我纠正。',
-      '大结果怎么处理？——统一截断/摘要，保护上下文窗口；边界是字符串才好做通用处理。',
-      '为什么不让模型直接读 Python 对象的 repr？——schema 不稳定的输出会让模型解析出错，JSON 字段是可依赖的契约。',
-    ],
-    rubric: [
-      '统一边界：registry 不感知工具内部类型',
-      '错误即结果消息：agent 可自我纠正，循环不崩',
-      '对上下文保护（截断/摘要）友好',
-    ],
+      'Hermes handler 约定返回 JSON 字符串，分发路径再关联调用并组织消息。结构化错误使模型能判断失败，但不保证自动恢复成功。大结果的截取或存储引用也要保留核验方式。',
+    followUps: ['工具内部成功与用户目标成功有什么区别？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'register-vs-expose',
-    question: '加一个新工具为什么写了 tools/your_tool.py 还不够，必须再登记 toolsets.py？',
-    hint: '区分「注册进 registry」和「暴露给 agent」这两件事。',
+    question: '注册的工具为什么不一定对模型可见？',
+    hint: '列出注册、工具组合、会话条件和必要依赖。',
     answer:
-      '自动发现只负责注册：任何 tools/*.py 顶层调用 registry.register() 的模块 import 即注册 schema，没有手动 import 列表。' +
-      '但暴露给 agent 是另一个 deliberate 步骤——工具名必须出现在 toolsets.py 的 TOOLSETS dict 里。' +
-      '分开的好处：schema footprint 可控，比如 kanban worker 不在 kanban 任务内时工具足迹为零；' +
-      '按平台裁剪，每个消息平台一个 hermes-<platform> bundle（如 Telegram 的 hermes-telegram），都直接以 _HERMES_CORE_TOOLS 为底座再加减；' +
-      'check_fn / requires_env 环境不满足时自动隐藏工具。面试里点出「registration ≠ exposure」这两层设计，' +
-      '说明你想过工具的可见性是有成本的——每个 schema 都占上下文、都稀释模型的注意力。',
-    followUps: [
-      '为什么要控制 schema footprint？——每个工具 schema 都随 messages 发出，占 token、稀释注意力，还会增加误调用。',
-      '本地自定义工具也必须改核心吗？——不，走插件路线：~/.hermes/plugins/<name>/ 里 ctx.register_tool(...)，不动 tools/ 和 toolsets.py。',
-      'check_fn 干什么？——环境检查（如 API key 是否存在），不满足就不暴露该工具。',
-    ],
-    rubric: [
-      '说清注册与暴露是两层，各自动作是什么',
-      '知道 _HERMES_CORE_TOOLS 的角色（各平台默认继承的 bundle）',
-      '理解 schema footprint 的成本与按平台/场景裁剪',
-    ],
+      '注册建立实现和定义的联系；toolset 与会话能力选择本次工具面；check_fn 检查可达性或配置前提。插件有自己的注册路径，不需要把个人工具硬塞进核心。已暴露工具仍有输入成本。',
+    followUps: ['桌面能力应该按后端环境变量还是会话来源判断？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'compression-exception',
-    question: '上下文压缩（context compression）为什么是「缓存铁律」的唯一例外？',
-    hint: '压缩同样改写了历史——为什么不违反自己定下的规矩？',
+    question: '压缩怎样在窗口与信息保留之间取舍？',
+    hint: '给出必须保留的目标、规则、已完成与待办。',
     answer:
-      '铁律禁止会话中途 alter past context / change toolsets / rebuild system prompt，因为任何改写都让 prompt cache 失效。' +
-      '压缩同样改写历史，但它是故意的、一次性的失效：当消息流逼近上下文窗口上限时，不压缩会话就直接死亡——' +
-      '一次性缓存失效的代价远小于会话无法继续。压缩形成的新前缀从下一轮起重新被缓存，成本回落。' +
-      '关键在于「唯一」二字：其他一切变更（装技能、改工具集、重载记忆）都走 deferred invalidation，' +
-      '默认下次会话生效，只有 /skills 系列提供 --now 立即失效。把例外收敛到一个，规则才真正可执行。',
-    followUps: [
-      '压缩的时机谁决定？——上下文窗口压力驱动，是循环里唯一被允许的上下文变更点。',
-      '压缩丢信息怎么办？——这是压缩本身的质量问题；工程上保证它只发生一次、之后缓存重建，是成本层面的兜底。',
-      '为什么不能允许「再允许几个例外」？——例外一旦泛化，缓存命中率就不可预测，成本模型失效。',
-    ],
-    rubric: [
-      '承认压缩也是破缓存，不是狡辩',
-      '说清权衡：一次性失效 vs 会话死亡',
-      '知道压缩后新前缀重新进入缓存，且其他变更走 deferred invalidation',
-    ],
+      '缓存不扩大窗口；压缩用较短材料继续任务，有损失细节的风险，也会影响前缀复用。核对摘要能否支持下一步，而不是只看模型是否输出成功。必要时回查历史。',
+    followUps: ['“已处理文件”为什么可能不是合格摘要？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'skill-injection',
-    question: '技能斜杠命令为什么注入为 user 消息，而不是更新 system prompt？',
-    hint: '缓存前缀里哪个位置最「碰不得」？',
+    question: '读取技能与重建系统提示有何不同？',
+    hint: '考虑尾部新材料与已有早期前缀。',
     answer:
-      'agent/skill_commands.py 扫描技能目录（默认 ~/.hermes/skills/）后，把技能内容以 user 消息注入——agent/AGENTS.md 的' +
-      '消息流不变量写明「skill slash commands (agent/skill_commands.py) inject as a user message」，理由是 ' +
-      'prompt caching must not break。' +
-      'system prompt 位于缓存前缀的最头部，改它等于让整段前缀失效；user 消息 append 在消息流尾部，前缀不动。' +
-      '代价是技能指令的权威性低于 system prompt——用消息角色换缓存命中率，是 Hermes 缓存优先设计的典型取舍。' +
-      '这个模式在全仓库一致：任何会改变 system prompt 状态的操作都默认 deferred，下次会话再生效。',
-    followUps: [
-      '注入 user 消息有什么副作用？——权威性弱于 system prompt，模型可能不听；这是刻意的取舍。',
-      '为什么缓存前缀头部最敏感？——前缀缓存按前缀匹配，头部一变，后面全部失效。',
-      '同样的取舍还出现在哪？——/tools、memory 相关命令也都默认 deferred invalidation，下次会话才生效。',
-    ],
-    rubric: [
-      '知道前缀缓存的位置敏感性：头部改动 = 全部失效',
-      '说清 append user 消息 vs 改写 system prompt 的取舍',
-      '能指出这是全仓库一致的模式（deferred invalidation）',
-    ],
+      '显式技能调用可将内容作为当前请求材料加入，而不是修改已有系统提示。按需读取仍有 token 成本，也不代表所有已打开会话自动替换旧副本。保存、读取与执行效果需要分别验证。',
+    followUps: ['技能已写入磁盘但仍待审批，这种说法哪里矛盾？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'parallel-tools',
-    question: 'Hermes 里工具的并行与串行是谁决定的？主循环里有真正的并行吗？',
-    hint: '看一轮 response 里 tool_calls 数组的形状，再想想 batch delegate。',
+    question: '同一批工具是否并行，由谁决定？',
+    hint: '模型提出调用，运行时检查安全性和冲突。',
     answer:
-      '由模型的单次响应决定：response.tool_calls 里有几个 call，循环就依次执行几个、逐个 append 结果，' +
-      '然后 api_call_count+1 进入下一轮。也就是说「同一轮多个 tool_calls」是模型表达的并行语义，' +
-      '执行层按数组顺序处理，主循环内没有并发执行框架。真正的并行发生在 delegate_task 的 batch tasks：' +
-      'tasks: [...] 每个元素起一个独立 subagent 并发跑，受 delegation.max_concurrent_children（默认 10）限制。' +
-      '这个分工很干净：循环内保持串行的确定性，并发被推到有隔离边界的委派层。',
-    followUps: [
-      '同轮多个 tool_calls 的结果顺序重要吗？——按数组顺序 append，消息流与模型的调用一一对应。',
-      '真正的并行在哪里、有什么隔离？——batch delegate：每个 subagent 有独立上下文与 terminal session。',
-      '为什么不在主循环内并发执行工具？——工具间可能有依赖（写文件再读），串行保持确定性；要并发就用委派换隔离。',
-    ],
-    rubric: [
-      '并行/串行由模型响应的 tool_calls 形状决定',
-      '循环内串行执行，保证确定性与消息一一对应',
-      '真并行在 batch delegate，有并发上限与隔离边界',
-    ],
+      '模型一次可提出多个调用。批处理规划器按工具类型和路径冲突分为有序并行或串行段；执行结果保持调用关联和原收集顺序。并行不只存在于委派层。',
+    followUps: ['读 A、读 B 与写 A、读 A 各怎样安排？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
   {
     id: 'after-loop',
-    question: '主循环结束后 Hermes 还做了什么？这对系统设计意味着什么？',
-    hint: '会话落盘到哪里？谁在 on_session_end 钩子里干活？',
+    question: '一个回合结束后，哪些后台动作有不同触发时机？',
+    hint: '先分清回合、会话、存储与空闲维护。',
     answer:
-      '三个出口（正常返回 / 触碰上限 / 用户中断）之后：会话写入 SessionDB（hermes_state.py，SQLite + FTS5，' +
-      '支撑跨会话全文搜索）；on_session_end 插件钩子触发，记忆 provider 在这里 sync_turn，把这一轮同步到 ' +
-      'honcho / mem0 等后端；之后 curator 这类后台系统才上场（跟踪技能使用、自动归档）。' +
-      '这意味着主循环只负责「这一轮的智能」，持久化与学习循环被解耦到会话边界之后。' +
-      '而且这个解耦是可配置的：不想让某类会话跑记忆，把 memory 加进 agent.disabled_toolsets 即可（例如定时任务场景）。',
-    followUps: [
-      '为什么记忆同步不放在循环内？——循环内追加任何上下文都破缓存；会话边界是天然的持久化检查点。',
-      'cron 会话默认加载记忆吗？——加载。现行 cron 会话 skip_memory=False（MEMORY.md/USER.md 正常加载）；不想让它读写记忆，用 agent.disabled_toolsets: [memory]。',
-      'FTS5 索引带来什么能力？——跨会话搜索自己的历史（session_search），是「自进化」的数据底座。',
-    ],
-    rubric: [
-      '知道会话落盘 SessionDB（SQLite + FTS5）',
-      '知道 on_session_end 钩子与记忆 sync_turn 的边界',
-      '理解主循环与后台学习系统的解耦，且解耦可配置（disabled_toolsets 拒用 memory）',
-    ],
+      '历史可在运行中持久化，外部 provider 按回合同步；后台复盘依据回合或工具迭代计数及开关；curator 检查空闲、间隔与托管条件。on_session_end 生命周期不同，不能把它们都写成退出时一起发生。',
+    followUps: ['重启后恢复同一会话，是否等于新会话？'],
+    rubric: ['说明对象与时机。', '走完例子，再改变一个条件。', '保留结论的适用边界。'],
   },
 ];
 
@@ -298,263 +169,139 @@ export const SELF_ASSESSMENT_TOPICS: SelfAssessmentTopic[] = [
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const INTERVIEW_INTRO_EN =
-  'Interviewers probe the agent loop not to hear you recite concepts, but to see whether you can ' +
-  'reason about the trade-offs of a real system. Each card below is a real loop-design question: ' +
-  'read the question and the thinking hint first, organize your own answer (silently or in the ' +
-  "thinking zone), then flip to compare against a model answer grounded in Hermes' real design. " +
-  'Not being able to answer is fine — walk the follow-up chain too, and once you can explain it ' +
-  'clearly, mark "I can answer this".';
+  'Explain a mechanism and an example before revealing the reference. Focus on changed conditions, not memorized fields.';
 
 export const LOOP_QUESTIONS_EN: LoopQuestion[] = [
   {
     id: 'sync-while',
-    question:
-      "Why is Hermes' agent main loop a synchronous while loop instead of an event-driven or async architecture?",
-    hint: 'Think about dependencies within a single session, debugging cost, and which layer streaming output lives in.',
+    question: 'Why can an ordered loop still use streaming and concurrency?',
+    hint: 'Separate phase dependencies, transport, and tool execution.',
     answer:
-      'The loop lives in run_conversation(); AGENTS.md states it is "entirely synchronous, with interrupt checks, ' +
-      'budget tracking, and a one-turn grace call". A synchronous while keeps control flow fully explicit: each ' +
-      'iteration is "check interrupt → call model → execute any tool_calls and append → count", and both budget ' +
-      'and interrupt are part of the loop condition. Within a single session every step strongly depends on the ' +
-      'previous one, so event-driven concurrency buys almost nothing while shattering this sequential chain into ' +
-      'a callback state machine. Perceptual complexity is pushed to the display layer (CLI spinner, TUI ' +
-      'message.delta events) and never pollutes the loop itself. Real concurrency happens outside the loop: ' +
-      "delegate_task batch tasks and the gateway's multi-platform ingress.",
-    followUps: [
-      'How are concurrency needs handled then? — Concurrency lives at the delegate_task tasks-array level (capped by delegation.max_concurrent_children, default 10); the main loop stays serial.',
-      'Where does human approval block? — It waits synchronously in a hook before tool execution; the loop itself is blocking, so no extra state machine is needed.',
-      'How do background delegate results return to the session? — Via the async-delegation completion queue, injected in a later turn instead of interrupting the current loop.',
-    ],
+      'Reads inform calculation and results inform the answer, so phases follow dependencies. turn_api_call handles streaming; tool_executor can run eligible calls concurrently. Ordered control flow is not a claim that the whole system is serial.',
+    followUps: ['Compare independent reads with a read that depends on a write.'],
     rubric: [
-      'Explains "synchronous ≠ no async boundaries" and can point out which layers are async',
-      'Knows streaming output is handled at the display layer, not in the main loop',
-      'Can analyze the real cost of event-driven design here (state-machine complexity vs zero concurrency gain)',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'append-only',
-    question:
-      'Why does Hermes only append to the message stream and never rewrite historical messages?',
-    hint: 'This is directly about money — think about what invalidates the prompt cache.',
+    question: 'Why preserve established context prefixes?',
+    hint: 'Explain matching ranges and later reuse.',
     answer:
-      'Hermes\' first design constraint is per-conversation prompt caching (AGENTS.md "Prompt Caching Must Not ' +
-      'Break"): every turn of a long conversation reuses the cached prefix. Any in-place modification of past ' +
-      'context — editing historical messages, swapping toolsets mid-session, rebuilding the system prompt — ' +
-      'invalidates the whole cache and forces full recompute on every later turn, at huge cost. So the message ' +
-      'stream only grows: tool results are appended as role="tool" messages, and even skill slash commands are ' +
-      'injected as user messages instead of rewriting the system prompt. The sole exception is context ' +
-      'compression: a deliberate, one-time invalidation that buys back context-window space. Every other change ' +
-      'defaults to deferred invalidation (takes effect next session); only the /skills commands offer --now to invalidate immediately.',
-    followUps: [
-      'What if the user runs /skills install mid-session? — By default it writes config and takes effect next session; --now applies immediately and accepts the cache-invalidation cost.',
-      "Doesn't compression also rewrite history? — Yes, it is the only allowed exception: a dead context window costs more than a one-time cache miss, and the new compressed prefix gets re-cached from the next turn on.",
-      "What if the provider doesn't support caching? — The policy doesn't change; append-only also buys correctness and auditability.",
-    ],
+      'Supporting services can reuse identical earlier input. An edit affects reuse from its divergence point, not necessarily all future requests forever. Costs have no fixed multiplier. New sessions read updated memory without rebuilding the active prompt after each write.',
+    followUps: ['Why deliberately reshape context during compression?'],
     rubric: [
-      'Clearly explains the causal link between append-only and cache hit rate',
-      'Knows the sole exception is context compression and why',
-      'Knows the --now / deferred invalidation pattern',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'budget',
-    question:
-      'How are max_iterations (unlimited by default) and the iteration budget designed? Why not a simple for-loop counter?',
-    hint: 'Notice the loop condition has three parts, and why the grace call exists.',
+    question: 'What do budgets, iteration limits, and inactivity timeouts control?',
+    hint: 'Consider a loop that stays active without completing.',
     answer:
-      'The loop condition is `(api_call_count < max_iterations and iteration_budget.remaining > 0) or _budget_grace_call`. ' +
-      "max_iterations is unlimited by default — the AIAgent constructor defaults it to sys.maxsize, the CLI parsing chain uses the same value via TURN_LIMIT_UNLIMITED, and 500 is only the TUI gateway session factory default — it is the main loop's global ceiling; subagents " +
-      'no longer share it — each subagent gets its own iteration budget delegation.max_iterations (default 250), ' +
-      'and a caller-supplied max_iterations is ignored in favor of the config value. Delegation tree depth is ' +
-      'locked by delegation.max_spawn_depth (default 1, flat). iteration_budget is a finer budget dimension; the ' +
-      'loop also stops when the budget runs out first. ' +
-      'The one-turn grace call is the key detail: after the budget is exhausted the model still gets one final ' +
-      'turn to wrap its findings into a final answer, instead of a hard cut that leaves a dangling session. The ' +
-      'loop has three exits: the model returns plain text (normal completion), the cap is hit (forced wrap-up), ' +
-      'or the user interrupts.',
-    followUps: [
-      "Why don't subagents inherit the main loop's cap? — To prevent runaway recursion: each subagent has its own budget delegation.max_iterations (default 250); a caller-supplied value is ignored and config wins.",
-      'What does the user see when the budget runs out? — The wrap-up answer produced by the grace call, not a truncated tool result.',
-      "Why can't there be no cap? — The agent could spin in a tool-call loop forever; the cap is cost control and fault isolation.",
-    ],
+      'Budgets and iteration caps bound consumption; inactivity timeouts detect lack of progress. Child tasks have their own configuration. A closeout opportunity does not establish success; distinguish completed and pending work.',
+    followUps: ['Why might an active erroneous loop avoid an inactivity timeout?'],
     rubric: [
-      'Can recite the three parts of the loop condition (iterations / budget / grace call)',
-      "Understands the grace call's motivation: a graceful wrap-up instead of a hard cut",
-      'Knows subagents have an independent iteration budget (delegation.max_iterations) and spawn depth locks the delegation tree',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'interrupt',
-    question:
-      'When a user presses Esc in the TUI to interrupt the agent, how does the loop handle it? Why not exceptions?',
-    hint: 'Where in the loop is the interrupt flag checked? What happens mid-tool-execution?',
+    question: 'How should interruption preserve understandable tool and message state?',
+    hint: 'Separate stop signals, request cancellation, and cleanup.',
     answer:
-      'At the top of every iteration the loop checks `self._interrupt_requested` and breaks if set — it is the ' +
-      'first line of the loop pseudocode in AGENTS.md. Interrupt is designed as part of the loop condition: Esc ' +
-      '(in the TUI, via the session.interrupt RPC) only sets a flag, and the agent exits at the next iteration ' +
-      'boundary, a "safe point", instead of being ' +
-      'torn apart mid-tool by an exception. This guarantees the message stream stays consistent (no half-finished ' +
-      'tool_call left hanging) and the session can wrap up gracefully and persist normally. The same mechanism ' +
-      'serves system-level interrupts: cron sessions get an inactivity watchdog (default 600s without progress ' +
-      'triggers a hard interrupt, tunable via HERMES_CRON_TIMEOUT), so a runaway agent loop ' +
-      'cannot drag down the scheduler.',
-    followUps: [
-      'Why not hard-interrupt mid-tool? — It would leave unpaired messages (a tool_call with no tool result), breaking message-stream consistency and the cache prefix.',
-      'Can the session continue after an interrupt? — The message stream is persisted intact (SessionDB), so it can be resumed.',
-      'An example of a system-level interrupt? — The cron inactivity watchdog (default 600s, idle time rather than wall-clock): same flag mechanism, but triggered by a watchdog instead of the user.',
-    ],
+      'The runtime coordinates requests, tools, and later iterations after interruption. External effects may already exist. Record outcomes or interrupted status for calls and retain recovery information; it is more than a break at the next loop boundary.',
+    followUps: ['Can you resend immediately if delivery may have succeeded?'],
     rubric: [
-      'Flag bit + iteration-boundary checkpoint, not exception-based interruption',
-      'Can contrast the state-consistency problem of the exception approach (half-finished tool_call)',
-      'Can cite the cron inactivity watchdog (default 600s) as a system-level example',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'json-results',
-    question:
-      'Why must all tool handlers return JSON strings instead of Python objects or natural-language paragraphs?',
-    hint: "Think about what the registry must do without knowing each tool's internal types.",
+    question: 'Why give tools a defined result boundary?',
+    hint: 'Distinguish a JSON result from an arbitrary object.',
     answer:
-      'tools/AGENTS.md states "All handlers return a JSON string". The registry uniformly handles schema ' +
-      "collection, dispatch, availability checks, and error wrapping — it should not be aware of each tool's " +
-      'internal types; a uniform string boundary lets it generically truncate/summarize to protect the context ' +
-      'window. Results are wrapped by make_tool_result_message into an OpenAI role="tool" message and appended. ' +
-      'Structured JSON (success/data/error fields) lets the model reliably parse success vs failure: errors are ' +
-      'also wrapped as normal result messages instead of being raised, so the agent sees the failure and ' +
-      'self-corrects, and the loop never crashes because one tool threw.',
-    followUps: [
-      'What if a tool throws internally? — The registry wraps it into an error JSON; the agent sees it next turn and self-corrects.',
-      'How are large results handled? — Uniform truncation/summarization to protect the context window; a string boundary is what makes generic handling possible.',
-      "Why not let the model read a Python object's repr? — Unstable output schemas trip the model's parsing; JSON fields are a dependable contract.",
-    ],
+      'Hermes handlers conventionally return JSON strings, which dispatch associates with calls. Structured errors enable diagnosis but do not guarantee successful recovery. Bounded output or overflow references must retain a way to verify evidence.',
+    followUps: ['How does tool success differ from task success?'],
     rubric: [
-      "Uniform boundary: the registry is agnostic to tools' internal types",
-      'Errors-as-result-messages: the agent can self-correct and the loop never crashes',
-      'Friendly to context protection (truncation/summarization)',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'register-vs-expose',
-    question:
-      'Why is writing tools/your_tool.py not enough to add a new tool — why must you also register it in toolsets.py?',
-    hint: 'Distinguish "registered into the registry" from "exposed to the agent".',
+    question: 'Why can a registered tool remain invisible?',
+    hint: 'Trace registration, toolsets, session conditions, and prerequisites.',
     answer:
-      'Auto-discovery only handles registration: any tools/*.py module that calls registry.register() at top ' +
-      'level registers its schema on import — no manual import list. But exposing a tool to the agent is a ' +
-      'separate, deliberate step — the tool name must appear in the TOOLSETS dict in toolsets.py. Benefits of ' +
-      'the split: a controllable schema footprint, e.g. a kanban worker has zero tool footprint outside kanban ' +
-      'tasks; per-platform tailoring, where each messaging platform gets a hermes-<platform> bundle (e.g. ' +
-      'hermes-telegram for Telegram) built directly on _HERMES_CORE_TOOLS; and check_fn / requires_env ' +
-      'automatically hiding tools when the ' +
-      'environment doesn\'t qualify. Calling out "registration ≠ exposure" in an interview shows you have thought ' +
-      "about tool visibility as a cost — every schema consumes context and dilutes the model's attention.",
+      'Registration connects definitions to implementations. Toolsets and session capabilities select exposure; check_fn checks reachability or prerequisites. Plugins use their supported registration path. Exposed tools still consume input.',
     followUps: [
-      'Why control the schema footprint? — Every tool schema ships with the messages, costs tokens, dilutes attention, and raises the chance of wrong calls.',
-      'Must local custom tools touch core code? — No, use the plugin route: ctx.register_tool(...) in ~/.hermes/plugins/<name>/, leaving tools/ and toolsets.py untouched.',
-      'What does check_fn do? — Environment checks (e.g. whether an API key exists); the tool is hidden when they fail.',
+      'Should desktop capabilities depend on a backend environment flag or session source?',
     ],
     rubric: [
-      'Explains registration and exposure as two layers and what each does',
-      'Knows the role of _HERMES_CORE_TOOLS (the default bundle every platform inherits)',
-      'Understands the cost of schema footprint and per-platform/scenario tailoring',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'compression-exception',
-    question: 'Why is context compression the sole exception to the "cache iron rule"?',
-    hint: "Compression also rewrites history — why doesn't it break its own rule?",
+    question: 'How does compression trade capacity for retained information?',
+    hint: 'Name goals, rules, completed scope, and pending work.',
     answer:
-      'The iron rule forbids altering past context / changing toolsets / rebuilding the system prompt ' +
-      'mid-session, because any rewrite invalidates the prompt cache. Compression also rewrites history, but it ' +
-      'is a deliberate, one-time invalidation: when the message stream approaches the context-window limit, not ' +
-      'compressing means the session simply dies — a one-time cache miss costs far less than losing the session. ' +
-      'The new prefix formed by compression gets re-cached from the next turn on, and costs fall back. The key ' +
-      'word is "sole": every other change (installing skills, changing toolsets, reloading memory) goes through ' +
-      'deferred invalidation, taking effect next session by default; only the /skills commands offer --now for immediate effect. Converging ' +
-      'on exactly one exception is what makes the rule enforceable.',
-    followUps: [
-      'Who decides when to compress? — Context-window pressure drives it; it is the only permitted context-mutation point in the loop.',
-      'What about information lost in compression? — That is a compression-quality problem; engineering-wise, guaranteeing it happens once and the cache rebuilds afterwards is the cost-level backstop.',
-      'Why not allow "a few more exceptions"? — Once exceptions generalize, the cache hit rate becomes unpredictable and the cost model collapses.',
-    ],
+      'Caching does not enlarge the window. Compression creates shorter continuation material, may lose detail, and changes prefix reuse. Verify the ability to continue and consult history when needed.',
+    followUps: ['Why can “processed files” be an inadequate summary?'],
     rubric: [
-      'Admits compression also breaks the cache — no sophistry',
-      'Explains the trade-off: one-time invalidation vs session death',
-      'Knows the new prefix re-enters the cache afterwards, and all other changes go through deferred invalidation',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'skill-injection',
-    question:
-      'Why are skill slash commands injected as user messages instead of updating the system prompt?',
-    hint: 'Which position in the cache prefix is the most "untouchable"?',
+    question: 'How does reading a skill differ from rebuilding the system prompt?',
+    hint: 'Compare new task material with an established earlier prefix.',
     answer:
-      'After scanning the skills dir (default ~/.hermes/skills/), agent/skill_commands.py injects skill content ' +
-      'as a user message — agent/AGENTS.md\'s message-flow invariants state that "skill slash commands ' +
-      '(agent/skill_commands.py) inject as a user message", because prompt caching must not break. The ' +
-      'system prompt sits at the very head of the cache prefix; touching it invalidates the entire prefix, while ' +
-      'a user message is appended at the tail and leaves the prefix untouched. The cost is that skill ' +
-      'instructions carry less authority than the system prompt — trading message role for cache hit rate is a ' +
-      "classic example of Hermes' cache-first design. The pattern is consistent across the repo: any operation " +
-      'that would change system-prompt state is deferred by default and takes effect next session.',
-    followUps: [
-      'Side effects of injecting as a user message? — Weaker authority than the system prompt; the model may not comply. That trade-off is deliberate.',
-      'Why is the head of the prefix most sensitive? — Prefix caching matches by prefix; once the head changes, everything after it is invalidated.',
-      'Where else does the same trade-off appear? — /tools and memory-related commands also default to deferred invalidation, taking effect next session.',
-    ],
+      'An explicit skill invocation adds relevant task material without rewriting the established system prompt. Reading still costs tokens and does not replace every earlier copy in open sessions. Verify saving, reading, and effect separately.',
+    followUps: ['Why is “already applied to disk, still staged” a contradiction?'],
     rubric: [
-      'Knows the position sensitivity of prefix caching: touching the head = invalidating everything',
-      'Explains the trade-off between appending a user message and rewriting the system prompt',
-      'Can point out this is a repo-wide pattern (deferred invalidation)',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'parallel-tools',
-    question:
-      'In Hermes, who decides whether tools run in parallel or serially? Is there real parallelism in the main loop?',
-    hint: 'Look at the shape of the tool_calls array in a single response, then think about batch delegate.',
+    question: 'Who determines whether a tool batch executes concurrently?',
+    hint: 'The model proposes calls; runtime checks eligibility and conflicts.',
     answer:
-      "The model's single response decides: however many calls sit in response.tool_calls, the loop executes " +
-      'that many in order, appends each result, then increments api_call_count and enters the next turn. In other ' +
-      'words, "multiple tool_calls in one turn" is parallelism expressed by the model; the execution layer ' +
-      'processes them in array order and there is no concurrent execution framework inside the main loop. Real ' +
-      'parallelism happens in delegate_task batch tasks: each element of tasks: [...] spawns an independent ' +
-      'subagent running concurrently, capped by delegation.max_concurrent_children (default 10). The division of ' +
-      'labor is clean: serial determinism inside the loop, concurrency pushed to the delegation layer with ' +
-      'isolation boundaries.',
-    followUps: [
-      "Does the result order of same-turn tool_calls matter? — They are appended in array order, so the message stream corresponds one-to-one with the model's calls.",
-      'Where is real parallelism, and with what isolation? — Batch delegate: each subagent has its own context and terminal session.',
-      'Why not run tools concurrently inside the main loop? — Tools may depend on each other (write a file, then read it); serial execution preserves determinism. For concurrency, delegate and get isolation.',
-    ],
+      'A model may propose several calls. The runtime planner creates ordered parallel or sequential segments based on tool type and path conflicts, preserving result association and collection order. Delegation is not the only concurrency mechanism.',
+    followUps: ['Compare reading A and B with writing then reading A.'],
     rubric: [
-      "Parallel vs serial is determined by the shape of the model response's tool_calls",
-      'Serial execution inside the loop guarantees determinism and one-to-one message correspondence',
-      'Real parallelism lives in batch delegate, with a concurrency cap and isolation boundaries',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
   {
     id: 'after-loop',
-    question:
-      'What does Hermes do after the main loop ends? What does that imply for system design?',
-    hint: 'Where is the session persisted? Who works in the on_session_end hook?',
+    question: 'Which post-turn activities have different triggers?',
+    hint: 'Distinguish a turn, session, persistence, and idle maintenance.',
     answer:
-      'After the three exits (normal return / cap hit / user interrupt): the session is written to SessionDB ' +
-      '(hermes_state.py, SQLite + FTS5, powering cross-session full-text search); the on_session_end plugin hook ' +
-      'fires, and memory providers run sync_turn there, syncing this turn to backends like honcho / mem0; only ' +
-      'then do background systems like the curator take the stage (tracking skill usage, auto-archiving). This ' +
-      'means the main loop is only responsible for "this turn\'s intelligence"; persistence and the learning ' +
-      'loop are decoupled past the session boundary. And the decoupling is configurable: add memory to ' +
-      'agent.disabled_toolsets for session types that should not run memory (e.g. scheduled jobs).',
-    followUps: [
-      "Why isn't memory sync inside the loop? — Anything appended to context inside the loop breaks the cache; the session boundary is the natural persistence checkpoint.",
-      'Do cron sessions load memory by default? — Yes. Cron sessions now run with skip_memory=False (MEMORY.md/USER.md load normally); to keep them memory-free, set agent.disabled_toolsets: [memory].',
-      'What capability does the FTS5 index bring? — Searching your own history across sessions (session_search) — the data foundation of "self-evolution".',
-    ],
+      'History can persist during execution; providers synchronize turns. Review uses counters and gates, while curator maintenance checks idleness, interval, and management eligibility. Session-end hooks are another lifecycle boundary.',
+    followUps: ['Is resuming after restart equivalent to a new session?'],
     rubric: [
-      'Knows sessions persist to SessionDB (SQLite + FTS5)',
-      'Knows the boundary between the on_session_end hook and memory sync_turn',
-      'Understands the decoupling of the main loop from background learning systems, and that it is configurable (disabled_toolsets opting out of memory)',
+      'Explain objects and timing.',
+      'Trace one example and a changed condition.',
+      'State the applicable boundary.',
     ],
   },
 ];
@@ -695,8 +442,8 @@ export const SELF_ASSESSMENT_UI = {
   weakTitlePrefix: { zh: '薄弱项（档位 <2，', en: 'Weak topics (level <2, ' },
   weakTitleSuffix: { zh: ' 个）', en: ')' },
   noWeak: {
-    zh: '没有薄弱项——12 个主题全部达到「能设计」以上。去把第 23 章的追问链再过一遍， 然后放平心态去面试。',
-    en: 'No weak topics — all 12 are at "Can design" or above. Walk the follow-up chains in Chapter 23 once more, then go into the interview relaxed.',
+    zh: '没有薄弱项——12 个主题全部达到「能设计」以上。去把第 30 章的追问链再过一遍， 然后放平心态去面试。',
+    en: 'No weak topics — all 12 are at "Can design" or above. Walk the follow-up chains in Chapter 30 once more, then go into the interview relaxed.',
   },
   currentLevel: { zh: '当前档位', en: 'Current level' },
   reviewLink: { zh: '回炉 → ', en: 'Review → ' },

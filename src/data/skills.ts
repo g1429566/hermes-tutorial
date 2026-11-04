@@ -19,10 +19,7 @@ export interface SkillField {
 }
 
 export const SKILL_FORMAT_INTRO =
-  'Hermes 的技能就是一份带 YAML frontmatter 的 Markdown 文件（SKILL.md）：frontmatter 告诉加载器' +
-  '「我是谁、能在什么平台跑、需要哪些配置」，正文告诉模型「怎么做」。下面逐个拆开 frontmatter 的每个字段，' +
-  '看它的用途与合并前必须通过的校验规则——这些规则写在 AGENTS.md 的「Skill authoring standards (HARDLINE)」里，' +
-  'reviewer 会直接拒绝违规的 PR。';
+  '先看正文怎样指导任务，再用字段浏览器理解名称、描述与可选条件。仓库贡献规范与运行时能否解析是不同的检查。';
 
 export const SKILL_FRONTMATTER_FIELDS: SkillField[] = [
   {
@@ -207,14 +204,8 @@ export const SKILL_LOAD_STEPS: SkillLoadStep[] = [
     code: {
       file: 'agent/skill_commands.py',
       lines: 'scan_skill_commands()',
-      snippet: `def scan_skill_commands() -> dict[str, dict[str, Any]]:
-    """Scan skill dirs and return {"/skill-name": {name, description, ...}}."""
-    from tools.skills_tool import _get_disabled_skill_names, _skill_catalog
-    disabled = _get_disabled_skill_names()
-    for entry in _skill_catalog():
-        if entry["status"] == "unique":
-            _scan_skill_md(Path(entry["path"]), disabled, seen_names, commands)
-    ...`,
+      snippet:
+        'def scan_skill_commands() -> dict[str, dict[str, Any]]:\n    """Scan skill dirs and return {"/skill-name": {name, description, ...}}."""\n    from tools.skills_tool import _get_disabled_skill_names, _skill_catalog\n    disabled = _get_disabled_skill_names()\n    for entry in _skill_catalog():\n        if entry["status"] == "unique":\n            _scan_skill_md(Path(entry["path"]), disabled, seen_names, commands)\n    ...',
       note: 'CLI 与 gateway 共用同一份扫描结果（该文件 docstring 开篇即注明）',
     },
     points: [
@@ -231,9 +222,8 @@ export const SKILL_LOAD_STEPS: SkillLoadStep[] = [
     code: {
       file: 'agent/skill_commands.py',
       lines: '_scan_skill_md()（_parse_frontmatter 经 tools/skills_tool 再导出）',
-      snippet: `frontmatter, body = _parse_frontmatter(content)
-name = frontmatter.get('name', skill_md.parent.name)
-description = frontmatter.get('description', '')`,
+      snippet:
+        "frontmatter, body = _parse_frontmatter(content)\nname = frontmatter.get('name', skill_md.parent.name)\ndescription = frontmatter.get('description', '')",
       note: 'SKILL.md = YAML frontmatter + Markdown 正文，没有第二条格式',
     },
     points: [
@@ -250,13 +240,8 @@ description = frontmatter.get('description', '')`,
     code: {
       file: 'agent/skill_utils.py',
       lines: 'skill_matches_platform_list()',
-      snippet: `def skill_matches_platform_list(platforms: Any) -> bool:
-    if not platforms:
-        return True
-    current = sys.platform
-    for platform in platforms:
-        normalized = str(platform).lower().strip()
-        ...`,
+      snippet:
+        'def skill_matches_platform_list(platforms: Any) -> bool:\n    if not platforms:\n        return True\n    current = sys.platform\n    for platform in platforms:\n        normalized = str(platform).lower().strip()\n        ...',
       note: 'platforms 缺省 = 全平台可用',
     },
     points: [
@@ -270,22 +255,14 @@ description = frontmatter.get('description', '')`,
     id: 'inject',
     label: '注入',
     title: '注入为 user 消息（缓存友好）',
-    body: '用户敲 /github 时，_build_skill_message() 把 SKILL.md 正文加上脚手架包成一条 user 消息进入对话——绝不改写 system prompt。AGENTS.md 开宗明义：per-conversation prompt caching is sacred，任何中途改写 past context 的行为都会让缓存失效、成本翻倍。',
+    body: '显式调用把技能正文作为当前任务材料加入，保留已有系统提示。新增材料仍有 token 成本，保存修订不等于替换所有已读取的旧副本。',
     code: {
       file: 'agent/skill_commands.py',
-      lines: 'AGENTS.md · Message-flow invariants',
-      snippet: `# Skill slash commands: agent/skill_commands.py scans
-# ~/.hermes/skills/, injects as **user message**
-# (not system prompt) to preserve prompt caching
-_SKILL_INVOCATION_PREFIX = "[IMPORTANT: The user has invoked the "
-_SINGLE_SKILL_MARKER = "The full skill content is loaded below.]"`,
-      note: '脚手架标记是字节级稳定的——memory provider 靠它还原用户真实指令',
+      lines: '教学伪代码',
+      snippet: 'read skill body\nappend current task material',
+      note: '实际调用路径请对照此模块。',
     },
-    points: [
-      '注入 user 消息：缓存前缀不动，成本不翻倍',
-      '脚手架标记让记忆系统能剥离技能正文、只存用户指令',
-      '技能默认「下次会话生效」，--now 才立即破缓存',
-    ],
+    points: ['尽量保持此前请求内容稳定。', '区分安装、发现、读取与执行。'],
   },
   {
     id: 'register',
@@ -295,11 +272,8 @@ _SINGLE_SKILL_MARKER = "The full skill content is loaded below.]"`,
     code: {
       file: 'agent/skill_commands.py',
       lines: 'get_skill_commands()',
-      snippet: `def get_skill_commands() -> dict[str, dict[str, Any]]:
-    """Return the current skill commands mapping (scan first if
-    empty). Rescans when the platform / profile home / project
-    root changes — each identity is scanned once and cached."""
-    # description 取自 SKILL.md frontmatter，供 /help 与补全展示`,
+      snippet:
+        'def get_skill_commands() -> dict[str, dict[str, Any]]:\n    """Return the current skill commands mapping (scan first if\n    empty). Rescans when the platform / profile home / project\n    root changes — each identity is scanned once and cached."""\n    # description 取自 SKILL.md frontmatter，供 /help 与补全展示',
       note: '命令名是 name 规范化后的 slug（小写连字符）',
     },
     points: [
@@ -313,10 +287,7 @@ _SINGLE_SKILL_MARKER = "The full skill content is loaded below.]"`,
 /* ── Chapter 06：策展器状态机 ──────────────────────────────────── */
 
 export const CURATOR_INTRO =
-  'agent 自己写的技能越攒越多，谁来收拾？策展器（curator）是一个后台维护系统：' +
-  '它读取 ~/.hermes/skills/.usage.json 里每个技能的遥测记录，按「多久没用」把技能在 active → stale → archived 之间搬动，' +
-  '还能 fork 一个 AIAgent 出来做 LLM 评审（默认关闭，curator.consolidate / --consolidate 才开启）。但它有三条铁律——只碰 agent 创建的技能、从不删除只归档、' +
-  'pinned 全豁免。点击下面的状态节点看逻辑，再点「触发一次策展检查」看一轮真实流转。';
+  '按给定活动时间推演一次维护。curator 根据托管、保护与闲置规则流转技能；LLM 内容整理默认关闭，逐回合后台复盘另有触发路径。';
 
 export type CuratorStateId = 'active' | 'stale' | 'archived' | 'pinned';
 
@@ -333,40 +304,64 @@ export const CURATOR_STATES: CuratorStateNode[] = [
     id: 'active',
     name: 'active',
     tagline: '正常服役',
-    body: '默认状态。技能正常出现在列表与斜杠命令里。每当技能被使用（use_count）、被查看（view_count）、被修改（patch_count），tools/skill_usage.py 的 bump_use / bump_view / bump_patch 就会写下各自的时间戳（last_used_at / last_viewed_at / last_patched_at）；latest_activity_at() 取三者最新值，作为策展器判断「活不活跃」的锚点（anchor）。',
+    body: '受管技能保持可用。使用、查看与修订等活动影响闲置锚点；活动次数不是正确性评分。',
     sources: [
-      { path: 'tools/skill_usage.py', note: 'bump_use / bump_view / bump_patch 三个计数入口' },
-      { path: 'agent/curator.py', note: '自动流转：anchor ≤ stale_cutoff 时 active → stale' },
+      {
+        path: 'tools/skill_usage.py',
+        note: 'bump_use / bump_view / bump_patch 三个计数入口',
+      },
+      {
+        path: 'agent/curator.py',
+        note: '自动流转：anchor ≤ stale_cutoff 时 active → stale',
+      },
     ],
   },
   {
     id: 'stale',
     name: 'stale',
     tagline: '久未使用',
-    body: '锚点超过 stale_after_days（默认 14 天）没有活动，active 被标记为 stale。stale 不是惩罚：技能照常可用、照常出现在命令里，只是一个「可能被归档」的信号。若之后又被使用（anchor 新于 stale 线），下一轮检查会自动 reactivate 回 active。',
+    body: '在满足条件的维护检查中，受管且未受保护的技能超过 stale 阈值后标记为 stale，默认 14 天。仍可使用，重新活动后可恢复活跃。',
     sources: [
-      { path: 'agent/curator.py', note: 'mark stale / reactivate 的 cutoff 比较' },
-      { path: 'config.yaml · curator.stale_after_days', note: '默认 14 天' },
+      {
+        path: 'agent/curator.py',
+        note: 'mark stale / reactivate 的 cutoff 比较',
+      },
+      {
+        path: 'config.yaml · curator.stale_after_days',
+        note: '默认 14 天',
+      },
     ],
   },
   {
     id: 'archived',
     name: 'archived',
     tagline: '归档可恢复',
-    body: '锚点超过 archive_after_days（默认 30 天），技能被移动到 ~/.hermes/skills/.archive/——这是策展器最重的操作，且可逆：hermes curator restore 随时能捞回来。从未使用过的技能有宽限地板：创建不满 stale_after_days 的一律不动，「没有使用证据」不等于「该归档」。',
+    body: '维护检查中，超过归档阈值的符合条件技能移入可恢复归档，默认 30 天；还要考虑宽限、pin 和 cron 引用保护。',
     sources: [
-      { path: 'tools/skill_usage.py', note: 'archive_skill()，.archive/ 扁平布局' },
-      { path: 'config.yaml · curator.archive_after_days', note: '默认 30 天' },
+      {
+        path: 'tools/skill_usage.py',
+        note: 'archive_skill()，.archive/ 扁平布局',
+      },
+      {
+        path: 'config.yaml · curator.archive_after_days',
+        note: '默认 30 天',
+      },
     ],
   },
   {
     id: 'pinned',
     name: 'pinned',
     tagline: '豁免态（正交标记）',
-    body: 'pinned 是与 state 正交的布尔标记，不是第四个状态：一个技能可以 active + pinned。pin 住的技能跳过一切自动流转、也跳过 LLM 评审；连 skill_manage(action="delete") 都拒绝删除 pinned 技能——但 patch / edit / write_file 照常放行，agent 可以继续改进它。cronjob 引用着的技能也被视作 pinned，不被自动流转。',
+    body: 'pin 与 state 独立，保护归档相关行为。agent 仍可正常修订内容；需要禁止 agent 改写时用 lock。策展器与逐回合复盘也不是同一机制。',
     sources: [
-      { path: 'agent/curator.py', note: 'pinned 与 cron 引用技能的豁免分支' },
-      { path: 'hermes_cli/curator.py', note: 'hermes curator pin / unpin' },
+      {
+        path: 'agent/curator.py',
+        note: 'pinned 与 cron 引用技能的豁免分支',
+      },
+      {
+        path: 'hermes_cli/curator.py',
+        note: 'hermes curator pin / unpin',
+      },
     ],
   },
 ];
@@ -374,32 +369,53 @@ export const CURATOR_STATES: CuratorStateNode[] = [
 // 遥测：~/.hermes/skills/.usage.json 每个技能的记录字段（tools/skill_usage.py，_empty_record()）。
 // 注意 last_activity_at 不落盘——由 latest_activity_at() 从三类时间戳现算，是策展锚点。
 export const CURATOR_USAGE_FIELDS = [
-  { name: 'use_count', note: '技能被实际使用的次数（bump_use 时 +1）' },
-  { name: 'view_count', note: '被 skill_view 查看的次数（bump_view 时 +1）' },
-  { name: 'patch_count', note: '被 skill_manage patch/edit 修改的次数（bump_patch 时 +1）' },
+  {
+    name: 'use_count',
+    note: '技能被实际使用的次数（bump_use 时 +1）',
+  },
+  {
+    name: 'view_count',
+    note: '被 skill_view 查看的次数（bump_view 时 +1）',
+  },
+  {
+    name: 'patch_count',
+    note: '被 skill_manage patch/edit 修改的次数（bump_patch 时 +1）',
+  },
   {
     name: 'last_used_at / last_viewed_at / last_patched_at',
     note: '三类活动各自的时间戳；最新者即锚点 last_activity_at（现算）',
   },
-  { name: 'created_at', note: '记录创建时间——从未使用的技能以它为锚点（宽限地板）' },
-  { name: 'state', note: 'active / stale / archived' },
-  { name: 'pinned', note: '豁免标记，正交于 state' },
-  { name: 'created_by', note: '"agent"（或 agent_created: true）才会被策展器托管；其余一律不碰' },
+  {
+    name: 'created_at',
+    note: '记录创建时间——从未使用的技能以它为锚点（宽限地板）',
+  },
+  {
+    name: 'state',
+    note: 'active / stale / archived',
+  },
+  {
+    name: 'pinned',
+    note: '豁免标记，正交于 state',
+  },
+  {
+    name: 'created_by',
+    note: '策展托管政策标记，不是作者证明；前台创建、后台创建与显式 adopt 的策略不同。',
+  },
 ];
 
 // 铁律（AGENTS.md「Curator (skill lifecycle)」Invariants，逐字对齐）。
 export const CURATOR_IRON_RULES = [
   {
-    title: '只碰 created_by: "agent" 的技能',
-    body: 'hub 与 external 技能永不纳入自动策展；bundled 默认也不动——例外：curator.prune_builtins: true 时，确定性久置巡检可归档内置技能，但不会进入 LLM 评审候选。tools/skill_usage.py 的 is_curation_eligible() 只认 .usage.json 里 created_by == "agent"（或 agent_created: true）的记录。',
+    title: '先检查托管与来源',
+    body: '默认只管理明确托管的技能；prune_builtins 是内置技能闲置归档的单独选择，不代表将它们交给 LLM 任意整理。',
   },
   {
-    title: '从不删除，最重操作是归档',
-    body: '归档 = 移动到 ~/.hermes/skills/.archive/，hermes curator restore 可恢复。用户永远不会丢技能。',
+    title: '归档可恢复',
+    body: '归档移入当前 profile 的 skills/.archive/；恢复由相应命令处理，不把它描述成删除。',
   },
   {
-    title: 'pinned 全豁免',
-    body: 'pinned 技能跳过每一次自动流转与 LLM 评审；skill_manage(action="delete") 也拒绝删除 pinned 技能。',
+    title: '区分 pin 与 lock',
+    body: 'pin 保护自动归档相关行为；lock 限制 agent 内容变更。后台复盘与策展器分别受各自规则和审批约束。',
   },
 ];
 
@@ -486,16 +502,12 @@ export const CURATOR_SIM_SKILLS: CuratorSimSkill[] = [
 ];
 
 export const CURATOR_HOOK =
-  'curator 的权力清单：标记 stale、归档到 .archive/、提请 LLM 评审。' +
-  '不在清单上的事一件也做不了——删技能不行，动你的技能不行，碰 pinned 不行。';
+  '先确认由谁托管、哪些保护生效，再按活动锚点判断本次流转；内容是否正确还需要另行核验。';
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const SKILL_FORMAT_INTRO_EN =
-  'A Hermes skill is just a Markdown file with YAML frontmatter (SKILL.md): the frontmatter tells the loader ' +
-  '"who I am, which platforms I run on, what config I need", and the body tells the model "how to do it". ' +
-  'Below we take apart every frontmatter field — its purpose and the validation rules it must pass before merge. ' +
-  'These rules live in AGENTS.md under "Skill authoring standards (HARDLINE)", and reviewers will reject PRs that violate them.';
+  'Start with how the body guides work, then inspect names, descriptions, and conditions. Contribution rules and runtime parsing are separate checks.';
 
 export const SKILL_FRONTMATTER_FIELDS_EN: SkillField[] = [
   {
@@ -671,14 +683,8 @@ export const SKILL_LOAD_STEPS_EN: SkillLoadStep[] = [
     code: {
       file: 'agent/skill_commands.py',
       lines: 'scan_skill_commands()',
-      snippet: `def scan_skill_commands() -> dict[str, dict[str, Any]]:
-    """Scan skill dirs and return {"/skill-name": {name, description, ...}}."""
-    from tools.skills_tool import _get_disabled_skill_names, _skill_catalog
-    disabled = _get_disabled_skill_names()
-    for entry in _skill_catalog():
-        if entry["status"] == "unique":
-            _scan_skill_md(Path(entry["path"]), disabled, seen_names, commands)
-    ...`,
+      snippet:
+        'def scan_skill_commands() -> dict[str, dict[str, Any]]:\n    """Scan skill dirs and return {"/skill-name": {name, description, ...}}."""\n    from tools.skills_tool import _get_disabled_skill_names, _skill_catalog\n    disabled = _get_disabled_skill_names()\n    for entry in _skill_catalog():\n        if entry["status"] == "unique":\n            _scan_skill_md(Path(entry["path"]), disabled, seen_names, commands)\n    ...',
       note: 'CLI and gateway share the same scan results (stated at the top of the file docstring)',
     },
     points: [
@@ -695,9 +701,8 @@ export const SKILL_LOAD_STEPS_EN: SkillLoadStep[] = [
     code: {
       file: 'agent/skill_commands.py',
       lines: '_scan_skill_md() (_parse_frontmatter re-exported via tools/skills_tool)',
-      snippet: `frontmatter, body = _parse_frontmatter(content)
-name = frontmatter.get('name', skill_md.parent.name)
-description = frontmatter.get('description', '')`,
+      snippet:
+        "frontmatter, body = _parse_frontmatter(content)\nname = frontmatter.get('name', skill_md.parent.name)\ndescription = frontmatter.get('description', '')",
       note: 'SKILL.md = YAML frontmatter + Markdown body — there is no second format',
     },
     points: [
@@ -714,13 +719,8 @@ description = frontmatter.get('description', '')`,
     code: {
       file: 'agent/skill_utils.py',
       lines: 'skill_matches_platform_list()',
-      snippet: `def skill_matches_platform_list(platforms: Any) -> bool:
-    if not platforms:
-        return True
-    current = sys.platform
-    for platform in platforms:
-        normalized = str(platform).lower().strip()
-        ...`,
+      snippet:
+        'def skill_matches_platform_list(platforms: Any) -> bool:\n    if not platforms:\n        return True\n    current = sys.platform\n    for platform in platforms:\n        normalized = str(platform).lower().strip()\n        ...',
       note: 'platforms omitted = available on all platforms',
     },
     points: [
@@ -734,21 +734,16 @@ description = frontmatter.get('description', '')`,
     id: 'inject',
     label: 'Inject',
     title: 'Injected as a user message (cache-friendly)',
-    body: 'When the user types /github, _build_skill_message() wraps the SKILL.md body with scaffolding into a user message entering the conversation — the system prompt is never rewritten. AGENTS.md states it upfront: per-conversation prompt caching is sacred; anything that rewrites past context mid-conversation busts the cache and doubles the cost.',
+    body: 'Explicit invocation adds the skill body as current task material without rewriting the established system prompt. The added material still costs tokens; saving a revision does not replace every earlier copy.',
     code: {
       file: 'agent/skill_commands.py',
-      lines: 'AGENTS.md · Message-flow invariants',
-      snippet: `# Skill slash commands: agent/skill_commands.py scans
-# ~/.hermes/skills/, injects as **user message**
-# (not system prompt) to preserve prompt caching
-_SKILL_INVOCATION_PREFIX = "[IMPORTANT: The user has invoked the "
-_SINGLE_SKILL_MARKER = "The full skill content is loaded below.]"`,
-      note: "The scaffolding markers are byte-stable — the memory provider relies on them to recover the user's real instruction",
+      lines: 'Teaching pseudocode',
+      snippet: 'read skill body\nappend current task material',
+      note: 'Trace the actual invocation path in this module.',
     },
     points: [
-      'Injected as a user message: the cache prefix is untouched, cost stays flat',
-      "The scaffolding markers let the memory system strip the skill body and store only the user's instruction",
-      'Skill changes take effect "next session" by default; --now busts the cache immediately',
+      'Preserve earlier request content where possible.',
+      'Distinguish installation, discovery, reading, and execution.',
     ],
   },
   {
@@ -759,11 +754,8 @@ _SINGLE_SKILL_MARKER = "The full skill content is loaded below.]"`,
     code: {
       file: 'agent/skill_commands.py',
       lines: 'get_skill_commands()',
-      snippet: `def get_skill_commands() -> dict[str, dict[str, Any]]:
-    """Return the current skill commands mapping (scan first if
-    empty). Rescans when the platform, profile home, or project
-    root changes — each identity is scanned once and cached."""
-    # description 取自 SKILL.md frontmatter，供 /help 与补全展示`,
+      snippet:
+        'def get_skill_commands() -> dict[str, dict[str, Any]]:\n    """Return the current skill commands mapping (scan first if\n    empty). Rescans when the platform, profile home, or project\n    root changes — each identity is scanned once and cached."""\n    # description 取自 SKILL.md frontmatter，供 /help 与补全展示',
       note: 'The command name is the normalized slug of name (lowercase, hyphenated)',
     },
     points: [
@@ -775,18 +767,14 @@ _SINGLE_SKILL_MARKER = "The full skill content is loaded below.]"`,
 ];
 
 export const CURATOR_INTRO_EN =
-  'The agent keeps writing more and more skills — who cleans up? The curator is a background maintenance system: ' +
-  'it reads the per-skill telemetry records in ~/.hermes/skills/.usage.json and moves skills between active → stale → archived based on "how long since last use", ' +
-  'and it can even fork an AIAgent to run LLM reviews (off by default — enabled via curator.consolidate / --consolidate). But it has three iron rules — it only touches agent-created skills, ' +
-  'it never deletes (archiving is the limit), and pinned skills are fully exempt. ' +
-  'Click the state nodes below to see the logic, then hit "Run a curation check" to watch a real pass.';
+  'Trace one maintenance check using stated activity times. Management, protection, and inactivity govern transitions. LLM consolidation is off by default; post-turn review is separate.';
 
 export const CURATOR_STATES_EN: CuratorStateNode[] = [
   {
     id: 'active',
     name: 'active',
     tagline: 'In service',
-    body: 'The default state. The skill appears normally in the list and slash commands. Whenever the skill is used (use_count), viewed (view_count), or modified (patch_count), the matching bumper in tools/skill_usage.py — bump_use / bump_view / bump_patch — writes its own timestamp (last_used_at / last_viewed_at / last_patched_at); latest_activity_at() takes the newest of the three as the anchor for the curator\'s "is it alive" judgment.',
+    body: 'Eligible managed skills remain available. Use, view, and patch activity inform the inactivity anchor; activity is not a correctness score.',
     sources: [
       {
         path: 'tools/skill_usage.py',
@@ -802,40 +790,61 @@ export const CURATOR_STATES_EN: CuratorStateNode[] = [
     id: 'stale',
     name: 'stale',
     tagline: 'Long unused',
-    body: 'When the anchor sits past stale_after_days (default 14 days) without activity, an active skill is marked stale. stale is not a punishment: the skill stays usable and keeps its command — it is just a "may be archived" signal. If it gets used again (anchor newer than the stale line), the next check automatically reactivates it to active.',
+    body: 'At a permitted check, a managed unpinned skill beyond the configured stale threshold is marked stale. Default: 14 days. It remains available and can reactivate after activity.',
     sources: [
-      { path: 'agent/curator.py', note: 'The cutoff comparisons for mark stale / reactivate' },
-      { path: 'config.yaml · curator.stale_after_days', note: 'Default: 14 days' },
+      {
+        path: 'agent/curator.py',
+        note: 'The cutoff comparisons for mark stale / reactivate',
+      },
+      {
+        path: 'config.yaml · curator.stale_after_days',
+        note: 'Default: 14 days',
+      },
     ],
   },
   {
     id: 'archived',
     name: 'archived',
     tagline: 'Archived, restorable',
-    body: 'When the anchor exceeds archive_after_days (default 30 days), the skill is moved to ~/.hermes/skills/.archive/ — the curator\'s heaviest operation, and it is reversible: hermes curator restore can always bring it back. Never-used skills have a grace floor: anything younger than stale_after_days is left alone — "no evidence of use" does not mean "should be archived".',
+    body: 'At a permitted check, long-inactive eligible skills can move to the recoverable archive. Default: 30 days. Grace periods, pinning, and cron references affect eligibility.',
     sources: [
-      { path: 'tools/skill_usage.py', note: 'archive_skill(), with the flat .archive/ layout' },
-      { path: 'config.yaml · curator.archive_after_days', note: 'Default: 30 days' },
+      {
+        path: 'tools/skill_usage.py',
+        note: 'archive_skill(), with the flat .archive/ layout',
+      },
+      {
+        path: 'config.yaml · curator.archive_after_days',
+        note: 'Default: 30 days',
+      },
     ],
   },
   {
     id: 'pinned',
     name: 'pinned',
     tagline: 'Exempt (orthogonal flag)',
-    body: 'pinned is a boolean flag orthogonal to state, not a fourth state: a skill can be active + pinned. Pinned skills skip all automatic transitions and the LLM review; even skill_manage(action="delete") refuses to delete a pinned skill — but patch / edit / write_file still work, so the agent can keep improving it. Skills referenced by cronjobs are also treated as pinned and never auto-transitioned.',
+    body: 'Pinning protects archival-related behavior and is independent of state. Ordinary agent edits can still occur; use a lock to restrict skill mutations. Do not confuse the curator with post-turn learning review.',
     sources: [
       {
         path: 'agent/curator.py',
         note: 'Exemption branches for pinned and cron-referenced skills',
       },
-      { path: 'hermes_cli/curator.py', note: 'hermes curator pin / unpin' },
+      {
+        path: 'hermes_cli/curator.py',
+        note: 'hermes curator pin / unpin',
+      },
     ],
   },
 ];
 
 export const CURATOR_USAGE_FIELDS_EN: typeof CURATOR_USAGE_FIELDS = [
-  { name: 'use_count', note: 'Times the skill was actually used (+1 on bump_use)' },
-  { name: 'view_count', note: 'Times it was viewed via skill_view (+1 on bump_view)' },
+  {
+    name: 'use_count',
+    note: 'Times the skill was actually used (+1 on bump_use)',
+  },
+  {
+    name: 'view_count',
+    note: 'Times it was viewed via skill_view (+1 on bump_view)',
+  },
   {
     name: 'patch_count',
     note: 'Times it was modified via skill_manage patch/edit (+1 on bump_patch)',
@@ -848,26 +857,32 @@ export const CURATOR_USAGE_FIELDS_EN: typeof CURATOR_USAGE_FIELDS = [
     name: 'created_at',
     note: 'Record creation time — never-used skills anchor on it (grace floor)',
   },
-  { name: 'state', note: 'active / stale / archived' },
-  { name: 'pinned', note: 'Exemption flag, orthogonal to state' },
+  {
+    name: 'state',
+    note: 'active / stale / archived',
+  },
+  {
+    name: 'pinned',
+    note: 'Exemption flag, orthogonal to state',
+  },
   {
     name: 'created_by',
-    note: 'Only "agent" (or agent_created: true) skills are curator-managed; everything else is untouched',
+    note: 'Management-policy marker, not authorship proof. Foreground creation, background creation, and explicit adoption differ.',
   },
 ];
 
 export const CURATOR_IRON_RULES_EN: typeof CURATOR_IRON_RULES = [
   {
-    title: 'Only touches created_by: "agent" skills',
-    body: 'Hub and external skills are never auto-curated, and bundled skills are left alone by default — exception: with curator.prune_builtins: true, the deterministic inactivity walk may archive bundled skills, but never adds them to the LLM review candidates. is_curation_eligible() in tools/skill_usage.py only accepts records with created_by == "agent" (or agent_created: true) in .usage.json.',
+    title: 'Check management and origin',
+    body: 'Default maintenance governs explicitly managed skills. prune_builtins is a separate archival option, not unrestricted LLM ownership.',
   },
   {
-    title: 'Never deletes — archiving is the heaviest operation',
-    body: 'Archiving = moving to ~/.hermes/skills/.archive/, restorable via hermes curator restore. Users never lose a skill.',
+    title: 'Archive recoverably',
+    body: 'Archival moves packages under the current profile; restore is a separate operation.',
   },
   {
-    title: 'pinned is fully exempt',
-    body: 'Pinned skills skip every automatic transition and LLM review; skill_manage(action="delete") also refuses to delete them.',
+    title: 'Distinguish pin and lock',
+    body: 'Pin protects archival-related behavior; lock restricts agent mutations. Review and curator runs have separate gates.',
   },
 ];
 
@@ -933,19 +948,33 @@ export const CURATOR_SIM_SKILLS_EN: CuratorSimSkill[] = [
 ];
 
 export const CURATOR_HOOK_EN =
-  "The curator's power list: mark stale, archive to .archive/, request an LLM review. " +
-  'Anything not on the list is off-limits — no deleting skills, no touching your skills, no touching pinned.';
+  'Check management and protections before inactivity transitions; content correctness requires separate evidence.';
 
 // SkillFormatLab 专属 UI 文案。
 export const SKILL_FORMAT_UI = {
-  frontmatterTitle: { zh: '逐个字段拆开看', en: 'Every field, taken apart' },
-  required: { zh: '必填', en: 'required' },
-  optional: { zh: '可选', en: 'optional' },
-  rulesHeading: { zh: '校验规则', en: 'Validation rules' },
-  exampleNote: { zh: '示例摘自真实技能文件', en: 'Example from a real skill file' },
+  frontmatterTitle: {
+    zh: '逐个字段拆开看',
+    en: 'Every field, taken apart',
+  },
+  required: {
+    zh: '必填',
+    en: 'required',
+  },
+  optional: {
+    zh: '可选',
+    en: 'optional',
+  },
+  rulesHeading: {
+    zh: '校验规则',
+    en: 'Validation rules',
+  },
+  exampleNote: {
+    zh: '格式示例；贡献时按当前规范核对',
+    en: 'Format example; check current contribution rules',
+  },
   realFrontmatterHeading: {
-    zh: '一份真实的 frontmatter（skills/software-development/github/SKILL.md）',
-    en: 'A real frontmatter (skills/software-development/github/SKILL.md)',
+    zh: '一个 frontmatter 示例',
+    en: 'A frontmatter example',
   },
   bodySpecHeading: {
     zh: '正文规范：现代章节顺序（HARDLINE 第 5 条）',
@@ -955,10 +984,22 @@ export const SKILL_FORMAT_UI = {
     zh: '复杂技能目标 ~200 行，简单技能 ~100 行；脚本进 scripts/、参考进 references/、模板进 templates/。',
     en: 'Target ~200 lines for complex skills, ~100 for simple ones; scripts go in scripts/, references in references/, templates in templates/.',
   },
-  loadKicker: { zh: '加载流程', en: 'Loading pipeline' },
-  loadTitle: { zh: '从磁盘到斜杠命令：五步', en: 'From disk to slash command: five steps' },
-  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
-  hookTitle: { zh: '一句话记住技能格式', en: 'The skill format in one sentence' },
+  loadKicker: {
+    zh: '加载流程',
+    en: 'Loading pipeline',
+  },
+  loadTitle: {
+    zh: '从磁盘到斜杠命令：五步',
+    en: 'From disk to slash command: five steps',
+  },
+  hookKicker: {
+    zh: '要点回顾',
+    en: 'Key idea',
+  },
+  hookTitle: {
+    zh: '一句话记住技能格式',
+    en: 'The skill format in one sentence',
+  },
 };
 
 // SkillCuratorLab 专属 UI 文案（含 judge() 的判定理由模板）。
@@ -988,16 +1029,16 @@ export const CURATOR_UI = {
     en: '~/.hermes/skills/.usage.json · one record per skill (tools/skill_usage.py)',
   },
   usageNote: {
-    zh: 'state 取值 active / stale / archived；created_by == "agent" 才会被策展',
-    en: 'state is active / stale / archived; only created_by == "agent" gets curated',
+    zh: 'state 是生命周期状态；created_by 是托管政策，其他来源还有各自规则',
+    en: 'state tracks lifecycle; created_by records management policy, with separate source-specific rules',
   },
   simKicker: { zh: '模拟', en: 'Simulation' },
   simTitle: { zh: '触发一次策展检查', en: 'Run a curation check' },
   simDesc: {
     zh: (count: number, stale: number, archive: number, days: number) =>
-      `按下按钮，对下面 ${count} 个样本技能跑一轮自动流转判定（规则与 agent/curator.py 一致；配置取默认值：stale_after_days=${stale}、archive_after_days=${archive}、每 ${days} 天一轮）。`,
+      `按下按钮，对下面 ${count} 个样本技能跑一轮自动流转判定（已假设托管与调度检查通过；只模拟闲置流转，阈值：stale_after_days=${stale}、archive_after_days=${archive}；${days} 天是默认检查间隔，并非到点保证执行）。`,
     en: (count: number, stale: number, archive: number, days: number) =>
-      `Press the button to run one automatic transition pass over the ${count} sample skills below (rules match agent/curator.py; defaults: stale_after_days=${stale}, archive_after_days=${archive}, one pass every ${days} days).`,
+      `Press the button to run one automatic transition pass over the ${count} sample skills below (management and scheduling checks are assumed satisfied; simplified inactivity thresholds: stale_after_days=${stale}, archive_after_days=${archive}; ${days} days is the default interval, not guaranteed execution).`,
   },
   runButton: { zh: '▶ 触发一次策展检查', en: '▶ Run a curation check' },
   reset: { zh: '重置', en: 'Reset' },
@@ -1015,20 +1056,20 @@ export const CURATOR_UI = {
   },
   transitioned: { zh: '← 流转', en: '← moved' },
   rulesKicker: { zh: '铁律', en: 'Iron rules' },
-  rulesTitle: { zh: 'curator 永远不做这三件事', en: 'Three things the curator never does' },
+  rulesTitle: { zh: '三项维护边界', en: 'Three maintenance boundaries' },
   ruleLabel: {
     zh: (i: number) => `铁律 ${i}`,
     en: (i: number) => `Rule ${i}`,
   },
-  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookKicker: { zh: '要点回顾', en: 'Key idea' },
   hookTitle: { zh: '一句话记住策展器', en: 'The curator in one sentence' },
   reasonNotAgent: {
-    zh: 'created_by ≠ "agent"——bundled / 用户技能策展器无权触碰',
-    en: 'created_by ≠ "agent" — bundled / user skills are off-limits to the curator',
+    zh: '本例未纳入托管，跳过闲置流转；实际内置归档另有可选策略',
+    en: 'Unmanaged in this example; bundled archival has a separate opt-in policy',
   },
   reasonPinned: {
-    zh: 'pinned——跳过一切自动流转与 LLM 评审',
-    en: 'pinned — skips all automatic transitions and the LLM review',
+    zh: '本例 pinned，跳过闲置流转；它不是编辑锁',
+    en: 'Pinned in this example: skip inactivity transitions; this is not an edit lock',
   },
   reasonGrace: {
     zh: (anchor: number) => `从未使用且创建仅 ${anchor} 天——宽限地板：没有使用证据 ≠ 该归档`,

@@ -22,13 +22,7 @@ export interface ProfileResource {
 }
 
 export const PROFILES_INTRO =
-  'Hermes 支持 profiles——多个完全隔离的实例，每个实例有自己的 HERMES_HOME 目录：' +
-  'config、API keys、记忆、会话、技能、网关状态全都各自独立。默认实例住 ~/.hermes，' +
-  '命名 profile 住 ~/.hermes/profiles/<name>。核心机制只有一个：' +
-  '_apply_profile_override()（hermes_cli/main.py）在任何 module import 之前设置好 ' +
-  'HERMES_HOME 环境变量，之后所有 get_hermes_home() 调用自动 scoped 到当前 profile。' +
-  '（多路复用网关 / Desktop serve 是另一条路：按活动绑定 contextvar override，' +
-  'os.environ["HERMES_HOME"] 保持启动 profile。）';
+  'profile 隔离配置与用户状态。单次 CLI 可在启动时选择 home；多 profile 后端需要按活动任务绑定作用域，不能把启动环境变量当作所有会话的身份。';
 
 /* ── ① 隔离模型 ─────────────────────────────────────────────────── */
 export const ISOLATION_OWNED = [
@@ -158,14 +152,7 @@ export const RESOLVER_RESOURCES: ProfileResource[] = [
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const PROFILES_INTRO_EN =
-  'Hermes supports profiles — multiple fully isolated instances, each with its own HERMES_HOME ' +
-  'directory: config, API keys, memory, sessions, skills, and gateway state are all independent. ' +
-  'The default instance lives in ~/.hermes; a named profile lives in ' +
-  '~/.hermes/profiles/<name>. There is exactly one core mechanism: _apply_profile_override() ' +
-  '(hermes_cli/main.py) sets the HERMES_HOME environment variable before any module import, ' +
-  'so every subsequent get_hermes_home() call is automatically scoped to the active profile. ' +
-  '(The multiplex gateway / Desktop serve backend takes another route: a contextvar override ' +
-  'bound per activity, while os.environ["HERMES_HOME"] keeps the launch profile.)';
+  'Profiles separate configuration and user state. A CLI selects its home at launch; multiplexed backends bind each task scope instead of using launch environment as every session identity.';
 
 export const ISOLATION_OWNED_EN = [
   { label: 'config.yaml', note: 'All configuration: model / agent / gateway' },
@@ -297,29 +284,56 @@ export const RESOLVER_RESOURCES_EN: ProfileResource[] = [
 
 /* ── 组件专属 UI 文案 ─────────────────────────────────────────── */
 export const PROFILES_UI = {
-  isolationKicker: { zh: '隔离模型', en: 'Isolation model' },
+  isolationKicker: {
+    zh: '隔离模型',
+    en: 'Isolation model',
+  },
   isolationTitle: {
     zh: '两个实例，两套完整家当',
     en: 'Two instances, two complete households',
   },
-  defaultInstance: { zh: '默认实例', en: 'Default instance' },
-  namedProfile: { zh: '命名 profile', en: 'Named profile' },
-  mechanismLabel: { zh: '核心机制', en: 'Core mechanism' },
-  rulesKicker: { zh: 'profile-safe 规则', en: 'Profile-safe rules' },
-  rulesTitle: { zh: 'GOOD vs BAD 代码对照', en: 'GOOD vs BAD code comparison' },
+  defaultInstance: {
+    zh: '默认实例',
+    en: 'Default instance',
+  },
+  namedProfile: {
+    zh: '命名 profile',
+    en: 'Named profile',
+  },
+  mechanismLabel: {
+    zh: '核心机制',
+    en: 'Core mechanism',
+  },
+  rulesKicker: {
+    zh: 'profile-safe 规则',
+    en: 'Profile-safe rules',
+  },
+  rulesTitle: {
+    zh: 'GOOD vs BAD 代码对照',
+    en: 'GOOD vs BAD code comparison',
+  },
   rulesDesc: {
     zh: 'AGENTS.md 给贡献者立了 6 条 profile-safe 规则（如今分散在根、hermes_cli/ 与 gateway/ 的 AGENTS.md 中）。点击左侧规则，看右侧代码对照。',
     en: 'AGENTS.md lays down 6 profile-safe rules for contributors (now spread across the root, hermes_cli/, and gateway/ AGENTS.md files). Click a rule on the left to see the code comparison on the right.',
   },
-  badPrefix: { zh: '反例', en: 'Counter-example' },
-  resolverKicker: { zh: '动手试试', en: 'Try it' },
-  resolverTitle: { zh: '路径解析器', en: 'Path resolver' },
+  badPrefix: {
+    zh: '反例',
+    en: 'Counter-example',
+  },
+  resolverKicker: {
+    zh: '动手试试',
+    en: 'Try it',
+  },
+  resolverTitle: {
+    zh: '路径解析器',
+    en: 'Path resolver',
+  },
   resolverDesc: {
     zh: '选择一个 profile，看每类资源实际解析到哪个路径。',
     en: 'Pick a profile and see which path each kind of resource actually resolves to.',
   },
   takeaway: {
-    zh: '一句话记住 profiles：_apply_profile_override() 抢在任何 import 之前设置 HERMES_HOME——之后每个 get_hermes_home() 都自动落在当前 profile 的目录里。',
-    en: "Profiles in one sentence: _apply_profile_override() sets HERMES_HOME before any import — every get_hermes_home() afterwards automatically lands inside the active profile's directory.",
+    zh: '按当前任务的 profile 解析 home、凭据与执行作用域，并用 A→B→A 检查是否串用。',
+    en: 'Resolve home, credentials, and execution scope for the owner profile; verify A→B→A without leakage.',
   },
 };

@@ -58,8 +58,7 @@ export const TOPOLOGIES: Topology[] = [
     faultIsolation:
       '节点级隔离：单点失败中断链条，需要检查点才能从断点续跑；错误会沿链条放大，前段质量决定后段上限。',
     useCases: '阶段明确的流水线：采集→清洗→分析→报告；大纲→初稿→审校→终稿。',
-    hermes:
-      'cron 的 context_from 字段：把 job A 的 last output 链进 job B 的 prompt，跨调度周期的持久化接力。',
+    hermes: 'context_from 可向 cron 任务提供既往输出，但依赖触发和成功条件仍需另行建立。',
   },
   {
     id: 'supervisor',
@@ -67,14 +66,14 @@ export const TOPOLOGIES: Topology[] = [
     tagline: '监督者不干活，只审查、打回、放行',
     structure:
       '双层：worker 产出结果，supervisor 按质量标准审查——不合格打回重做（带反馈），合格才放行。是审查-打回循环，不是一次通过。',
-    dispatch: 'worker 自主执行 + supervisor 质检门禁；循环次数取决于质量而非预算。',
+    dispatch: '依据质量反馈重做，同时受预算与修订次数限制。',
     contextSharing:
       '不对称共享：supervisor 看全程（任务 + 产出 + 历史反馈），worker 只看到任务和最近一次打回的理由。',
     faultIsolation:
       '质量向隔离：监督回路防止低质产出流出系统；代价是吞吐——打回循环本身需要上限，否则会空转。',
     useCases: '质量敏感任务：对外发布的内容、合规审查、代码 review 后才允许合并。',
     hermes:
-      'kanban dispatcher 的 failure_limit：同一任务连续失败（默认 2 次）自动 block，防止打回循环空转；curator 的 LLM review pass 对技能做质量评审，pinned 技能豁免。',
+      '可以围绕委派产物建立明确验收与反馈循环。kanban failure_limit 只限制失败重试，不能等同于语义质量监督者。',
   },
   {
     id: 'group',
@@ -95,8 +94,7 @@ export const TOPOLOGIES: Topology[] = [
     id: 'swarm',
     name: 'Swarm 蜂群',
     tagline: '海量同质 worker 从队列抢任务',
-    structure:
-      '无中心队列：大量同质 worker 从一个任务队列抢占式取任务，做完一个拿下一个。worker 之间零通信、零共享。',
+    structure: '共享队列向多名 worker 分配独立任务；队列仍有管理与协调，不是完全没有中心状态。',
     dispatch: '队列抢占：原子 claim 防止重复领取；worker 挂掉后任务被回收重派。',
     contextSharing: '零共享：任务自带全部上下文，worker 之间不需要也不允许依赖彼此的状态。',
     faultIsolation:
@@ -124,7 +122,7 @@ export const TOPOLOGY_SCENARIOS: TopologyScenario[] = [
       '客户要一份对外发布的技术白皮书：质量不达标绝不能出门，通常要「写 → 审 → 打回重写」好几轮。流程本身（大纲、初稿、审校、终稿）是固定的。你会选哪种拓扑？',
     recommended: 'supervisor',
     reasoning:
-      '质量门禁是核心约束，Supervisor 的审查-打回循环正好匹配：writer 产出、reviewer 按标准打回并附反馈，合格才放行。关键是给打回循环加上限——Hermes 的对应物是 kanban failure_limit（连续失败默认 2 次自动 block），防止监督循环空转。流程固定的部分（大纲→初稿→审校→终稿）也可以叠加 Handoff，用 cron 的 context_from 把上一棒的产出链进下一棒。',
+      '有上限的写作审校循环需要明确验收与反馈；失败次数只控制尝试，不判断语义质量。顺序交接还需要真实依赖控制。',
   },
   {
     id: 'feature-dev',
@@ -178,7 +176,7 @@ export const TOPOLOGIES_EN: Topology[] = [
     useCases:
       'Pipelines with clear stages: collect → clean → analyze → report; outline → draft → review → final.',
     hermes:
-      "cron's context_from field: chains job A's last output into job B's prompt — a persistent relay across scheduling cycles.",
+      'context_from can supply prior output to a cron run, but dependency scheduling and success criteria must be established separately.',
   },
   {
     id: 'supervisor',
@@ -186,8 +184,7 @@ export const TOPOLOGIES_EN: Topology[] = [
     tagline: 'The supervisor does no work — it reviews, rejects, and releases',
     structure:
       'Two layers: workers produce results, the supervisor reviews them against quality standards — unqualified work is rejected with feedback, qualified work is released. It is a review-reject loop, not a one-shot pass.',
-    dispatch:
-      'Workers execute autonomously + the supervisor gates quality; loop count depends on quality, not budget.',
+    dispatch: 'Quality feedback plus explicit budget and retry limits.',
     contextSharing:
       'Asymmetric sharing: the supervisor sees everything (task + output + feedback history); the worker only sees the task and the latest rejection reason.',
     faultIsolation:
@@ -195,7 +192,7 @@ export const TOPOLOGIES_EN: Topology[] = [
     useCases:
       'Quality-sensitive tasks: content for external release, compliance review, code that may merge only after review.',
     hermes:
-      "kanban dispatcher's failure_limit: a task that keeps failing (default 2 times) is blocked automatically, preventing the rejection loop from spinning; the curator's LLM review pass quality-reviews skills, with pinned skills exempt.",
+      'A quality-review loop can be built around delegated outputs with explicit acceptance. Kanban failure_limit limits retries; it is not a semantic reviewer.',
   },
   {
     id: 'group',
@@ -219,7 +216,7 @@ export const TOPOLOGIES_EN: Topology[] = [
     name: 'Swarm',
     tagline: 'Masses of homogeneous workers grab tasks from a queue',
     structure:
-      'Centerless queue: large numbers of homogeneous workers preemptively pull tasks from a task queue, finishing one and taking the next. Zero communication, zero sharing between workers.',
+      'A shared queue distributes independent tasks to multiple workers. Queue ownership and coordination still exist.',
     dispatch:
       'Queue preemption: atomic claim prevents double-assignment; tasks from dead workers are reclaimed and reassigned.',
     contextSharing:
@@ -250,7 +247,7 @@ export const TOPOLOGY_SCENARIOS_EN: TopologyScenario[] = [
       'A client wants a technical white paper for external release: it must not ship below the quality bar, and it usually takes several rounds of "write → review → reject → rewrite". The pipeline itself (outline, draft, review, final) is fixed. Which topology do you choose?',
     recommended: 'supervisor',
     reasoning:
-      "The quality gate is the core constraint, and Supervisor's review-reject loop matches it exactly: the writer produces, the reviewer rejects against the standard with feedback, and only qualified work is released. The key is capping the rejection loop — Hermes' counterpart is kanban failure_limit (auto-block after 2 consecutive failures by default), which keeps the review loop from spinning. The fixed-pipeline part (outline → draft → review → final) can also stack Handoff on top, using cron's context_from to chain each leg's output into the next.",
+      'A bounded write-review loop needs explicit acceptance and feedback. Failure counts cap attempts, not semantic quality. Sequential stages need real dependency control.',
   },
   {
     id: 'feature-dev',

@@ -14,9 +14,7 @@ export interface ProviderStep {
 }
 
 export const PROVIDER_INTRO =
-  '每个推理后端（openrouter / anthropic / gmi / deepseek …）都是一个 model-provider 插件：' +
-  '一份 ProviderProfile 把认证、端点、模型目录、请求级怪癖声明在一处，传输层读 profile 而不是收 20 个布尔旗标。' +
-  '先把统一接口的四个环节走一遍，再用表单生成你自己的 provider 插件骨架。';
+  '先建立认证、目录、请求与结果四个环节，再用表单观察 ProviderProfile。生成骨架只是开始，还需验证真实路径。';
 
 export const PROVIDER_STEPS: ProviderStep[] = [
   {
@@ -27,13 +25,8 @@ export const PROVIDER_STEPS: ProviderStep[] = [
     code: {
       file: 'hermes_cli/config_defaults.py',
       lines: 'OPTIONAL_ENV_VARS',
-      snippet: `"ACME_API_KEY": {
-    "description": "What it's for",
-    "prompt": "Display name",
-    "url": "https://...",
-    "password": True,
-    "category": "provider",  # provider / tool / skill / messaging / setting
-},`,
+      snippet:
+        '"ACME_API_KEY": {\n    "description": "What it\'s for",\n    "prompt": "Display name",\n    "url": "https://...",\n    "password": True,\n    "category": "provider",  # provider / tool / skill / messaging / setting\n},',
       note: '根 AGENTS.md「.env is for secrets only」铁律（Contribution Rubric）对应的元数据模板',
     },
     points: [
@@ -50,9 +43,8 @@ export const PROVIDER_STEPS: ProviderStep[] = [
     code: {
       file: 'providers/base.py',
       lines: 'ProviderProfile · 模型目录',
-      snippet: `fallback_models: tuple = ()  # 实时拉取失败时 /model 选择器的兜底
-models_url: str = ""           # 缺省回退 {base_url}/models
-default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
+      snippet:
+        'fallback_models: tuple = ()  # 实时拉取失败时 /model 选择器的兜底\nmodels_url: str = ""           # 缺省回退 {base_url}/models\ndefault_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型',
       note: 'hostname 缺省从 base_url 推导，用于 URL→provider 反查',
     },
     points: [
@@ -64,45 +56,29 @@ default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
   {
     id: 'call',
     label: 'CALL',
-    title: '调用：统一成 chat.completions 形状',
-    body: '主循环只认一种形状：client.chat.completions.create(model, messages, tools)。provider 适配层负责把各家 API 的方言翻译进来——声明式的 profile 覆盖端点与默认参数，prepare_messages / build_api_kwargs_extras 这类钩子处理请求级怪癖，比如 DeepSeek 要在 extra_body 里显式带 thinking 开关。',
+    title: '适配 provider 的请求与结果',
+    body: '声明与传输适配共同处理认证、消息、工具、流式和结果。Chat Completions 是常见路径之一，真实运行也有 Responses、Anthropic Messages 等路径。',
     code: {
-      file: 'agent/conversation_loop.py',
-      lines: 'Agent Loop',
-      snippet: `response = client.chat.completions.create(
-    model=model, messages=messages, tools=tool_schemas)
-if response.tool_calls:
-    ...  # 执行工具，继续循环
-else:
-    return response.content`,
-      note: 'api_mode 默认 "chat_completions"；profile 是声明式的，不拥有 client 构造',
+      file: 'agent/turn_api_call.py',
+      lines: '教学伪代码',
+      snippet: 'response = request_selected_transport(messages, tools)',
+      note: '示意调用边界，不表示所有 provider 共用一个 SDK 方法。',
     },
-    points: [
-      '主循环完全同步——流式增量只在显示层处理',
-      'fixed_temperature / default_max_tokens 处理请求级默认值',
-      'DeepSeek 的 build_api_kwargs_extras：extra_body.thinking + reasoning_effort',
-    ],
+    points: ['至少验证一次真实工具调用与结果回传。', '流式在请求层处理，界面负责显示。'],
   },
   {
     id: 'events',
     label: 'EVENTS',
     title: '统一事件流：插件钩子与两种结局',
-    body: '无论底层是哪个 provider，主循环只看到两种结局：tool_calls（继续循环）或 content（返回）。调用前后各有一对插件钩子——pre_llm_call / post_llm_call 在统一位置触发，插件做审计、改写、统计都不用认识具体 provider。',
+    body: '公共生命周期接入可以观察不同 provider 的调用。文本、工具调用、中断与失败要分别处理，不能把所有响应强行缩成两种成功结局。',
     code: {
       file: 'agent/turn_context.py + turn_finalizer.py + model_tools.py',
       lines: '生命周期钩子',
-      snippet: `# pre_llm_call   —— 调用前：插件可审计/改写
-# post_llm_call  —— 调用后：统一的结果后处理
-# 两种结局：
-#   response.tool_calls → handle_function_call → 循环继续
-#   response.content    → return，会话收尾`,
+      snippet:
+        '# pre_llm_call   —— 调用前：插件可审计/改写\n# post_llm_call  —— 调用后：统一的结果后处理\n# 两种结局：\n#   response.tool_calls → handle_function_call → 循环继续\n#   response.content    → return，会话收尾',
       note: 'pre_llm_call 在 turn_context.py、post_llm_call 在 turn_finalizer.py 触发；pre/post_tool_call 在 model_tools.py 触发',
     },
-    points: [
-      '钩子与 provider 解耦：写一个插件，惠及所有后端',
-      'fallback_model 与 credential_pool 处理单点故障',
-      'reasoning 内容统一存进 assistant_msg["reasoning"]',
-    ],
+    points: ['按实际 API 模式与能力要求核对。', '请求成功不等于用户任务已经验收。'],
   },
 ];
 
@@ -222,10 +198,7 @@ export const DISCOVERY_POINTS = [
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const PROVIDER_INTRO_EN =
-  'Every inference backend (openrouter / anthropic / gmi / deepseek …) is a model-provider plugin: ' +
-  'a single ProviderProfile declares auth, endpoint, model catalog, and request-level quirks in one place, ' +
-  'so the transport layer reads a profile instead of juggling 20 boolean flags. ' +
-  'Walk the four stages of the unified interface first, then use the form to generate your own provider plugin skeleton.';
+  'Trace authentication, catalogs, requests, and results before exploring ProviderProfile. Generated scaffolding still needs real integration checks.';
 
 export const PROVIDER_STEPS_EN: ProviderStep[] = [
   {
@@ -236,13 +209,8 @@ export const PROVIDER_STEPS_EN: ProviderStep[] = [
     code: {
       file: 'hermes_cli/config_defaults.py',
       lines: 'OPTIONAL_ENV_VARS',
-      snippet: `"ACME_API_KEY": {
-    "description": "What it's for",
-    "prompt": "Display name",
-    "url": "https://...",
-    "password": True,
-    "category": "provider",  # provider / tool / skill / messaging / setting
-},`,
+      snippet:
+        '"ACME_API_KEY": {\n    "description": "What it\'s for",\n    "prompt": "Display name",\n    "url": "https://...",\n    "password": True,\n    "category": "provider",  # provider / tool / skill / messaging / setting\n},',
       note: 'Metadata template for the root AGENTS.md ".env is for secrets only" rule (Contribution Rubric)',
     },
     points: [
@@ -259,9 +227,8 @@ export const PROVIDER_STEPS_EN: ProviderStep[] = [
     code: {
       file: 'providers/base.py',
       lines: 'ProviderProfile · 模型目录',
-      snippet: `fallback_models: tuple = ()  # 实时拉取失败时 /model 选择器的兜底
-models_url: str = ""           # 缺省回退 {base_url}/models
-default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
+      snippet:
+        'fallback_models: tuple = ()  # 实时拉取失败时 /model 选择器的兜底\nmodels_url: str = ""           # 缺省回退 {base_url}/models\ndefault_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型',
       note: 'hostname is derived from base_url by default, used for URL→provider reverse lookup',
     },
     points: [
@@ -273,44 +240,34 @@ default_aux_model: str = ""    # 压缩/视觉等辅助任务的便宜模型`,
   {
     id: 'call',
     label: 'CALL',
-    title: 'Calling: unified into the chat.completions shape',
-    body: "The agent loop speaks exactly one shape: client.chat.completions.create(model, messages, tools). The provider adapter layer translates each vendor's API dialect into it — the declarative profile covers endpoints and default parameters, while hooks like prepare_messages / build_api_kwargs_extras handle request-level quirks, e.g. DeepSeek needs an explicit thinking switch in extra_body.",
+    title: 'Adapt the provider API',
+    body: 'Provider metadata and transport adapters connect authentication, messages, tools, streaming, and results. Chat Completions is one common shape; Responses and Anthropic Messages are separate supported paths.',
     code: {
-      file: 'agent/conversation_loop.py',
-      lines: 'Agent Loop',
-      snippet: `response = client.chat.completions.create(
-    model=model, messages=messages, tools=tool_schemas)
-if response.tool_calls:
-    ...  # 执行工具，继续循环
-else:
-    return response.content`,
-      note: 'api_mode defaults to "chat_completions"; the profile is declarative and does not own client construction',
+      file: 'agent/turn_api_call.py',
+      lines: 'Teaching pseudocode',
+      snippet: 'response = request_selected_transport(messages, tools)',
+      note: 'Illustrates a boundary, not one universal SDK call.',
     },
     points: [
-      'The agent loop is fully synchronous — streaming deltas are handled only in the display layer',
-      'fixed_temperature / default_max_tokens handle request-level defaults',
-      "DeepSeek's build_api_kwargs_extras: extra_body.thinking + reasoning_effort",
+      'Verify a tool call and its result, not only text.',
+      'Streaming is handled in the request layer as well as the UI.',
     ],
   },
   {
     id: 'events',
     label: 'EVENTS',
     title: 'Unified event flow: plugin hooks and two outcomes',
-    body: 'No matter which provider sits underneath, the agent loop sees only two outcomes: tool_calls (loop continues) or content (return). A pair of plugin hooks flanks each call — pre_llm_call / post_llm_call fire at unified points, so plugins can audit, rewrite, and meter without knowing any specific provider.',
+    body: 'Shared lifecycle integration observes model work across provider-specific routes. Text, tool calls, cancellation, and failures need distinct handling.',
     code: {
       file: 'agent/turn_context.py + turn_finalizer.py + model_tools.py',
       lines: '生命周期钩子',
-      snippet: `# pre_llm_call   —— 调用前：插件可审计/改写
-# post_llm_call  —— 调用后：统一的结果后处理
-# 两种结局：
-#   response.tool_calls → handle_function_call → 循环继续
-#   response.content    → return，会话收尾`,
+      snippet:
+        '# pre_llm_call   —— 调用前：插件可审计/改写\n# post_llm_call  —— 调用后：统一的结果后处理\n# 两种结局：\n#   response.tool_calls → handle_function_call → 循环继续\n#   response.content    → return，会话收尾',
       note: 'pre_llm_call fires in turn_context.py and post_llm_call in turn_finalizer.py; pre/post_tool_call fire in model_tools.py',
     },
     points: [
-      'Hooks are decoupled from providers: write one plugin, benefit every backend',
-      'fallback_model and the credential pool handle single points of failure',
-      'Reasoning content is uniformly stored in assistant_msg["reasoning"]',
+      'Check the actual API mode and capability requirements.',
+      'A successful response is not task-level acceptance.',
     ],
   },
 ];
@@ -370,7 +327,7 @@ export const PROVIDER_UI = {
     zh: '_discover_providers() 不在启动时跑——第一次调用 get_provider_profile() 或 list_providers() 时才扫描并 import（bundled 插件目录、legacy 单文件，外加优先级最低的 pip entry points），import 触发模块级的 register_provider()；$HERMES_HOME 的 user 插件不走这个扫描，而是查询时按 home 懒装载、同名覆盖 bundled。',
     en: '_discover_providers() does not run at startup — on the first call to get_provider_profile() or list_providers() it scans and imports (the bundled plugin dir, legacy single-file profiles, plus pip entry points at the lowest precedence), and the import triggers the module-level register_provider(); $HERMES_HOME user plugins are not part of this scan — they load lazily per home at lookup time, overriding bundled same-name profiles.',
   },
-  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
+  hookKicker: { zh: '要点回顾', en: 'Key idea' },
   hookTitle: { zh: '一句话记住 provider 插件', en: 'Provider plugins in one sentence' },
   hookBody: {
     zh: '一份声明式的 ProviderProfile + 一次 register_provider()——懒发现会找到你， 同名 user 覆盖 bundled，后写者胜。',

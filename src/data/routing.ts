@@ -4,7 +4,7 @@
 // AIAgent 参数（credential_pool / fallback_model）与 auxiliary 配置段说明。
 
 export const ROUTING_INTRO =
-  '第 27 章讲可靠性时提过「重试→熔断→降级」。这一章看降级是怎么真实发生的：' +
+  '第 24 章讲可靠性时提过「重试→熔断→降级」。这一章看降级是怎么真实发生的：' +
   '主模型挂了谁来接盘？侧边任务（压缩、摘要、vision）又派给谁？' +
   'Hermes 的答案分三层：同 provider 的凭据池、跨 provider 的 fallback_model、以及辅助任务的统一路由器。';
 
@@ -52,7 +52,7 @@ export const AUX_TASKS: AuxTask[] = [
   { id: 'approval', name: '审批分类', kind: 'text', desc: '快而便宜的小模型分类器' },
   { id: 'title', name: '标题生成', kind: 'text', desc: '给会话起标题' },
   { id: 'curator', name: '策展评审', kind: 'text', desc: '技能质量 LLM review pass' },
-  { id: 'vision', name: 'vision 分析', kind: 'vision', desc: '图片理解（第 31 章）' },
+  { id: 'vision', name: 'vision 分析', kind: 'vision', desc: '图片理解（第 26 章）' },
 ];
 
 // 文本任务的 auto 解析顺序（agent/auxiliary_client.py docstring）
@@ -63,7 +63,7 @@ export const TEXT_CHAIN = [
   { step: 4, backend: '自定义 endpoint', note: 'config.yaml model.base_url + OPENAI_API_KEY' },
   { step: 5, backend: '原生 Anthropic', note: '直连 key' },
   { step: 6, backend: '直连 key 系', note: 'z.ai/GLM、Kimi/Moonshot、MiniMax 等' },
-  { step: 7, backend: 'None', note: '全部不可用——该辅助功能静默降级' },
+  { step: 7, backend: 'None', note: '全部不可用时按该辅助功能的失败策略处理' },
 ];
 
 // 视觉任务的 auto 解析顺序（agent/auxiliary_client.py::_vision_auto_route）
@@ -93,7 +93,7 @@ auxiliary:
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const ROUTING_INTRO_EN =
-  'Chapter 27 mentioned “retry → circuit break → degrade” when covering reliability. This chapter ' +
+  'Chapter 24 mentioned “retry → circuit break → degrade” when covering reliability. This chapter ' +
   'shows how degradation actually happens: who takes over when the main model dies? And who picks ' +
   'up the side tasks (compression, summarization, vision)? Hermes’s answer has three layers: the ' +
   'credential pool within a provider, fallback_model across providers, and a unified router for ' +
@@ -142,7 +142,7 @@ export const AUX_TASKS_EN: AuxTask[] = [
     id: 'vision',
     name: 'Vision analysis',
     kind: 'vision',
-    desc: 'Image understanding (Chapter 31)',
+    desc: 'Image understanding (Chapter 26)',
   },
 ];
 

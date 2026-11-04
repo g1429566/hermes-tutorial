@@ -54,7 +54,7 @@ export default function HeroChapter({ onNavigate }: HeroChapterProps) {
             <li className="pt-4">
               <button
                 type="button"
-                onClick={() => onNavigate('map')}
+                onClick={() => onNavigate('install')}
                 className="rounded bg-acid px-6 py-3 font-mono text-sm font-bold text-ink transition-transform hover:-translate-y-0.5"
               >
                 {hero.cta}

@@ -14,9 +14,10 @@ import { CompareSelect, DetailPanel, SectionHeading } from './primitives';
 import { setLabResult } from '@/lib/progress-v2';
 import { useProgress } from '@/hooks/useProgress';
 import { pick, useLang } from '@/lib/i18n';
+import MemoryTimeline from './MemoryTimeline';
 
-// Chapter 08「记忆与跨会话召回」：四层记忆架构图。
-// 四层卡片切换：Working / Episodic / Semantic / Procedural，
+// Current context, built-in notes, history, skills, and optional providers.
+// Stable card IDs preserve previous lab selections.
 // 每层展开生命周期、存什么、何时写、何时读、Hermes 实现（真实文件路径）、注意事项。
 export default function MemoryLab() {
   const { lang } = useLang();
@@ -26,7 +27,7 @@ export default function MemoryLab() {
   const initial =
     saved && typeof saved === 'object' && 'layer' in saved && typeof saved.layer === 'string'
       ? saved.layer
-      : layers[0].id;
+      : 'builtin';
   const [layerId, setLayerId] = useState(initial);
 
   const layer = layers.find((l) => l.id === layerId) ?? layers[0];
@@ -41,6 +42,7 @@ export default function MemoryLab() {
       <p className="max-w-3xl leading-relaxed text-ink/75">
         {lang === 'en' ? MEMORY_INTRO_EN : MEMORY_INTRO}
       </p>
+      <MemoryTimeline />
 
       <div className="mt-8">
         <CompareSelect

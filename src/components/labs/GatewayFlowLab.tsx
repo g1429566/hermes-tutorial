@@ -98,9 +98,8 @@ const FLOW_STEPS: FlowStep[] = [
     code: {
       file: 'gateway/run.py',
       lines: 'class GatewayRunner',
-      snippet: `# 网关缓存每个 session 的 agent 实例；
-# 若内存中的 live transcript 比落盘副本更长，
-# 重启后优先保留 live 版本——避免同会话失忆`,
+      snippet:
+        '# 网关缓存每个 session 的 agent 实例；\n# 若内存中的 live transcript 比落盘副本更长，\n# 同进程恢复比较 live 与持久化状态；重启只依赖已保存内容',
     },
     points: [
       '同一个 run_agent.py 主循环，平台只是输入来源',
@@ -139,7 +138,7 @@ const FLOW_STEPS: FlowStep[] = [
 
 const STT_NOTE = {
   title: '语音消息转录（stt）',
-  body: '用户发来语音，音频附件自动进入 STT pipeline（run.py 的 _event_media_is_stt_input 判断），转录文本再交给 agent——agent 看到的始终是文字。config.yaml 的 stt: 段控制开关与 provider：local 用 faster-whisper 本地跑，免费、不需要任何 API key（base 模型约 150 MB，首次使用自动下载）；云端可接 groq / openai / mistral / xai / elevenlabs / deepinfra，provider 缺省时按 local → groq → openai → … 自动探测。',
+  body: '用户发来语音，音频附件自动进入 STT pipeline（run.py 的 _event_media_is_stt_input 判断），转录文本再交给 agent——这条路径向 agent 提供转录文本。config.yaml 的 stt: 段控制开关与 provider：local 用 faster-whisper 本地跑，免费、不需要任何 API key（base 模型约 150 MB，首次使用自动下载）；云端可接 groq / openai / mistral / xai / elevenlabs / deepinfra，provider 缺省时按 local → groq → openai → … 自动探测。',
   code: `# config.yaml
 stt:
   enabled: true        # false 则跳过自动转录
@@ -151,7 +150,7 @@ stt:
   codeLines: 'stt: 段',
   points: [
     '转录是入站管道的一环：语音 → 文字 → 正常消息流程',
-    '本地 provider 零成本零配置（pip install faster-whisper）',
+    '本地转写仍需依赖与模型资源，通过 Hermes setup / PM 配置',
     '回播语音是 TTS 的活，与 STT 独立开关（/voice 命令控制）',
   ],
 };
@@ -182,7 +181,7 @@ const BG_NOTIFY_MODES = [
 
 const BG_NOTIFY_BODY =
   'terminal(background=true, notify_on_complete=true) 启动的后台进程，由网关 watcher 盯着：进程一结束就触发一个新的 agent 回合汇报结果。' +
-  '吵不吵由 config.yaml 的 display.background_process_notifications（或环境变量 HERMES_BACKGROUND_NOTIFICATIONS）控制，五档可选。';
+  '吵不吵由 config.yaml 的 display.background_process_notifications控制，五档可选。';
 
 /* ── 英文版（结构与上方中文常量一一对应） ──────────────────────── */
 
@@ -266,9 +265,8 @@ const FLOW_STEPS_EN: FlowStep[] = [
     code: {
       file: 'gateway/run.py',
       lines: 'class GatewayRunner',
-      snippet: `# 网关缓存每个 session 的 agent 实例；
-# 若内存中的 live transcript 比落盘副本更长，
-# 重启后优先保留 live 版本——避免同会话失忆`,
+      snippet:
+        '# 网关缓存每个 session 的 agent 实例；\n# 若内存中的 live transcript 比落盘副本更长，\n# 同进程恢复比较 live 与持久化状态；重启只依赖已保存内容',
     },
     points: [
       'The same run_agent.py main loop; platforms are just input sources',
@@ -305,7 +303,7 @@ const FLOW_STEPS_EN: FlowStep[] = [
 
 const STT_NOTE_EN: typeof STT_NOTE = {
   title: 'Voice message transcription (stt)',
-  body: "When a user sends a voice message, the audio attachment automatically enters the STT pipeline (run.py's _event_media_is_stt_input decides), and the transcribed text is handed to the agent — the agent always sees text. The stt: section in config.yaml controls the switch and the provider: local runs faster-whisper locally, free, no API key needed (the base model is ~150 MB, downloaded automatically on first use); cloud providers groq / openai / mistral / xai / elevenlabs / deepinfra are also supported, and when provider is unset it auto-detects local → groq → openai → …",
+  body: "When a user sends a voice message, the audio attachment automatically enters the STT pipeline (run.py's _event_media_is_stt_input decides), and the transcribed text is handed to the agent — this route supplies a transcription to the agent. The stt: section in config.yaml controls the switch and the provider: local runs faster-whisper locally, free, no API key needed (the base model is ~150 MB, downloaded automatically on first use); cloud providers groq / openai / mistral / xai / elevenlabs / deepinfra are also supported, and when provider is unset it auto-detects local → groq → openai → …",
   code: `# config.yaml
 stt:
   enabled: true        # false 则跳过自动转录
@@ -317,7 +315,7 @@ stt:
   codeLines: 'stt: section',
   points: [
     'Transcription is one stage of the inbound pipeline: voice → text → the normal message flow',
-    'The local provider is zero-cost and zero-config (pip install faster-whisper)',
+    'Local transcription requires dependencies and model resources; configure it through Hermes setup / PM',
     "Voice playback is TTS's job, with an independent switch (the /voice command)",
   ],
 };

@@ -1,4 +1,4 @@
-// Chapter 08「记忆与跨会话召回」数据源：四层记忆架构。
+// 第 07 章交互数据：当前上下文、内置记忆、历史、技能与可选外部记忆。
 // 内容对齐 hermes-agent/AGENTS.md 的「Per-conversation prompt caching is sacred」
 // 「Memory-provider plugins」「Skills」「Curator」各节，以及 hermes_state.py
 // （SessionDB + FTS5）、agent/memory_provider.py（MemoryProvider ABC）、
@@ -6,7 +6,7 @@
 // 的真实实现。
 
 export interface MemoryLayer {
-  id: 'working' | 'episodic' | 'semantic' | 'procedural';
+  id: 'working' | 'builtin' | 'episodic' | 'semantic' | 'procedural';
   name: string; // 中文名
   latin: string; // 英文层名
   tagline: string;
@@ -19,344 +19,294 @@ export interface MemoryLayer {
 }
 
 export const MEMORY_INTRO =
-  '「记忆」在 Hermes 里不是一个组件，而是四层各就各位的架构：正在进行的对话是 Working 层，' +
-  '落盘的会话历史是 Episodic 层，跨会话的用户画像是 Semantic 层，而「怎么做事」的知识沉进技能系统成为 ' +
-  'Procedural 层。切换下面四层，看每一层的生命周期、读写时机，以及它在仓库里的真实落脚点。';
+  '先区分当前上下文、内置文件记忆、历史与技能，再看可选的外部扩展。选中卡片，核对保存位置与读取时机。';
 
 export const MEMORY_LAYERS: MemoryLayer[] = [
   {
     id: 'working',
-    name: '工作记忆',
-    latin: 'Working',
-    tagline: '当前会话的 messages 数组',
-    lifecycle:
-      '随会话而生，随进程而终。整个生命周期就是 run_conversation() 里那个 while 循环：' +
-      '会话结束时它不落盘——落盘是 Episodic 层的事。',
-    stores: [
-      'system prompt + 工具 schema（会话开始时组装一次）',
-      'user / assistant / tool 三种角色的消息（OpenAI 格式）',
-      '模型的 reasoning 内容（存在 assistant_msg["reasoning"]）',
-    ],
-    writes:
-      '每一轮：模型回复与工具结果以 append 方式追加——只追加，永不改写历史消息。' +
-      '唯一被允许的变更是上下文压缩（context compression）。',
-    reads:
-      '每一次模型调用：整个 messages 数组随请求发出，后续轮次复用缓存前缀（per-conversation prompt caching）。',
+    name: '当前上下文',
+    latin: 'Context',
+    tagline: '当前模型请求能看到的信息',
+    lifecycle: '属于当前会话；恢复时可以从持久历史重建。一次用户回合可包含多次模型迭代。',
+    stores: ['系统说明、对话消息与本次工具定义', '用户要求、模型工具调用和对应结果'],
+    writes: '普通回合追加消息；容量压力下可由压缩路径整理历史。',
+    reads: '随本次模型请求发送；稳定前缀在服务支持时可以复用缓存。',
     impl: [
       {
-        path: 'run_agent.py（AIAgent）+ agent/conversation_loop.py（run_conversation）',
-        note: '主循环与消息流',
+        path: 'agent/turn_context.py',
+        note: '准备回合上下文',
       },
-      { path: 'AGENTS.md §Core Invariants', note: '「Per-conversation prompt caching is sacred」' },
+      {
+        path: 'agent/conversation_loop.py',
+        note: '控制迭代',
+      },
     ],
     cautions: [
-      'prompt cache 是圣物：中途不换工具集、不重建 system prompt、不改写历史——缓存一破，成本翻倍',
-      '技能斜杠命令注入为 user 消息而非 system prompt，正是为了不破缓存',
-      '超长会话靠压缩续命，不靠截断丢消息',
+      '磁盘上存在文件，不代表本次模型已读到内容。',
+      '缓存减少重复处理，不取消上下文窗口限制。',
+    ],
+  },
+  {
+    id: 'builtin',
+    name: '内置持久记忆',
+    latin: 'Built-in',
+    tagline: 'MEMORY.md 与 USER.md',
+    lifecycle: '文件跨会话保存，当前会话使用启动时读出的固定快照。',
+    stores: [
+      'USER.md：跨任务的用户事实与长期偏好',
+      'MEMORY.md：环境事实与通用约定',
+      '默认容量为 1,375 / 2,200 字符，可配置',
+    ],
+    writes: 'memory 工具实际成功时写入；staged 结果仍需审批，不能当作已保存。',
+    reads: '新会话启动读取；当前会话的初始系统提示不因写入自动重建。',
+    impl: [
+      {
+        path: 'tools/memory_tool.py',
+        note: 'add / patch / remove 与写入门控',
+      },
+      {
+        path: 'tools/memory_tool_store.py',
+        note: '存储、容量和固定快照',
+      },
+    ],
+    cautions: [
+      'patch 只改 old_text 对应的唯一片段，其他内容保留。',
+      '任务操作步骤放入技能，不占每个会话自动加载的容量。',
     ],
   },
   {
     id: 'episodic',
-    name: '情景记忆',
-    latin: 'Episodic',
-    tagline: 'SessionDB：SQLite + FTS5 的会话档案',
-    lifecycle:
-      '跨会话持久。会话从开始到结束的每一条消息都写入本地 SQLite（profile 隔离的 ~/.hermes 下），' +
-      'FTS5 索引同步维护——这是「上周我让你改的那个 bug」能被找回来的基础。',
-    stores: [
-      'sessions 表：来源、模型、起止时间、token 统计、标题等元数据',
-      '全部消息原文 + FTS5 全文索引（messages_fts；另有 trigram 表，可用时由 CJK-bigram 索引替代以支持 CJK 子串搜索）',
-      '首轮交换后由辅助 LLM 异步生成的会话标题（agent/title_generator.py，不阻塞回复）',
-    ],
-    writes:
-      '会话进行中持续写入；标题在第一轮应答交付后由后台线程生成并 _persist_session_title() 落库。',
-    reads:
-      'agent 通过 session_search 工具召回，按参数推断四种形态：discovery（query：FTS5 检索 + ' +
-      '按谱系去重 + 上下文窗口）、read（session_id：整段会话或头/尾窗口）、scroll（锚点前后 ±window 翻页）、' +
-      'browse（无参数：按时间浏览）——全程零 LLM 调用，返回的都是库里的真实消息。',
-    impl: [
-      { path: 'hermes_state.py', note: 'SessionDB —— SQLite session store（FTS5 search）' },
-      { path: 'tools/session_search_tool.py', note: '跨会话召回工具，挂在 session_search toolset' },
-      { path: 'agent/title_generator.py', note: '首轮交换后自动生成 3-7 词会话标题' },
-    ],
-    cautions: [
-      'subagent 与第三方工具来源的会话默认隐藏；cron 会话在检索里降权（防止定时任务淹没交互会话）',
-      'FTS5 不可用时（极少数 SQLite 构建）降级为无全文搜索，并打印一次告警',
-      '召回结果直接给原文窗口，不做 LLM 摘要——摘要只出现在「标题」这一处',
-    ],
-  },
-  {
-    id: 'semantic',
-    name: '语义记忆 · 用户模型',
-    latin: 'Semantic',
-    tagline: 'MemoryProvider 插件（Honcho dialectic modeling 等）',
-    lifecycle:
-      '跨会话、由外部后端持有。in-tree 的 plugins/memory/ 现在只内置 byterover、' +
-      'retaindb 两个 provider；mem0、holographic、openviking 与更早迁出的 honcho、supermemory、' +
-      'hindsight 都已进入插件目录（plugin-catalog/*.yaml，老配置自动迁移安装，2026 年 9–10 月）。' +
-      'config.yaml 的 memory.provider 指定当前激活者，MemoryManager 统一编排。',
-    stores: [
-      '用户画像与长期事实：偏好、身份、项目背景（Honcho：dialectic Q&A、peer cards、conclusions）',
-      '由 provider 后端自行索引的语义内容（向量 / 图 / 关系库，实现各异）',
-    ],
-    writes:
-      '每轮对话结束后 sync_turn(user_content, assistant_content)——要求非阻塞，' +
-      '慢后端应入队后台处理；进程退出时 shutdown() 冲刷队列、关闭连接。',
-    reads:
-      '每次模型调用前 prefetch(query)：返回一段格式化文本注入上下文，没有相关内容就返回空串。' +
-      '实现要快——真实召回放后台线程，prefetch 只取缓存结果。',
+    name: '会话历史',
+    latin: 'History',
+    tagline: 'SQLite 与 session_search',
+    lifecycle: '会话消息按运行时路径持久化，用于恢复和历史检索。',
+    stores: ['既往用户消息、模型回复和工具记录', '会话标题、来源和时间等元数据'],
+    writes: '运行中及回合收尾的持久化路径，不仅在整个会话结束后保存。',
+    reads: 'session_search 按参数发现、读取、滚动或浏览已有消息。',
     impl: [
       {
-        path: 'agent/memory_provider.py',
-        note: 'MemoryProvider ABC：prefetch / sync_turn / shutdown（post_setup 是可选钩子，由 hermes memory setup 调用）',
-      },
-      { path: 'agent/memory_manager.py', note: 'MemoryManager 编排全部 provider 实例' },
-      {
-        path: 'plugins/memory/',
-        note: 'in-tree provider 目录：byterover / retaindb（其余 provider 见插件目录）',
+        path: 'hermes_state.py',
+        note: 'SessionDB 门面',
       },
       {
-        path: 'plugin-catalog/honcho.yaml',
-        note: 'Honcho（plastic-labs）：已迁出 in-tree，经插件目录安装；跨会话用户建模 + dialectic Q&A',
+        path: 'tools/session_search_tool.py',
+        note: '返回历史消息与元数据',
       },
     ],
     cautions: [
-      'in-tree memory provider 集合已关闭（2026 年 5 月政策）：新后端必须发独立插件仓库，实现同一个 ABC',
-      '技能脚手架消息会被剥壳后再存入——provider 拿到的是用户真实指令，不是整份 SKILL.md',
-      '只有激活的 provider 才会暴露她的 CLI 子命令（hermes <plugin>），disabled 的不污染 --help',
+      '搜索本身不再调用模型生成摘要。',
+      '历史里的地址、结论可能过时，必要时核对当前状态。',
     ],
   },
   {
     id: 'procedural',
-    name: '程序性记忆',
-    latin: 'Procedural',
-    tagline: '技能系统：会做事的知识',
-    lifecycle:
-      '文件级持久，由策展器后台维护。agent 用 skill_manage 把「这次摸索出来的做法」写成技能；' +
-      '默认 14 天不用标 stale、30 天归档（可恢复；阈值由 curator.stale_after_days / ' +
-      'curator.archive_after_days 调整）；pinned 技能永远豁免。',
+    name: '技能与经验',
+    latin: 'Skills',
+    tagline: '按需读取的操作知识',
+    lifecycle: '技能包跨会话保存；读取时进入当前上下文。',
     stores: [
-      'SKILL.md：frontmatter（元数据）+ 正文（操作步骤、陷阱、验收方法）',
-      'scripts/ 辅助脚本、references/ 参考资料、templates/ 模板',
-      '.usage.json 遥测：use_count / last_activity_at / state / pinned',
+      'SKILL.md：适用条件、步骤、判断与验收',
+      'scripts/、references/、templates/ 等支持文件',
     ],
-    writes:
-      'agent 通过 skill_manage 创建或修补技能时写入 ~/.hermes/skills/；' +
-      'agent 创建的技能会被标记 created_by: "agent"——这是策展器唯一有权管理的集合。',
-    reads:
-      '两种读法：用户敲 /skill-name 斜杠命令，把技能正文注入为 user 消息；' +
-      '或 agent 主动调 skills_list / skill_view 查看技能内容。',
+    writes: '前台明确学习或满足条件的后台复盘，通过 skill_manage 写入；也可能等待审批。',
+    reads: '用户调用技能或 agent 按需读取；文件变更不会自动替换此前读过的上下文。',
     impl: [
-      { path: 'skills/ + ~/.hermes/skills/', note: '内置技能目录与用户级技能目录' },
-      { path: 'tools/skills_tool.py', note: 'skills_list / skill_view 两工具' },
-      { path: 'tools/skill_manager_tool.py', note: 'skill_manage：创建 / 修补 / pin / 归档' },
       {
-        path: 'agent/curator.py',
-        note: '策展器：stale / archive 自动流转（LLM 合并评审默认关闭）',
+        path: 'tools/skills_tool.py',
+        note: '发现与读取技能',
+      },
+      {
+        path: 'tools/skill_manager_tool.py',
+        note: '技能写入与校验',
+      },
+      {
+        path: 'agent/background_review.py',
+        note: '经验复盘',
       },
     ],
     cautions: [
-      '程序性记忆 = 第 05/06 章的主题，这里只记一句：技能就是 Hermes 的「肌肉记忆」',
-      '技能改动默认下次会话生效——立刻生效要破 prompt cache，代价自负',
-      '策展器只归档不删除，归档在 ~/.hermes/skills/.archive/ 可恢复',
+      '新增技能数量不能证明任务质量提高。',
+      '策展维护与逐回合复盘是不同机制；pin 也不等于编辑锁。',
+    ],
+  },
+  {
+    id: 'semantic',
+    name: '外部记忆扩展',
+    latin: 'External',
+    tagline: '可选 MemoryProvider 插件',
+    lifecycle: '由选定 provider 管理存储，可能依赖外部服务。',
+    stores: ['按 provider 实现的相关事实、检索索引或用户模型'],
+    writes: 'MemoryManager 通过回合同步和生命周期回调与插件配合。',
+    reads: '准备用户回合时获取相关信息；插件可以异步预取。',
+    impl: [
+      {
+        path: 'agent/memory_provider.py',
+        note: '接口与生命周期',
+      },
+      {
+        path: 'agent/memory_manager.py',
+        note: '编排、同步和召回',
+      },
+    ],
+    cautions: [
+      '不安装外部 provider 也能用内置文件记忆。',
+      '存储位置、网络、费用与能力随插件而异；不把 Honcho 当成默认必经阶段。',
     ],
   },
 ];
 
-export const MEMORY_HOOK =
-  'Working 管当下，Episodic 管「发生过什么」，Semantic 管「你是谁」，Procedural 管「怎么做」。' +
-  '四层共用一条军规：写入绝不破坏正在进行的对话缓存。';
+export const MEMORY_HOOK = '写到磁盘、进入当前上下文、改善下次任务，是三个需要分别核对的事件。';
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const MEMORY_INTRO_EN =
-  '"Memory" in Hermes is not a single component but a four-layer architecture, each layer in its ' +
-  'place: the live conversation is the Working layer, the on-disk session history is the Episodic ' +
-  'layer, the cross-session user profile is the Semantic layer, and "how to do things" sinks into ' +
-  "the skill system as the Procedural layer. Switch between the four layers below to see each one's " +
-  'lifecycle, read/write timing, and where it actually lives in the repo.';
+  'Distinguish live context, built-in files, history, and skills before optional external memory. Compare where information lives and when it is read.';
 
 export const MEMORY_LAYERS_EN: MemoryLayer[] = [
   {
     id: 'working',
-    name: 'Working memory',
-    latin: 'Working',
-    tagline: 'The messages array of the current session',
+    name: 'Live context',
+    latin: 'Context',
+    tagline: 'What the current request can see',
     lifecycle:
-      'Born with the session, ends with the process. Its whole lifecycle is the while loop in ' +
-      'run_conversation(): when the session ends it is not persisted — persistence is the ' +
-      "Episodic layer's job.",
+      'Belongs to the conversation; persistent history can support recovery. One user turn can contain several model iterations.',
     stores: [
-      'system prompt + tool schemas (assembled once at session start)',
-      'user / assistant / tool role messages (OpenAI format)',
-      'the model\'s reasoning content (stored in assistant_msg["reasoning"])',
+      'System instructions, messages, and tool definitions',
+      'User requests, tool calls, and matched results',
     ],
     writes:
-      'Every turn: model replies and tool results are appended — append only, history messages ' +
-      'are never rewritten. The only permitted mutation is context compression.',
-    reads:
-      'Every model call: the entire messages array is sent with the request, and later turns ' +
-      'reuse the cached prefix (per-conversation prompt caching).',
+      'Normal turns append messages; compression can reshape history under capacity pressure.',
+    reads: 'Included in the model request; stable prefixes may reuse provider caching.',
     impl: [
       {
-        path: 'run_agent.py（AIAgent）+ agent/conversation_loop.py（run_conversation）',
-        note: 'main loop and message flow',
+        path: 'agent/turn_context.py',
+        note: 'Prepare turn context',
       },
-      { path: 'AGENTS.md §Core Invariants', note: '"Per-conversation prompt caching is sacred"' },
+      {
+        path: 'agent/conversation_loop.py',
+        note: 'Control iterations',
+      },
     ],
     cautions: [
-      'The prompt cache is sacred: never swap the toolset mid-session, never rebuild the system ' +
-        'prompt, never rewrite history — break the cache and the cost doubles',
-      'Skill slash commands are injected as user messages rather than into the system prompt, ' +
-        'precisely to keep the cache intact',
-      'Overlong sessions survive on compression, not on truncating messages',
+      'A file on disk is not automatically present in model context.',
+      'Caching does not remove context-window limits.',
+    ],
+  },
+  {
+    id: 'builtin',
+    name: 'Built-in memory',
+    latin: 'Built-in',
+    tagline: 'MEMORY.md and USER.md',
+    lifecycle: 'Files persist across sessions; each session starts with a fixed snapshot.',
+    stores: [
+      'USER.md: durable user facts and preferences',
+      'MEMORY.md: environment facts and standing conventions',
+      'Default limits: 1,375 / 2,200 characters, configurable',
+    ],
+    writes: 'A successful memory call persists a change. Staged writes still await approval.',
+    reads:
+      'Read at new-session startup; a write does not automatically rebuild the active snapshot.',
+    impl: [
+      {
+        path: 'tools/memory_tool.py',
+        note: 'add / patch / remove and write gates',
+      },
+      {
+        path: 'tools/memory_tool_store.py',
+        note: 'Persistence, capacity, and frozen snapshot',
+      },
+    ],
+    cautions: [
+      'patch replaces a unique old_text span and preserves the rest.',
+      'Task procedures belong in skills, not always-loaded notes.',
     ],
   },
   {
     id: 'episodic',
-    name: 'Episodic memory',
-    latin: 'Episodic',
-    tagline: 'SessionDB: a SQLite + FTS5 session archive',
-    lifecycle:
-      'Persistent across sessions. Every message from start to end of a session is written to ' +
-      'local SQLite (profile-isolated under ~/.hermes), with the FTS5 index maintained in sync — ' +
-      'this is what makes "the bug I asked you to fix last week" retrievable.',
-    stores: [
-      'sessions table: source, model, start/end time, token stats, title and other metadata',
-      'full message bodies + FTS5 full-text index (messages_fts; a trigram table, replaced when available by a CJK-bigram index that supports CJK substring search)',
-      'session titles generated asynchronously by a helper LLM after the first exchange (agent/title_generator.py, does not block the reply)',
-    ],
+    name: 'Conversation history',
+    latin: 'History',
+    tagline: 'SQLite and session_search',
+    lifecycle: 'Runtime persistence retains messages for recovery and retrieval.',
+    stores: ['Previous requests, answers, and tool records', 'Titles, source, and time metadata'],
     writes:
-      'Written continuously while the session runs; the title is generated by a background thread ' +
-      'after the first reply is delivered and persisted via _persist_session_title().',
-    reads:
-      'The agent recalls via the session_search tool, which infers one of four shapes from the ' +
-      'args: discovery (query; FTS5 retrieval + lineage dedup + context window), read (session_id; ' +
-      'whole session or head/tail), scroll (paging ±window around an anchor), browse (no args; by ' +
-      'time) — zero LLM calls end to end; everything returned is a real message from the store.',
+      'Persistence can occur during execution and turn finalization, not only at session end.',
+    reads: 'session_search discovers, reads, scrolls, or browses stored messages.',
     impl: [
-      { path: 'hermes_state.py', note: 'SessionDB — SQLite session store (FTS5 search)' },
+      {
+        path: 'hermes_state.py',
+        note: 'SessionDB facade',
+      },
       {
         path: 'tools/session_search_tool.py',
-        note: 'cross-session recall tool, mounted on the session_search toolset',
-      },
-      {
-        path: 'agent/title_generator.py',
-        note: 'auto-generates a 3-7 word session title after the first exchange',
+        note: 'Historical messages and metadata',
       },
     ],
     cautions: [
-      'Sessions from subagents and third-party tools are hidden by default; cron sessions are ' +
-        "down-ranked in search (so scheduled jobs don't drown interactive sessions)",
-      'When FTS5 is unavailable (rare SQLite builds) it degrades to no full-text search and prints ' +
-        'a one-time warning',
-      'Recall returns raw message windows, no LLM summary — summarization happens only in the "title"',
-    ],
-  },
-  {
-    id: 'semantic',
-    name: 'Semantic memory · user model',
-    latin: 'Semantic',
-    tagline: 'MemoryProvider plugins (Honcho dialectic modeling, etc.)',
-    lifecycle:
-      'Cross-session, held by an external backend. In-tree plugins/memory/ now ships only two ' +
-      'built-in providers: byterover and retaindb. mem0, holographic, and openviking joined the ' +
-      'earlier departures honcho, supermemory, and hindsight in the plugin catalog ' +
-      '(plugin-catalog/*.yaml, auto-installed for existing homes, Sep-Oct 2026). memory.provider ' +
-      'in config.yaml selects the active one; MemoryManager orchestrates them all.',
-    stores: [
-      'User profile and long-term facts: preferences, identity, project background (Honcho: dialectic Q&A, peer cards, conclusions)',
-      'Semantic content indexed by the provider backend itself (vectors / graphs / relational stores, implementation varies)',
-    ],
-    writes:
-      'sync_turn(user_content, assistant_content) after each conversation turn — must be ' +
-      'non-blocking; slow backends should enqueue for background processing. On process exit, ' +
-      'shutdown() flushes the queue and closes connections.',
-    reads:
-      'prefetch(query) before each model call: returns a formatted text block injected into the ' +
-      'context, or an empty string when nothing is relevant. Must be fast — real recall runs on a ' +
-      'background thread; prefetch only picks up cached results.',
-    impl: [
-      {
-        path: 'agent/memory_provider.py',
-        note: 'MemoryProvider ABC: prefetch / sync_turn / shutdown (post_setup is an optional hook invoked by hermes memory setup)',
-      },
-      {
-        path: 'agent/memory_manager.py',
-        note: 'MemoryManager orchestrates all provider instances',
-      },
-      {
-        path: 'plugins/memory/',
-        note: 'in-tree provider directory: byterover / retaindb (the rest live in the plugin catalog)',
-      },
-      {
-        path: 'plugin-catalog/honcho.yaml',
-        note: 'Honcho (plastic-labs): moved out of the in-tree set, installed via the plugin catalog; cross-session user modeling + dialectic Q&A',
-      },
-    ],
-    cautions: [
-      'The in-tree memory provider collection is closed (May 2026 policy): new backends must ship ' +
-        'as standalone plugin repos implementing the same ABC',
-      "Skill scaffold messages are stripped before storage — the provider receives the user's " +
-        'real instruction, not the whole SKILL.md',
-      "Only the active provider exposes its CLI subcommand (hermes <plugin>); disabled ones don't " +
-        'pollute --help',
+      'Search itself does not generate an LLM summary.',
+      'Old addresses and conclusions may need verification against current state.',
     ],
   },
   {
     id: 'procedural',
-    name: 'Procedural memory',
-    latin: 'Procedural',
-    tagline: 'The skill system: knowledge of how to do things',
-    lifecycle:
-      'File-level persistence, maintained in the background by the curator. The agent uses ' +
-      'skill_manage to write "the approach figured out this time" into a skill; by default 14 days ' +
-      'unused marks it stale, 30 days archives it (recoverable; thresholds tunable via ' +
-      'curator.stale_after_days / curator.archive_after_days); pinned skills are always exempt.',
+    name: 'Skills and lessons',
+    latin: 'Skills',
+    tagline: 'Procedural knowledge loaded on demand',
+    lifecycle: 'A durable skill package enters context when read.',
     stores: [
-      'SKILL.md: frontmatter (metadata) + body (steps, pitfalls, acceptance criteria)',
-      'scripts/ helper scripts, references/ reference material, templates/ templates',
-      '.usage.json telemetry: use_count / last_activity_at / state / pinned',
+      'SKILL.md: applicability, steps, decisions, acceptance',
+      'Supporting scripts, references, and templates',
     ],
     writes:
-      'Written to ~/.hermes/skills/ when the agent creates or patches a skill via skill_manage; ' +
-      'agent-created skills are marked created_by: "agent" — the only collection the curator is ' +
-      'allowed to manage.',
+      'Explicit learning or eligible background review writes through skill_manage, possibly pending approval.',
     reads:
-      'Two read paths: the user types a /skill-name slash command to inject the skill body as a ' +
-      'user message; or the agent actively calls skills_list / skill_view to inspect skill content.',
+      'Explicit invocation or relevant reading; a disk change does not replace earlier context.',
     impl: [
       {
-        path: 'skills/ + ~/.hermes/skills/',
-        note: 'built-in skill directory and user-level skill directory',
-      },
-      {
         path: 'tools/skills_tool.py',
-        note: 'the two read tools: skills_list / skill_view',
+        note: 'Discover and read',
       },
       {
         path: 'tools/skill_manager_tool.py',
-        note: 'skill_manage: create / patch / pin / archive',
+        note: 'Write and validate',
       },
       {
-        path: 'agent/curator.py',
-        note: 'the curator: automatic stale / archive transitions (LLM consolidation review off by default)',
+        path: 'agent/background_review.py',
+        note: 'Review lessons',
       },
     ],
     cautions: [
-      "Procedural memory is the subject of Chapters 05/06 — one line here: skills are Hermes's " +
-        '"muscle memory"',
-      'Skill changes take effect next session by default — making them effective immediately breaks ' +
-        'the prompt cache, at your own cost',
-      'The curator archives but never deletes; archives live in ~/.hermes/skills/.archive/ and are recoverable',
+      'More skills do not prove better results.',
+      'Library maintenance differs from post-turn review; pin is not an edit lock.',
+    ],
+  },
+  {
+    id: 'semantic',
+    name: 'External memory',
+    latin: 'External',
+    tagline: 'Optional MemoryProvider plugins',
+    lifecycle: 'The provider owns its storage and may depend on an external service.',
+    stores: ['Provider-specific facts, retrieval indexes, or user models'],
+    writes: 'MemoryManager coordinates per-turn synchronization and lifecycle hooks.',
+    reads: 'Recall is prepared for a user turn; implementations can prefetch asynchronously.',
+    impl: [
+      {
+        path: 'agent/memory_provider.py',
+        note: 'Provider interface',
+      },
+      {
+        path: 'agent/memory_manager.py',
+        note: 'Orchestration and recall',
+      },
+    ],
+    cautions: [
+      'Built-in files work without an external provider.',
+      'Storage, cost, and capabilities vary; Honcho is not an obligatory default stage.',
     ],
   },
 ];
 
 export const MEMORY_HOOK_EN =
-  'Working handles the present, Episodic handles "what happened", Semantic handles "who you are", ' +
-  'Procedural handles "how to do it". All four share one rule: writes must never break the cache ' +
-  'of the ongoing conversation.';
+  'Persisting information, loading it into context, and improving a later task are separate events to verify.';
 
 // 本章专属 UI 文案（组件硬编码部分）。
 export const MEMORY_UI = {
@@ -365,6 +315,6 @@ export const MEMORY_UI = {
   reads: { zh: '何时读', en: 'When read' },
   impl: { zh: 'Hermes 对应实现', en: 'Where it lives in Hermes' },
   cautions: { zh: '注意事项', en: 'Cautions' },
-  hookKicker: { zh: '记忆钩子', en: 'Memory hook' },
-  hookTitle: { zh: '一句话记住四层记忆', en: 'The four layers in one line' },
+  hookKicker: { zh: '要点回顾', en: 'Key idea' },
+  hookTitle: { zh: '区分保存、读取与效果', en: 'Separate saving, reading, and effect' },
 };

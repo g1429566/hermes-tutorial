@@ -1,99 +1,65 @@
-# Hermes Agent Tutorial
+# Learn Hermes Agent
 
 **English** | [中文](README.ch.md)
 
-[![CI](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml/badge.svg)](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml)
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
-![React](https://img.shields.io/badge/React-19-149eca)
-![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6)
-![Node](https://img.shields.io/badge/Node-%E2%89%A520.9-3c873a)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+A bilingual, 34-chapter interactive course about [Hermes Agent](https://github.com/NousResearch/hermes-agent). Read the explanation first, trace an example, then use exercises and simulations to check understanding.
 
-An **interactive tutorial site** built around [Hermes Agent](https://github.com/NousResearch/hermes-agent): a single-page immersive app, statically exported, backend-free, and fully offline-capable. Defaults to English; 中文 available via the in-site language switcher.
+**Read online: [Hermes Agent Tutorial](https://g1429566.github.io/hermes-tutorial/)**
 
-**Live site: https://g1429566.github.io/hermes-tutorial/**
+The source baseline is [`9302ba9e21`](https://github.com/NousResearch/hermes-agent/commit/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e), checked on November 4, 2026. Interfaces, defaults, and plugin inventories are versioned; see the [source record](content/SOURCES.md).
 
-## Screenshots
+## Course
 
-| Home (M0 · Build Intuition First)       | Interactive lab (M1 · The Agent Loop)             |
-| --------------------------------------- | ------------------------------------------------- |
-| ![Home](.github/screenshot-home-en.png) | ![Interactive lab](.github/screenshot-lab-en.png) |
+| Module | Topics                                                                         | Chapters |
+| ------ | ------------------------------------------------------------------------------ | -------- |
+| M0     | Installation, first task, capabilities, repository map                         | 4        |
+| M1     | Loop, tools, skills, memory, self-improvement, curation, compression, profiles | 8        |
+| M2     | Delegation, messaging, queues, schedules, boards, terminal backends            | 6        |
+| M3     | TUI, CLI, skill authoring, tools, model providers, plugins                     | 6        |
+| M4     | Failure handling, routing, media, evaluation, interoperability                 | 5        |
+| M5     | System design, collaboration choices, design documents, self-assessment        | 5        |
 
-## Overview
+The memory lesson traces `MEMORY.md` / `USER.md` writes, frozen snapshots, and fresh sessions, separating built-in memory from history, skills, and optional providers. Self-improvement follows a corrected CSV procedure through foreground learning, background review, approval, later use, and evaluation.
 
-Using Hermes itself as the teaching subject, the tutorial walks learners through 33 progressive chapters:
+Web simulations do not control a real Hermes instance. Local exercises require installation, model access, and relevant tools. Stable chapter IDs preserve existing links and saved progress while display numbers follow the prerequisite order.
 
-1. **Meet** Hermes and its capabilities (M0 Meet Hermes);
-2. Go **under the hood** of how it works (M1, 14 chapters mapped to real source code);
-3. **Design new agents and extend agent functionality** on those principles (M2 Build on the Principles);
-4. Reach **interview readiness for AI agent engineering roles** (M3 Interview Sprint + M4 Extensions & Frontiers).
-
-Each chapter = kicker + explanation + interactive lab + key takeaways + completion button. Chapter 19 embeds a Pyodide (CPython WebAssembly) sandbox so you can run Python right in the browser.
-
-## Course Structure
-
-| Module | Topic                   | Chapters |
-| ------ | ----------------------- | -------- |
-| M0     | Meet Hermes             | 4        |
-| M1     | Under the Hood          | 14       |
-| M2     | Build on the Principles | 5        |
-| M3     | Interview Sprint        | 4        |
-| M4     | Extensions & Frontiers  | 2        |
-| M5     | Agent Core Completion   | 4        |
-
-M5 covers context compression & checkpoints, model routing & credential pools, multimodal tools, and batch runs & evaluation.
-
-## Features
-
-- Bilingual UI and content (中文 / English), switchable in the nav sidebar and persisted locally
-- 33 interactive labs — one hands-on component per chapter
-- Progress stored in `localStorage`: versioned keys, export / import / v1 migration / reset
-- Hash routing — deploy the static export to any static file server
-- Pyodide runtime vendored from npm into `public/pyodide/` by `postinstall`, fully offline
-- Vitest unit tests + ESLint + Prettier + GitHub Actions CI
-
-## Quick Start
+## Run locally
 
 Requires Node.js ≥ 20.9.
 
-### Development (hot reload)
-
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-### Production (static export + local static server)
+Build and serve the static export:
 
 ```bash
-npm run build   # outputs out/
-npm run start   # http://localhost:3000
+npm run build
+npm run start
 ```
 
-### Docker one-liner (nginx)
+For the GitHub Pages subpath:
 
 ```bash
-docker compose up --build
+NEXT_BASE_PATH=/hermes-tutorial npm run build
 ```
 
-Then visit http://localhost:8080 .
+Alternatively, run `docker compose up --build` and open `http://localhost:8080`.
 
-## Tech Stack
+## Authoring and validation
 
-Next.js 16 (static export) + React 19 + Tailwind CSS 4 + TypeScript 6. Content is embedded as typed TypeScript data structures (`src/data/`), not MDX.
+[content/zh](content/zh) and [content/en](content/en) contain the source prose, read at build time. Chapter metadata lives in `src/data/chapters.ts`; labs live in `src/components/labs/` with their data in `src/data/`. Verify source behavior and revise prose before updating lab descriptions, metadata, and questions.
 
-## Project Structure
-
+```bash
+npm run lint
+npm run test
+npm run build
 ```
-app/               # Next.js App Router entry (layout / page / globals.css)
-src/
-  components/      # CourseNav / ChapterRenderer / Quiz / labs/ per-chapter interactive labs
-  data/            # 33-chapter metadata + per-chapter content data (typed TS, zh + en exports)
-  hooks/           # useChapter (hash routing) / useProgress (progress subscription)
-  lib/             # i18n, progress v1/v2, assessment, cron-explain, judge, skill-validate
-scripts/           # serve.mjs (static server) / setup-pyodide.mjs (vendor Pyodide)
-tests/             # Vitest unit tests
-```
+
+The Next.js static export needs no application backend. Prose, simulations, and vendored Pyodide examples can be served as static files. Real model/tool exercises and external references require their own environment or network. Pyodide uses teaching stubs; it is not a full Hermes runtime in a browser.
+
+Pushing `main` runs validation and a build before deploying GitHub Pages.
 
 ## License
 

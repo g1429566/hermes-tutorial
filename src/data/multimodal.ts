@@ -3,9 +3,7 @@
 // 与 plugins/ 目录真实结构；TTS/STT 以 tools/tts_tool.py、config 的 stt/tts 段为据。
 
 export const MULTIMODAL_INTRO =
-  'Hermes 的主循环只处理文本，但 agent 的感知力不止文本：看图、生图、生视频、说话、听写。' +
-  '这些能力遵循同一条架构原则——主循环不变，多模态以工具/provider 插件的形式长在边缘。' +
-  '这一章逐个拆开看它们怎么接进来的。';
+  '多模态消息可以包含图像等内容块。主模型原生处理与辅助工具分析是不同路径，按模型能力和配置选择。';
 
 export interface Modality {
   id: string;
@@ -25,13 +23,13 @@ export const MODALITIES: Modality[] = [
     tagline: '让 agent 看图',
     tool: 'vision_analyze',
     architecture:
-      '由 agent.image_input_mode 自动选路（默认 auto）：主模型报告支持视觉时走 native 快速路径——图片编码后作为多模态工具结果直接挂进对话，主模型自己看图；否则落到第 30 章的辅助 vision 路由：下载图片转 base64，交给解析链选出的 vision 后端分析，主循环只收到文本结论。临时文件自动清理，过大的图片会被自动重编码。',
+      '由 agent.image_input_mode 自动选路（默认 auto）：主模型报告支持视觉时走 native 快速路径——图片编码后作为多模态工具结果直接挂进对话，主模型自己看图；否则落到第 25 章的辅助 vision 路由：下载图片转 base64，交给解析链选出的 vision 后端分析，主循环只收到文本结论。临时文件自动清理，过大的图片会被自动重编码。',
     configKey: 'agent.image_input_mode / auxiliary.vision.*',
     sourceRef: 'tools/vision_tools.py',
     notes: [
       '输入是图片 URL + 自定义 prompt（另支持 region 局部裁剪放大）',
       '自定义/本地 endpoint 的模型可用 model.supports_vision 声明视觉能力，native 路径同样可用',
-      '图片过大时由压缩层做重编码自救（第 29 章）',
+      '图片过大时由压缩层做重编码自救（第 10 章）',
       'native 快速路径的隐性成本：图片嵌入是历史消息的一部分，之后每次 API 调用都重发——尺寸与重复预算集中在 tools/vision_tools_history_budget.py 按 (session, source) 计数管理（vision.embed_target_bytes / vision.max_calls_per_image）',
     ],
   },
@@ -77,11 +75,10 @@ export const MODALITIES: Modality[] = [
     name: '语音转写',
     tagline: '听懂用户发来的语音',
     tool: '（网关内部能力）',
-    architecture:
-      '你在 Telegram 发语音，网关先做语音转写（STT）变成文本，再进入统一的消息流——对 agent 主循环完全透明，它看到的永远是文本。',
+    architecture: '入站语音通常先转写再进入文本处理；转写可能出错，影响意图时需要核对。',
     configKey: 'stt.*',
-    sourceRef: 'gateway/（消息流转，见第 11 章）',
-    notes: ['转写发生在 adapter/session 层', '与 TTS 组合成完整的语音对话闭环'],
+    sourceRef: 'gateway/（消息流转，见第 14 章）',
+    notes: ['数字、姓名与意图可能转录错误，需要核对。', 'STT 与 TTS 分别配置。'],
   },
 ];
 
@@ -108,10 +105,7 @@ export const UNIFIED_SURFACE = {
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const MULTIMODAL_INTRO_EN =
-  'The Hermes agent loop only handles text, but the agent’s senses go beyond text: seeing images, ' +
-  'generating images, generating video, speaking, and transcribing. These capabilities all follow ' +
-  'the same architectural principle — the loop stays unchanged, and multimodality grows on the ' +
-  'edges as tools / provider plugins. This chapter takes each one apart to see how it’s wired in.';
+  'Multimodal messages can include image blocks. Native model input and auxiliary tool analysis are distinct routes selected by capability and configuration.';
 
 export const MODALITIES_EN: Modality[] = [
   {
@@ -120,13 +114,13 @@ export const MODALITIES_EN: Modality[] = [
     tagline: 'Let the agent look at images',
     tool: 'vision_analyze',
     architecture:
-      'Routing is automatic via agent.image_input_mode (default auto): when the main model reports vision support, the native fast path attaches the encoded image to the conversation as a multimodal tool result and the main model sees it directly; otherwise it falls back to Chapter 30’s auxiliary vision routing: download the image, convert to base64, hand it to the vision backend chosen by the resolution chain — the loop receives only a textual conclusion. Temp files are cleaned up automatically, and oversized images are re-encoded on rejection.',
+      'Routing is automatic via agent.image_input_mode (default auto): when the main model reports vision support, the native fast path attaches the encoded image to the conversation as a multimodal tool result and the main model sees it directly; otherwise it falls back to Chapter 25’s auxiliary vision routing: download the image, convert to base64, hand it to the vision backend chosen by the resolution chain — the auxiliary route returns a textual conclusion. Temp files are cleaned up automatically, and oversized images are re-encoded on rejection.',
     configKey: 'agent.image_input_mode / auxiliary.vision.*',
     sourceRef: 'tools/vision_tools.py',
     notes: [
       'Input is an image URL + a custom prompt (plus an optional region crop to zoom)',
       'Models on custom/local endpoints can declare vision capability via model.supports_vision — the native path works for them too',
-      'Oversized images are self-rescued by the compression layer via re-encoding (Chapter 29)',
+      'Oversized images are self-rescued by the compression layer via re-encoding (Chapter 10)',
       'The hidden cost of the native fast path: the image embed becomes part of history and is re-sent on every later API call — size and repeat budgets are managed centrally in tools/vision_tools_history_budget.py, counted per (session, source) (vision.embed_target_bytes / vision.max_calls_per_image)',
     ],
   },
@@ -179,12 +173,12 @@ export const MODALITIES_EN: Modality[] = [
     tagline: 'Understand the voice messages users send',
     tool: '(gateway-internal capability)',
     architecture:
-      'You send a voice message in Telegram; the gateway transcribes it (STT) into text first, then feeds it into the unified message stream — completely transparent to the agent loop, which always sees text.',
+      'Incoming speech is commonly transcribed before text handling. Transcription can be wrong and must be checked when it changes intent.',
     configKey: 'stt.*',
-    sourceRef: 'gateway/ (message flow, see Chapter 11)',
+    sourceRef: 'gateway/ (message flow, see Chapter 14)',
     notes: [
-      'Transcription happens at the adapter/session layer',
-      'Combines with TTS into a complete voice conversation loop',
+      'Verify transcription when numbers or intent matter.',
+      'STT and TTS have separate configuration.',
     ],
   },
 ];

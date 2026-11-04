@@ -30,7 +30,7 @@ export const BATCH_STEPS: BatchStep[] = [
     id: 'checkpoint',
     label: '断点',
     title: '故障容错与断点续跑',
-    body: '内置 checkpointing：中途进程崩溃、机器重启都不怕——加 --resume 从上次断点继续，已完成的批次不重跑。跑几千条数据集时的必备能力。',
+    body: '按执行器保存的进度恢复；外部副作用与完成记录之间崩溃，仍需幂等或状态核对。',
   },
   {
     id: 'trajectory',
@@ -48,7 +48,7 @@ export const BATCH_STEPS: BatchStep[] = [
 
 export const SWE_RUNNER = {
   title: 'mini_swe_runner：复用同套后端的 SWE 评测',
-  body: 'SWE-bench 风格的软件工程评测不需要另造执行层：mini_swe_runner 直接复用 Hermes 内建终端后端（local / docker / modal，--env 选择），在 Docker 里 --image python:3.11-slim 起干净环境跑任务，输出的轨迹与 batch_runner、trajectory_compressor 完全同构——同一份数据既能评测也能进训练管道。',
+  body: 'SWE-bench 风格的软件工程评测不需要另造执行层：mini_swe_runner 直接复用 Hermes 内建终端后端（local / docker / modal，--env 选择），在 Docker 里 --image python:3.11-slim 起干净环境跑任务，输出的轨迹与 batch_runner、trajectory_compressor 可供相应分析或转换路径使用——同一份数据既能评测也能进训练管道。',
   commands: [
     'python mini_swe_runner.py --task "Create a hello world script" --env local',
     'python mini_swe_runner.py --task "List files in /tmp" --env docker --image python:3.11-slim',
@@ -118,7 +118,7 @@ export const BATCH_STEPS_EN: BatchStep[] = [
     id: 'checkpoint',
     label: 'Checkpoint',
     title: 'Fault tolerance and resume',
-    body: 'Built-in checkpointing: a crashed process or a rebooted machine is no problem — pass --resume to continue from the last checkpoint, and finished batches are never re-run. A must-have when running datasets of thousands of items.',
+    body: 'Resume uses saved progress according to the runner. A crash between an external effect and its completion record still needs idempotence or verification.',
   },
   {
     id: 'trajectory',

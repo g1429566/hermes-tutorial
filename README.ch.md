@@ -2,98 +2,64 @@
 
 [English](README.md) | **中文**
 
-[![CI](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml/badge.svg)](https://github.com/g1429566/hermes-tutorial/actions/workflows/ci.yml)
-![Next.js](https://img.shields.io/badge/Next.js-16-black)
-![React](https://img.shields.io/badge/React-19-149eca)
-![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6)
-![Node](https://img.shields.io/badge/Node-%E2%89%A520.9-3c873a)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+围绕 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的 34 章双语交互教程。先用完整讲解建立概念，再通过例子、状态推演和交互练习核对理解。
 
-围绕 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 的**交互式学习教程网站**：单页沉浸式应用，纯静态导出、无后端、可完全离线运行。
+**在线阅读：[Hermes Agent 学习教程](https://g1429566.github.io/hermes-tutorial/)**
 
-**在线访问：https://g1429566.github.io/hermes-tutorial/**
+当前源码核对基线为 2026 年 11 月 4 日的 [`9302ba9e21`](https://github.com/NousResearch/hermes-agent/commit/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e)。默认值、接口和插件集合随版本变化，具体依据见 [源码记录](content/SOURCES.md)。
 
-## 效果预览
+## 学什么
 
-| 首页（M0 · 先建立直觉）              | 交互实验室（M1 · Agent 主循环）           |
-| ------------------------------------ | ----------------------------------------- |
-| ![首页](.github/screenshot-home.png) | ![交互实验室](.github/screenshot-lab.png) |
+| 模块 | 主题                                                      | 章数 |
+| ---- | --------------------------------------------------------- | ---- |
+| M0   | 安装、第一次任务、能力与仓库地图                          | 4    |
+| M1   | 主循环、工具、技能、记忆、自我进化、策展、压缩与 Profiles | 8    |
+| M2   | 委派、网关、消息队列、定时任务、看板与终端后端            | 6    |
+| M3   | TUI、CLI、技能编写、工具、模型 Provider 与插件            | 6    |
+| M4   | 故障处理、模型路由、多模态、评测与互操作                  | 5    |
+| M5   | 综合设计、协作选择、设计文档与自评                        | 5    |
 
-## 简介
+记忆讲义完整追踪 `MEMORY.md` / `USER.md` 的保存、固定快照与新会话读取，区分历史检索、技能与可选外部 provider。自我进化章节用 CSV 缺失值的纠正，解释前台学习、后台复盘、写入审批、下次复用与效果验证。
 
-本教程把 Hermes 当作教学对象，通过 33 章循序渐进的课程，让学习者：
+网页模拟不会操作真实 Hermes。本机练习需要实际安装、配置模型与相应工具。原有章节 ID 保留，旧链接及本地学习进度可继续使用；展示编号按新的先修顺序排列。
 
-1. **了解** Hermes 的各项功能（M0 认识 Hermes）；
-2. **深入** Hermes 的工作原理（M1 深入原理，14 章对照真实源码）；
-3. 基于原理**自己设计新 agent、扩展 agent 功能**（M2 基于原理构建）；
-4. 达到 **AI agent 工程方向的面试要求**（M3 面试冲刺 + M4 扩展与前沿）。
-
-每章 = kicker + 讲解 + 交互实验室 + 要点 + 完成按钮。第 19 章内嵌 Pyodide（CPython WebAssembly）沙箱，可在浏览器中直接运行 Python 代码。
-
-## 课程结构
-
-| 模块 | 主题           | 章数 |
-| ---- | -------------- | ---- |
-| M0   | 认识 Hermes    | 4    |
-| M1   | 深入原理       | 14   |
-| M2   | 基于原理构建   | 5    |
-| M3   | 面试冲刺       | 4    |
-| M4   | 扩展与前沿     | 2    |
-| M5   | Agent 核心补全 | 4    |
-
-M5 覆盖上下文压缩与 checkpoint、模型路由与凭据池、多模态工具、批处理与评测。
-
-## 特性
-
-- 中英双语界面与内容（默认英文），导航栏一键切换，选择持久化
-- 33 个交互实验室（lab），每章一个可动手操作的组件
-- 学习进度存 `localStorage`：版本化 key，支持导出 / 导入 / v1 迁移 / 重置
-- Hash 路由，纯静态部署到任意静态服务器即可使用
-- Pyodide 运行时由 `postinstall` 从 npm 包 vendor 到 `public/pyodide/`，全程离线
-- Vitest 单元测试 + ESLint + Prettier + GitHub Actions CI
-
-## 快速开始
+## 本地运行
 
 需要 Node.js ≥ 20.9。
 
-### 开发模式（热更新）
-
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-### 生产模式（静态导出 + 本地静态服务器）
+生产构建与静态预览：
 
 ```bash
-npm run build   # 产出 out/
-npm run start   # http://localhost:3000
+npm run build
+npm run start
 ```
 
-### Docker 一键部署（nginx）
+GitHub Pages 使用仓库子路径：
 
 ```bash
-docker compose up --build
+NEXT_BASE_PATH=/hermes-tutorial npm run build
 ```
 
-然后访问 http://localhost:8080 。
+也可以用 `docker compose up --build`，然后打开 `http://localhost:8080`。
 
-## 技术栈
+## 维护与检查
 
-Next.js 16（静态导出）+ React 19 + Tailwind CSS 4 + TypeScript 6。内容以 TypeScript 类型化数据结构嵌入（`src/data/`），非 MDX。
+中文和英文正文分别位于 [content/zh](content/zh) 和 [content/en](content/en)，构建时读入并静态发布。章节目录在 `src/data/chapters.ts`，交互实验在 `src/components/labs/`，对应数据在 `src/data/`。先核对源码、修订正文，再同步实验说明、简介和测验。
 
-## 项目结构
-
+```bash
+npm run lint
+npm run test
+npm run build
 ```
-app/               # Next.js App Router 入口（layout / page / globals.css）
-src/
-  components/      # CourseNav / ChapterRenderer / Quiz / labs/ 各章交互实验室
-  data/            # 33 章元数据 + 各章内容数据（类型化 TS）
-  hooks/           # useChapter（hash 路由）/ useProgress（进度订阅）
-  lib/             # i18n、progress v1/v2、assessment、cron-explain、judge、skill-validate
-scripts/           # serve.mjs（静态服务器）/ setup-pyodide.mjs（vendor Pyodide）
-tests/             # Vitest 单元测试
-```
+
+Next.js 静态导出不需要网站后端。正文、模拟和已准备的 Pyodide 教学环境可由静态文件提供；真实模型、工具及外部参考链接需要各自的运行环境或网络。Pyodide 示例使用教学替代模块，不代表完整 Hermes 已在浏览器运行。
+
+推送 `main` 后，GitHub Actions 先检查、构建，再部署 GitHub Pages。
 
 ## License
 

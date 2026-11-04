@@ -9,59 +9,90 @@ export interface TerminalLine {
 
 export const HERO = {
   kicker: 'M0 · 认识 HERMES',
-  title: '先建立直觉',
+  title: '从一次任务开始',
   subtitle:
-    'Hermes 是一个会积累的自进化 AI agent：从经验中创建技能、跨会话记住你、' +
-    '在你自己的机器或云端干活，手机上也能遥控。这一章不写代码——先看它跑起来是什么样子。',
+    'Hermes 把模型的判断与工具执行连接起来。先看一次读取账单、计算与核对的示意过程，再理解技能、记忆怎样帮助下一次任务。',
   points: [
-    '自进化技能：复杂任务后自动沉淀可复用技能',
-    '跨会话记忆：FTS5 搜索 + LLM 摘要 + 用户建模',
-    '20+ 平台网关：Telegram 一句话，云端 VM 上干活',
+    '执行闭环：提出工具调用，观察结果，再决定下一步',
+    '跨会话积累：少量稳定事实与可复用流程分别保存',
+    '多种入口：终端、桌面与聊天平台驱动同一核心',
   ],
-  cta: '开始第 01 章 · 读懂仓库地图 →',
+  cta: '从安装与第一次对话开始 →',
 };
 
 export const TERMINAL_LINES: TerminalLine[] = [
-  { kind: 'cmd', text: 'hermes' },
-  { kind: 'out', text: '✻ Hermes Agent — 输入消息开始对话，/help 查看命令' },
-  { kind: 'cmd', text: '帮我看看 gateway 怎么接入一个新平台' },
-  { kind: 'agent', text: '我先读一下网关的平台适配层结构……' },
-  { kind: 'tool', text: '✓ Read gateway/platforms/ADDING_A_PLATFORM.md' },
-  { kind: 'tool', text: '✓ Grep "register_platform" gateway/platforms/' },
+  {
+    kind: 'out',
+    text: '教学演示 · 以下数字是给定的样例，不是实时运行记录',
+  },
+  {
+    kind: 'cmd',
+    text: 'hermes',
+  },
+  {
+    kind: 'cmd',
+    text: '读取账单并求和，说明计算依据',
+  },
   {
     kind: 'agent',
-    text: '接入新平台只需三步：① 在 platforms/ 加 adapter ② 注册到 run.py ③ 配置凭据……',
+    text: '先读取实际文件，再核对其中的金额。',
   },
-  { kind: 'ok', text: '⚡ 已把「平台接入流程」保存为技能，下次直接复用' },
+  {
+    kind: 'tool',
+    text: 'read_file → 早餐 12、午餐 28、晚餐 25',
+  },
+  {
+    kind: 'tool',
+    text: '计算工具 → 12 + 28 + 25 = 65',
+  },
+  {
+    kind: 'ok',
+    text: '总额 65 元；三笔记录与计算结果一致。',
+  },
 ];
 
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const HERO_EN: typeof HERO = {
   kicker: 'M0 · MEET HERMES',
-  title: 'Build Intuition First',
+  title: 'Start with one task',
   subtitle:
-    'Hermes is a self-evolving AI agent that accumulates: it distills skills from experience, ' +
-    'remembers you across sessions, and works on your own machine or in the cloud — remote-controllable ' +
-    'from your phone. No code in this chapter — just watch it run.',
+    'Hermes connects model decisions to tool execution. Follow a bill-reading and calculation example, then learn how skills and memory support later work.',
   points: [
-    'Self-evolving skills: reusable skills distilled automatically after complex tasks',
-    'Cross-session memory: FTS5 search + LLM summaries + user modeling',
-    '20+ platform gateways: one Telegram message, work done on a cloud VM',
+    'Execution loop: propose an action, inspect its result, then continue',
+    'Reuse: store durable facts and repeatable procedures in appropriate places',
+    'Interfaces: terminal, desktop, and messaging entry points share a core',
   ],
-  cta: 'Start Chapter 01 · Read the Repo Map →',
+  cta: 'Begin with installation and a first conversation →',
 };
 
 export const TERMINAL_LINES_EN: TerminalLine[] = [
-  { kind: 'cmd', text: 'hermes' },
-  { kind: 'out', text: '✻ Hermes Agent — type a message to start, /help for commands' },
-  { kind: 'cmd', text: 'show me how to onboard a new platform to the gateway' },
-  { kind: 'agent', text: "Let me read the gateway's platform adapter layer first……" },
-  { kind: 'tool', text: '✓ Read gateway/platforms/ADDING_A_PLATFORM.md' },
-  { kind: 'tool', text: '✓ Grep "register_platform" gateway/platforms/' },
+  {
+    kind: 'out',
+    text: 'Teaching example · stated inputs, not a live execution trace',
+  },
+  {
+    kind: 'cmd',
+    text: 'hermes',
+  },
+  {
+    kind: 'cmd',
+    text: 'Read the bill, total it, and explain the basis',
+  },
   {
     kind: 'agent',
-    text: 'Three steps to onboard a platform: ① add an adapter in platforms/ ② register it in run.py ③ configure credentials……',
+    text: 'Read the actual file before checking the amounts.',
   },
-  { kind: 'ok', text: '⚡ Saved "platform onboarding flow" as a skill — reusable next time' },
+  {
+    kind: 'tool',
+    text: 'read_file → breakfast 12, lunch 28, dinner 25',
+  },
+  {
+    kind: 'tool',
+    text: 'calculation → 12 + 28 + 25 = 65',
+  },
+  {
+    kind: 'ok',
+    text: 'Total 65; the records and calculation agree.',
+  },
 ];

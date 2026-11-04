@@ -29,9 +29,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '明确不做什么：划清边界比堆功能更加分',
     ],
     hermesExample:
-      'Hermes 用 platform 构造参数（"cli" / "telegram" / …）区分接入形态，每个平台选自己的基础 toolset；' +
-      'max_iterations（默认不限）、iteration_budget、quiet_mode、save_trajectories 等约 85 个构造参数，' +
-      '本质就是把「需求」参数化——同一个 agent 内核，按场景装配出不同形态。',
+      '先声明用户、任务、运行入口、数据位置与验收，再选择模型与工具。不同入口和 profile 有不同配置，不能用一个构造参数默认值概括全部运行形态。',
     placeholder:
       '例：面向开发者的 CLI agent，单会话交互；预算敏感（要 prompt caching）；暂不考虑多租户 SaaS……',
   },
@@ -44,10 +42,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '会话结束后发生什么：持久化、记忆同步、后台系统',
     ],
     hermesExample:
-      'Hermes 的心脏是 run_conversation() 里一个同步 while 循环（实现在 agent/conversation_loop.py；' +
-      'agent/AGENTS.md 原话：entirely synchronous），' +
-      '流式与动画全在显示层；循环之外才有 gateway 多平台接入、SessionDB 落盘（SQLite + FTS5）、' +
-      'on_session_end 钩子触发的记忆同步，以及 curator / cron 这类后台系统。',
+      '主回合按依赖推进，支持模型流式与符合条件的工具并行。持久化、回合同步、后台复盘和空闲策展有不同的触发与生命周期。',
     placeholder: '画出你的架构分层：主循环 / 显示层 / 持久化 / 后台系统，标出同步与异步边界……',
   },
   {
@@ -59,11 +54,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '扩展点在哪：不动核心代码能不能加能力（插件、钩子）',
     ],
     hermesExample:
-      'Hermes 的 tools/registry.py 自动发现（import 即注册），但必须登记进 toolsets.py 的 TOOLSETS 才会暴露给 agent' +
-      '——registration ≠ exposure，schema footprint 是刻意控制的成本。provider 以插件形式接入' +
-      '（plugins/model-providers/）、统一成 chat.completions 风格的一种请求形状' +
-      '（api_mode 另有 codex_responses / anthropic_messages 等变体）；记忆后端实现 MemoryProvider ABC' +
-      '（sync_turn / prefetch / shutdown）；通用插件只能挂生命周期钩子（pre_tool_call 等），不许改核心文件。',
+      '工具注册不等于暴露；schema、handler、toolset 与会话条件共同决定工具面。模型有不同 API 路径，外部记忆实现 MemoryProvider 接口。插件通过公共扩展面接入。',
     placeholder: '列出你的核心组件：工具注册表、provider 适配层、记忆接口……各自的替换成本是什么？',
   },
   {
@@ -75,9 +66,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '多实例 / 多租户怎么隔离',
     ],
     hermesExample:
-      'Hermes 的消息流只 append 不改写——prompt cache 铁律禁止中途改历史 / 换 toolset / 重建 system prompt，' +
-      '唯一例外是 context compression。会话落 SessionDB（SQLite + FTS5 可全文搜索）；技能遥测是 ' +
-      '~/.hermes/skills/.usage.json sidecar；所有状态锚在 get_hermes_home()，profile 之间完全隔离。',
+      '分别列出当前消息、内置记忆快照、会话数据库、技能包和活动记录。按所属 profile 绑定读写，明确显式跨范围访问，不用一个全局常量代表所有会话。',
     placeholder:
       '写明你的状态清单：消息流（append-only？）、会话库、配置、遥测，以及各自的隔离边界……',
   },
@@ -90,11 +79,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '隔离级别：子任务故障能不能拖垮主流程',
     ],
     hermesExample:
-      'Hermes 的防线层层可数：max_iterations 上限与子 agent 共享（默认不限，防失控靠 iteration_budget）；' +
-      '预算耗尽仍有 one-turn grace call 体面收尾；cron 会话有 600 秒不活动看门狗（空闲计时，非墙钟），' +
-      '失控任务拖不死调度器；kanban 同一任务连续失败（默认 2 次）自动 block 防空转；' +
-      '委派是进程级隔离——子 agent 有独立上下文与 terminal session，卡死检测靠心跳监视器（child_timeout_seconds 可选兜底）；' +
-      'fallback_model 与 credential_pool 处理 provider 单点故障。',
+      '按故障选择重试、修正、限时、预算与副作用核对。内置子 agent 可在线程池中运行：独立上下文不是进程或文件系统隔离。',
     placeholder:
       '逐条列出你的防线：迭代上限 / 超时 / 重试熔断 / 隔离 / 降级，每条给出具体数值或机制……',
   },
@@ -107,10 +92,7 @@ export const DESIGN_DOC_SECTIONS: DesignDocSection[] = [
       '迭代机制：数据怎么回流成改进',
     ],
     hermesExample:
-      'Hermes 的 curator 是遥测驱动生命周期的样板：.usage.json 记录每个技能的 use_count / view_count / ' +
-      'last_activity_at，stale_after_days 与 archive_after_days 到期自动转 stale / archive——' +
-      '不删除，只归档，pinned 豁免。会话经 FTS5 全文索引支撑 session_search 复盘；' +
-      'save_trajectories 保存完整轨迹供离线分析。',
+      '固定模型、输入和配置，核对结果、异常处理、时间与成本。技能活动不是准确率；用未参与修订的变式验证学习效果。',
     placeholder: '定义你的指标与回流路径：用什么数据判断好坏，数据怎么驱动下一轮改进……',
   },
 ];
@@ -135,11 +117,7 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'Be explicit about non-goals: drawing boundaries scores higher than piling on features',
     ],
     hermesExample:
-      'Hermes uses the platform constructor parameter ("cli" / "telegram" / …) to distinguish integration ' +
-      'forms, and each platform picks its own base toolset; some 85 constructor parameters — ' +
-      'max_iterations (unlimited by default), iteration_budget, quiet_mode, save_trajectories — are ' +
-      'essentially requirements turned into parameters: one agent kernel, assembled into different ' +
-      'forms per scenario.',
+      'State users, tasks, entry points, data, and acceptance before selecting models and tools. Configuration depends on runtime and profile.',
     placeholder:
       'e.g. a CLI agent for developers, single-session interaction; budget-sensitive (needs prompt caching); no multi-tenant SaaS for now……',
   },
@@ -152,11 +130,7 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'What happens after the session ends: persistence, memory sync, background systems',
     ],
     hermesExample:
-      "Hermes' heart is a synchronous while loop in run_conversation() (implemented in " +
-      "agent/conversation_loop.py; agent/AGENTS.md's own words: entirely synchronous), " +
-      'with streaming and animation all in the display layer; outside the loop sit the ' +
-      "gateway's multi-platform ingress, SessionDB persistence (SQLite + FTS5), memory sync triggered by " +
-      'the on_session_end hook, and background systems like curator / cron.',
+      'Ordered turns coexist with streaming and eligible tool concurrency. Persistence, synchronization, review, and idle maintenance have different lifecycles.',
     placeholder:
       'Sketch your architecture layers: main loop / display layer / persistence / background systems — mark the sync and async boundaries……',
   },
@@ -169,13 +143,7 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'Where the extension points are: can you add capabilities without touching core code (plugins, hooks)',
     ],
     hermesExample:
-      "Hermes' tools/registry.py auto-discovers (import registers), but a tool is only exposed to the agent " +
-      "once listed in toolsets.py's TOOLSETS — registration ≠ exposure, and schema footprint is a " +
-      'deliberately controlled cost. Providers plug in as plugins (plugins/model-providers/) behind a ' +
-      'single chat.completions-style request shape (api_mode adds variants like codex_responses / ' +
-      'anthropic_messages); memory backends implement the MemoryProvider ABC (sync_turn / prefetch / ' +
-      'shutdown); generic plugins may only attach lifecycle hooks (pre_tool_call etc.) and may not ' +
-      'modify core files.',
+      'Registration differs from exposure. Schema, handler, toolsets, and session conditions interact. Models use several API paths; memory providers and plugins have defined interfaces.',
     placeholder:
       'List your core components: tool registry, provider adapter layer, memory interface… What is the replacement cost of each?',
   },
@@ -188,11 +156,7 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'How multi-instance / multi-tenant isolation works',
     ],
     hermesExample:
-      "Hermes' message stream only appends, never rewrites — the prompt-cache iron rule forbids mid-session " +
-      'history edits / toolset swaps / system-prompt rebuilds, with context compression as the sole ' +
-      'exception. Sessions land in SessionDB (SQLite + FTS5, full-text searchable); skill telemetry is the ' +
-      '~/.hermes/skills/.usage.json sidecar; all state anchors at get_hermes_home(), with profiles fully ' +
-      'isolated from each other.',
+      'List live messages, snapshots, history, skill packages, and activity records separately. Bind access to the owner profile and distinguish explicit cross-scope reads.',
     placeholder:
       'Write out your state inventory: message stream (append-only?), session store, config, telemetry — and the isolation boundary of each……',
   },
@@ -205,14 +169,7 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'Isolation levels: can a subtask failure drag down the main flow',
     ],
     hermesExample:
-      "Hermes' lines of defense are enumerable: the max_iterations cap is shared with subagents (unlimited " +
-      'by default; runaway protection rides on iteration_budget); a one-turn grace call wraps up ' +
-      'gracefully even after the budget runs out; cron sessions get a 600-second inactivity watchdog ' +
-      "(idle time, not wall-clock) so runaway jobs can't kill the scheduler; kanban auto-blocks a task " +
-      'after consecutive failures (default 2) against spinning; delegation is process-level isolation — ' +
-      'subagents get their own context and terminal session, with stuck-child detection via a heartbeat ' +
-      'monitor (child_timeout_seconds as an opt-in backstop); fallback_model and credential_pool handle ' +
-      'provider single points of failure.',
+      'Match failure handling to the fault. Built-in children can run in a thread pool: separate context does not imply separate process or filesystem.',
     placeholder:
       'List your defenses one by one: iteration cap / timeout / retry & circuit-breaking / isolation / degradation — give a concrete number or mechanism for each……',
   },
@@ -225,11 +182,7 @@ export const DESIGN_DOC_SECTIONS_EN: DesignDocSection[] = [
       'Iteration mechanism: how data flows back into improvements',
     ],
     hermesExample:
-      "Hermes' curator is the model of a telemetry-driven lifecycle: .usage.json records each skill's " +
-      'use_count / view_count / last_activity_at, and stale_after_days / archive_after_days automatically ' +
-      'transition skills to stale / archive on expiry — archived, never deleted, with pinned exempt. ' +
-      'Sessions are full-text indexed via FTS5 to power session_search retrospectives; save_trajectories ' +
-      'keeps full trajectories for offline analysis.',
+      'Hold model, inputs, and configuration fixed. Check results, failures, latency, and cost. Activity is not accuracy; evaluate revisions on unseen variations.',
     placeholder:
       'Define your metrics and feedback loop: what data tells good from bad, and how data drives the next round of improvement……',
   },

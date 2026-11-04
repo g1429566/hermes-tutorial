@@ -145,7 +145,7 @@ export const SERVERLESS_STEPS: ServerlessStep[] = [
     id: 'idle',
     label: '空闲',
     title: '沙箱空闲',
-    body: '云端沙箱没有任务在跑。计算资源空转就是白花钱——serverless 后端的核心动机就是把这段时间的成本降到接近零。',
+    body: '闲置计算可以减少或停止，但仍可能有存储、网络与服务费用；需结合实际计费和唤醒延迟比较。',
   },
   {
     id: 'sleep',
@@ -169,7 +169,7 @@ export const SERVERLESS_STEPS: ServerlessStep[] = [
     id: 'resume',
     label: '恢复执行',
     title: '环境一致，继续执行',
-    body: '文件系统与休眠前完全一致：之前装的依赖、写的文件都还在。命令继续跑，会话无缝衔接。',
+    body: '根据后端与持久化设置恢复支持范围内的文件状态；内存进程、网络连接和外部资源需要分别处理。',
   },
 ];
 
@@ -372,7 +372,7 @@ export const SERVERLESS_STEPS_EN: ServerlessStep[] = [
     id: 'idle',
     label: 'Idle',
     title: 'Sandbox idle',
-    body: 'The cloud sandbox has no task running. Idle compute is money burned — the core motivation of serverless backends is driving the cost of this period to near zero.',
+    body: 'Idle compute may be reduced or suspended. Storage, network, and service fees can remain; compare the actual service billing and latency.',
   },
   {
     id: 'sleep',
@@ -396,7 +396,7 @@ export const SERVERLESS_STEPS_EN: ServerlessStep[] = [
     id: 'resume',
     label: 'Resume',
     title: 'Same environment, keep executing',
-    body: 'The filesystem is exactly as it was before sleep: previously installed dependencies and written files are all still there. The command runs on, and the session continues seamlessly.',
+    body: 'Restore supported filesystem state according to the backend and persistence settings. Memory processes, sockets, and external resources may need separate recovery.',
   },
 ];
 
