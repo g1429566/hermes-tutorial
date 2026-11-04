@@ -1,4 +1,4 @@
-// Chapter 12「Cron 定时调度」数据源：四种调度格式、tick 流程、加固不变量。
+// Chapter 15「Cron 定时调度」数据源：四种调度格式、tick 流程、加固不变量。
 // 内容对齐 hermes-agent/cron/AGENTS.md 的 Cron 一节与 cron/jobs.py、cron/scheduler*.py。
 
 export const CRON_INTRO =
@@ -69,14 +69,14 @@ export const TICK_STEPS: TickStep[] = [
     id: 'fire',
     label: '触发',
     title: '在独立会话里跑 agent',
-    body: '任务在自己的 cron session 中执行，MEMORY.md/USER.md 像普通会话一样加载（scheduler 固定 skip_memory=False，唯一的关闭开关是配置 agent.disabled_toolsets: [memory]）。per-job 字段可以覆盖 model/provider、加载指定 skills、先跑 script 把 stdout 注入 prompt、用 context_from 把其它任务的输出链进来、指定 workdir。',
+    body: '需要模型的任务在独立 cron 会话中运行。Hermes 按该 profile 的 memory.memory_enabled 和 memory.user_profile_enabled 配置分别读取 MEMORY.md 与 USER.md。任务还可以指定模型、技能和工作目录。',
     sourceRef: 'cron/jobs.py',
   },
   {
     id: 'interrupt',
     label: '兜底',
     title: '600 秒不活动看门狗',
-    body: 'cron 会话由不活动看门狗看管：默认空闲 600 秒没有进展就硬中断（环境变量 HERMES_CRON_TIMEOUT 可改秒数，0 = 不限）。它掐的是空闲时长而不是墙钟——真正在干活的长任务不会被误杀；任务挂载的 script 另有限时（默认 3600 秒）。',
+    body: '调度器记录最近一次可观察的活动。默认连续 600 秒未观察到活动时触发超时处理。每次新活动会重新开始计时，持续发起工具调用的循环可能一直达不到空闲阈值。',
     sourceRef: 'cron/scheduler.py',
   },
   {
@@ -91,7 +91,7 @@ export const TICK_STEPS: TickStep[] = [
 export const CRON_HARDENING: { title: string; desc: string }[] = [
   {
     title: '600 秒不活动看门狗',
-    desc: '空闲超时才中断：runaway 循环无法独占调度器，活跃长任务不受误伤。',
+    desc: '空闲计时器用来发现停滞。持续活动的循环还要依靠迭代预算等限制来结束。',
   },
   { title: 'catchup 窗口', desc: '周期的一半，夹在 120s–2h：睡过的周期任务会补跑。' },
   { title: 'grace 窗口', desc: '一次性任务错过触发时间后 120 秒内仍补跑。' },
@@ -101,7 +101,7 @@ export const CRON_HARDENING: { title: string; desc: string }[] = [
   },
   {
     title: '记忆默认跟随普通会话',
-    desc: 'cron 会话固定 skip_memory=False；要关掉记忆只能显式 agent.disabled_toolsets: [memory]。',
+    desc: '在 profile 配置里将 memory.memory_enabled 与 memory.user_profile_enabled 都设为 false，会关闭两份内置记忆的加载。这两个开关也影响该 profile 的普通会话。agent.disabled_toolsets 管理可调用的工具集合。',
   },
   {
     title: '独立 cron session',
@@ -165,14 +165,14 @@ export const TICK_STEPS_EN: TickStep[] = [
     id: 'fire',
     label: 'Fire',
     title: 'Run the agent in its own session',
-    body: "The job executes in its own cron session, loading MEMORY.md/USER.md like a normal session (the scheduler pins skip_memory=False; the only off-switch is setting agent.disabled_toolsets: [memory]). Per-job fields can override model/provider, load specific skills, run a script first and inject its stdout into the prompt, chain in other jobs' output via context_from, and set a workdir.",
+    body: 'Jobs that use a model run in a separate cron session. The profile settings memory.memory_enabled and memory.user_profile_enabled control loading of MEMORY.md and USER.md respectively. The job can also select a model, skills, and working directory.',
     sourceRef: 'cron/jobs.py',
   },
   {
     id: 'interrupt',
     label: 'Backstop',
     title: '600-second inactivity watchdog',
-    body: 'Cron sessions run under an inactivity watchdog: by default, 600 seconds without progress triggers a hard interrupt (override the seconds with the HERMES_CRON_TIMEOUT env var; 0 = unlimited). It measures idle time, not wall-clock — a long-but-active job is never cut off; an attached script is bounded separately (default 3600s).',
+    body: 'The scheduler tracks the time since the last observed activity. By default, 600 seconds without activity triggers timeout handling. Each new activity resets the timer, so a loop that keeps calling tools can stay below the idle threshold.',
     sourceRef: 'cron/scheduler.py',
   },
   {
@@ -187,7 +187,7 @@ export const TICK_STEPS_EN: TickStep[] = [
 export const CRON_HARDENING_EN: { title: string; desc: string }[] = [
   {
     title: '600-second inactivity watchdog',
-    desc: 'Only idle time is interrupted: a runaway loop cannot monopolize the scheduler, while an active long job is never cut.',
+    desc: 'The idle timer detects stalled work. A loop that stays active needs a separate stopping condition such as an iteration budget.',
   },
   {
     title: 'catchup window',
@@ -203,7 +203,7 @@ export const CRON_HARDENING_EN: { title: string; desc: string }[] = [
   },
   {
     title: 'Memory follows the normal session by default',
-    desc: 'Cron sessions pin skip_memory=False; the only way to turn memory off is agent.disabled_toolsets: [memory].',
+    desc: 'Setting both memory.memory_enabled and memory.user_profile_enabled to false disables loading of both built-in stores across the profile, including ordinary sessions. The agent.disabled_toolsets option controls tool availability.',
   },
   {
     title: 'Separate cron session',

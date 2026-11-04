@@ -16,13 +16,14 @@ import {
   KANBAN_ISOLATION_EN,
   KANBAN_LAB_UI,
   KANBAN_VERBS,
+  moveKanbanCard,
   type KanbanCard,
   type KanbanColumn,
 } from '@/data/kanban';
 import { SectionHeading } from './primitives';
 import { pick, useLang } from '@/lib/i18n';
 
-// Chapter 13「Kanban 工作队列」：Kanban 面板模拟 + dispatcher 循环 + 隔离模型。
+// Chapter 16「Kanban 工作队列」：Kanban 面板模拟 + dispatcher 循环 + 隔离模型。
 // 卡片位置是会话内模拟状态，不持久化（刷新即重置演示）。
 export default function KanbanLab() {
   const { lang } = useLang();
@@ -36,7 +37,7 @@ export default function KanbanLab() {
   const [cards, setCards] = useState<KanbanCard[]>(INITIAL_CARDS);
 
   function move(id: string, to: KanbanColumn) {
-    setCards((prev) => prev.map((c) => (c.id === id ? { ...c, column: to } : c)));
+    setCards((prev) => moveKanbanCard(prev, id, to));
   }
 
   return (
@@ -47,7 +48,7 @@ export default function KanbanLab() {
         kicker={pick(lang, KANBAN_LAB_UI.boardKicker)}
         title={pick(lang, KANBAN_LAB_UI.boardTitle)}
       />
-      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {columns.map((col) => {
           const colCards = cards.filter((c) => c.column === col.id);
           return (
@@ -66,6 +67,11 @@ export default function KanbanLab() {
                     <p className="mt-1 text-sm leading-snug">
                       {initialCards.find((c) => c.id === card.id)?.title ?? card.title}
                     </p>
+                    {card.parentId && (
+                      <p className="mt-1 text-xs text-muted">
+                        {pick(lang, KANBAN_LAB_UI.prerequisite)} {card.parentId}
+                      </p>
+                    )}
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
                       {cardActions
                         .filter((a) => a.from.includes(card.column))

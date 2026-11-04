@@ -1,9 +1,3 @@
-// Chapter 19「加一个新工具」数据源：工具注册实验。
-// 代码模板逐行对齐 hermes-agent/tools/AGENTS.md「Adding a core tool (2 files)」：
-// check_requirements + handler 返回 json.dumps + registry.register 完整签名；
-// 「第二步把工具名加进 toolsets.py」也是 tools/AGENTS.md 的明文要求（Required ——
-// discovery registers the schema, but a tool is only exposed if a toolset names it）。
-
 export interface ToolBuilderForm {
   name: string; // snake_case
   toolset: string;
@@ -15,10 +9,7 @@ export interface ToolBuilderForm {
 }
 
 export const TOOL_BUILDER_INTRO =
-  'Hermes 的工具就是一个 Python 函数加一次 registry.register()：schema 给模型看，handler 给运行时调，' +
-  'check_fn 决定这个环境装不装得上它。但新手最常栽的跟头不在代码里——自动发现只是 import 了你的文件，' +
-  '工具名不进 toolsets.py，agent 永远看不见它。下面左边定义工具，右边实时生成 tools/your_tool.py，' +
-  '最后用「模拟调用」走一遍 handle_function_call 的 JSON 包装链路。';
+  '下面做一个回显工具，把收到的参数原样放进结果。先填写工具名与参数说明，观察注册代码中的 schema 如何描述输入，再用一组样例比较模拟结果与 Python 处理器的输出。';
 
 export const PARAM_TYPES = ['string', 'number', 'integer', 'boolean', 'array', 'object'];
 
@@ -29,21 +20,11 @@ export const DEFAULT_TOOL_FORM: ToolBuilderForm = {
   paramName: 'param',
   paramType: 'string',
   paramDescription: '要处理的输入文本。',
-  requiresEnv: 'EXAMPLE_API_KEY',
+  requiresEnv: '',
 };
 
 // 工具名惯例：snake_case（与仓库 tools/*.py 里所有 registry.register(name=...) 一致）
 export const TOOL_NAME_RE = /^[a-z][a-z0-9_]*$/;
-
-// JSON Schema type → Python 参数注解
-const PY_TYPES: Record<string, string> = {
-  string: 'str',
-  number: 'float',
-  integer: 'int',
-  boolean: 'bool',
-  array: 'list',
-  object: 'dict',
-};
 
 function sanitized(form: ToolBuilderForm): ToolBuilderForm {
   return {
@@ -60,58 +41,51 @@ function sanitized(form: ToolBuilderForm): ToolBuilderForm {
 // 生成 tools/<name>.py：模板对齐 tools/AGENTS.md「Adding a core tool」注册示例，schema.parameters 按表单展开
 export function buildToolCode(form: ToolBuilderForm): string {
   const f = sanitized(form);
-  const pyType = PY_TYPES[f.paramType];
-  const envCheck = f.requiresEnv ? `bool(get_secret("${f.requiresEnv}"))` : 'True  # 无环境依赖';
-  const requiresEnv = f.requiresEnv ? `["${f.requiresEnv}"]` : '[]';
+  const name = JSON.stringify(f.name);
+  const param = JSON.stringify(f.paramName);
+  const envCheck = f.requiresEnv ? `bool(get_secret(${JSON.stringify(f.requiresEnv)}))` : 'True';
   return `import json
-from agent.secret_scope import get_secret
-from tools.registry import registry
+${f.requiresEnv ? 'from agent.secret_scope import get_secret\n' : ''}from tools.registry import registry
 
 def check_requirements() -> bool:
     return ${envCheck}
 
-def ${f.name}(${f.paramName}: ${pyType}, task_id: str = None) -> str:
-    return json.dumps({"success": True, "data": "..."})
+def handle(args: dict, **kwargs) -> str:
+    value = args[${param}]
+    return json.dumps({"success": True, "data": {"echo": value}}, ensure_ascii=False)
 
 registry.register(
-    name="${f.name}",
-    toolset="${f.toolset}",
+    name=${name},
+    toolset=${JSON.stringify(f.toolset)},
     schema={
-        "name": "${f.name}",
-        "description": "${f.description}",
+        "name": ${name},
+        "description": ${JSON.stringify(f.description)},
         "parameters": {
             "type": "object",
             "properties": {
-                "${f.paramName}": {"type": "${f.paramType}", "description": "${f.paramDescription}"},
+                ${param}: {"type": ${JSON.stringify(f.paramType)}, "description": ${JSON.stringify(f.paramDescription)}},
             },
-            "required": ["${f.paramName}"],
+            "required": [${param}],
         },
     },
-    handler=lambda args, **kw: ${f.name}(${f.paramName}=args.get("${f.paramName}", ""), task_id=kw.get("task_id")),
+    handler=handle,
     check_fn=check_requirements,
-    requires_env=${requiresEnv},
+    requires_env=${JSON.stringify(f.requiresEnv ? [f.requiresEnv] : [])},
 )`;
 }
 
-// 第二步：toolsets.py 手动接线（tools/AGENTS.md——Required，自动发现不会替你暴露工具）
 export function buildToolsetsCode(form: ToolBuilderForm): string {
   const f = sanitized(form);
-  return `# toolsets.py —— 第二步，必须手动
-# 方式一：加进 _HERMES_CORE_TOOLS（所有平台的默认 bundle 都继承它）
-_HERMES_CORE_TOOLS = [
-    ...,
-    "${f.name}",
-]
-
-# 方式二：加进目标 toolset（按平台/场景启用）
-TOOLSETS = {
-    "${f.toolset}": [..., "${f.name}"],
-    ...
-}`;
+  return `${JSON.stringify(f.toolset)}: {
+    "description": ${JSON.stringify(f.description)},
+    "tools": [${JSON.stringify(f.name)}],
+    "includes": [],
+},`;
 }
 
 export interface SimulatedCall {
   requestLine: string;
+  argsPython: string;
   resultJson: string;
   toolMessageJson: string;
 }
@@ -134,14 +108,21 @@ function sampleValue(paramType: string): unknown {
 }
 
 // 伪造一次 handle_function_call：registry 分发 → handler 执行 → JSON 字符串 → role="tool" 消息
-export function simulateToolCall(form: ToolBuilderForm): SimulatedCall {
+export function simulateToolCall(form: ToolBuilderForm, lang: 'zh' | 'en' = 'zh'): SimulatedCall {
   const f = sanitized(form);
-  const args = { [f.paramName]: sampleValue(f.paramType) };
-  const result = JSON.stringify({ success: true, data: { echo: args[f.paramName] } });
+  const sample =
+    f.paramType === 'string' && lang === 'en' ? 'Sample input' : sampleValue(f.paramType);
+  const argsPython = `{${JSON.stringify(f.paramName)}: ${sample === true ? 'True' : JSON.stringify(sample)}}`;
+  const result = JSON.stringify({ success: true, data: { echo: sample } });
   return {
-    requestLine: `handle_function_call("${f.name}", ${JSON.stringify(args)}, task_id)`,
+    argsPython,
+    requestLine: `handle_function_call(${JSON.stringify(f.name)}, ${argsPython}, tool_call_id="call_1")`,
     resultJson: result,
-    toolMessageJson: JSON.stringify({ role: 'tool', name: f.name, content: result }, null, 2),
+    toolMessageJson: JSON.stringify(
+      { role: 'tool', tool_call_id: 'call_1', name: f.name, content: result },
+      null,
+      2,
+    ),
   };
 }
 
@@ -158,11 +139,7 @@ export const CALL_STEPS = [
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const TOOL_BUILDER_INTRO_EN =
-  'A Hermes tool is one Python function plus one registry.register() call: the schema is what the model sees, ' +
-  'the handler is what the runtime invokes, and check_fn decides whether the tool can be installed in the current environment. ' +
-  'But the most common beginner mistake is not in the code — auto-discovery only imports your file; ' +
-  'unless the tool name goes into toolsets.py, the agent never sees it. Below, define the tool on the left, ' +
-  'watch tools/your_tool.py generate live on the right, then walk the JSON wrapping chain of handle_function_call with a simulated call.';
+  'Build an echo tool that returns the input it receives. Enter a name and parameter description, see how the registered schema describes that input, then compare one simulated result with the Python handler output.';
 
 export const DEFAULT_TOOL_FORM_EN: ToolBuilderForm = {
   name: 'example_tool',
@@ -171,7 +148,7 @@ export const DEFAULT_TOOL_FORM_EN: ToolBuilderForm = {
   paramName: 'param',
   paramType: 'string',
   paramDescription: 'The input text to process.',
-  requiresEnv: 'EXAMPLE_API_KEY',
+  requiresEnv: '',
 };
 
 export const CALL_STEPS_EN: typeof CALL_STEPS = [
@@ -202,14 +179,14 @@ export const TOOL_BUILDER_UI = {
   paramDescLabel: { zh: '参数描述', en: 'Description' },
   paramDescPlaceholder: { zh: '这个参数是干什么的。', en: 'What this parameter is for.' },
   previewNote: {
-    zh: '模板逐行对齐 tools/AGENTS.md「Adding a core tool」；所有 handler 必须返回 JSON 字符串',
-    en: 'Template matches tools/AGENTS.md "Adding a core tool" line by line; every handler must return a JSON string',
+    zh: 'schema 描述请求，handle 读取指定字段并返回 JSON 字符串。',
+    en: 'The schema describes the request. The handler reads the named field and returns a JSON string.',
   },
   simulateButton: { zh: '▶ 模拟调用一次', en: '▶ Simulate one call' },
   toolsetsKicker: { zh: '最容易漏的一步', en: 'The easiest step to miss' },
   toolsetsBody: {
-    zh: '自动发现只负责 import 你的文件、把 schema 收进 registry；工具名不进 toolsets.py 的 TOOLSETS，agent 就永远看不见它。这一步没有自动 wiring——必须手动。',
-    en: 'Auto-discovery only imports your file and collects the schema into the registry; unless the tool name goes into TOOLSETS in toolsets.py, the agent never sees it. There is no automatic wiring for this step — it must be done manually.',
+    zh: '本例演示内置工具。要新增静态工具组，把下面这一项放入 toolsets.py 已有的 TOOLSETS 字典。如果目标组已经存在，只把新工具名加到它的 tools 列表中。会话启用该工具组、运行环境满足要求后，模型才可使用它。',
+    en: 'For this built-in example, insert this entry inside the existing TOOLSETS dictionary in toolsets.py to define a new static toolset. For an existing group, append the tool name to its tools list. Enable that group and satisfy the environment requirements to use the tool in a session.',
   },
   simKicker: { zh: '模拟调用', en: 'Simulated call' },
   simTitle: {
@@ -236,8 +213,8 @@ export const TOOL_BUILDER_UI = {
     en: 'Beyond simulation — actually run it in the browser',
   },
   runBody: {
-    zh: '下面的沙箱代码 = 一个最小 registry stub（顶替真实的 tools/registry.py）+ 一个 secret_scope stub（顶替 agent.secret_scope.get_secret）+ 你刚写的工具文件 + 一次 handler 分发。点「运行」，在浏览器里的 CPython 中看注册信息和 handler 真实返回的 JSON 字符串——可以随手改代码再跑。',
-    en: 'The sandbox code below = a minimal registry stub (standing in for the real tools/registry.py) + a secret_scope stub (standing in for agent.secret_scope.get_secret) + the tool file you just wrote + one handler dispatch. Hit "Run" to see the registration info and the JSON string the handler actually returns, in CPython running in your browser — feel free to tweak the code and run again.',
+    zh: '点击「运行」，浏览器内的 Python 会注册上方的工具、检查环境条件，再传入和模拟相同的参数。这里用一个小对象记录注册信息，凭据查询统一返回教学占位值。比较两处输出中的 echo 字段。',
+    en: 'Click Run to register the generated tool in browser Python, check its requirements, and pass it the same argument as the simulation. A small object records registration and the credential lookup returns a teaching placeholder. Compare the echo field in both outputs.',
   },
   pyRunnerTitleSuffix: { zh: ' · Pyodide 沙箱', en: ' · Pyodide sandbox' },
   pyRunnerNote: {
@@ -247,7 +224,7 @@ export const TOOL_BUILDER_UI = {
   hookKicker: { zh: '要点回顾', en: 'Key idea' },
   hookTitle: { zh: '一句话记住加工具', en: 'Adding a tool in one sentence' },
   hookBody: {
-    zh: 'import 即注册，toolset 才暴露；handler 永远返回 json.dumps。——文件会被自动发现， 但暴露给 agent 是你的手动决定。',
-    en: 'Import registers, toolsets expose; handlers always return json.dumps. — Files are auto-discovered, but exposing them to the agent is your manual decision.',
+    zh: '注册记录工具名称、参数和处理器。启用的工具组与环境条件决定模型可以调用哪些工具。',
+    en: 'Registration records the name, parameters, and handler. Enabled toolsets and environment checks determine which tools are available.',
   },
 };

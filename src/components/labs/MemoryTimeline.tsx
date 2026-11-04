@@ -82,6 +82,13 @@ export default function MemoryTimeline() {
       <p aria-live="polite" className="mt-4 text-sm leading-relaxed">
         {outcomes[state.outcome]}
       </p>
+      {state.pending && state.disk && (
+        <p className="mt-2 text-sm leading-relaxed text-muted">
+          {zh
+            ? '直接保存后，先前的提案仍在待审批队列中，需要单独审阅。'
+            : 'The earlier proposal remains pending after a direct save and needs its own review.'}
+        </p>
+      )}
     </div>
   );
 }

@@ -23,4 +23,16 @@ describe('memory learning exercise', () => {
     expect(next.snapshot).toBe(saved.disk);
     expect(next.session).toBe(saved.session + 1);
   });
+
+  it('a direct save preserves a previously staged proposal until it is reviewed', () => {
+    const staged = advanceMemory(INITIAL_MEMORY_EXERCISE, 'stage');
+    const saved = advanceMemory(staged, 'save');
+    expect(saved.pending).toBe(true);
+    expect(saved.disk).toBe(true);
+    expect(saved.snapshot).toBe(false);
+    const next = advanceMemory(saved, 'new-session');
+    expect(next.snapshot).toBe(true);
+    expect(next.pending).toBe(true);
+    expect(advanceMemory(next, 'approve').pending).toBe(false);
+  });
 });

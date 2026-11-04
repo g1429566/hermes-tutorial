@@ -19,7 +19,7 @@ export const INITIAL_MEMORY_EXERCISE: MemoryExercise = {
 // A bounded teaching model: it does not access real profiles, files, or model tools.
 export function advanceMemory(state: MemoryExercise, action: MemoryAction): MemoryExercise {
   const transitions = {
-    save: () => ({ ...state, disk: true, pending: false, outcome: 'saved' as const }),
+    save: () => ({ ...state, disk: true, outcome: 'saved' as const }),
     stage: () => ({ ...state, pending: true, outcome: 'staged' as const }),
     approve: () =>
       state.pending ? { ...state, disk: true, pending: false, outcome: 'saved' as const } : state,

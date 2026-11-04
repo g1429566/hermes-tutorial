@@ -1,4 +1,4 @@
-// Chapter 18「写一个新技能」数据源：技能构建器。
+// Chapter 20「写一个新技能」数据源：技能构建器。
 // 字段与硬标准对齐 hermes-agent/skills/AGENTS.md「SKILL.md frontmatter」（16–22 行）
 // 与「Authoring standards (HARDLINE)」（24–56 行）；
 // frontmatter 形状对齐真实技能 skills/apple/apple-reminders/SKILL.md。
@@ -76,18 +76,17 @@ export function buildSkillMarkdown(form: SkillBuilderForm): string {
   const description = form.description.trim() || 'Describe what the skill does.';
   const version = form.version.trim() || '0.1.0';
   const author = form.author.trim() || 'Your Name';
-  const platforms = form.platforms.length > 0 ? `[${form.platforms.join(', ')}]` : '[]';
   return [
     '---',
-    `name: ${name}`,
-    `description: "${description}"`,
-    `version: ${version}`,
-    `author: ${author}`,
+    `name: ${JSON.stringify(name)}`,
+    `description: ${JSON.stringify(description)}`,
+    `version: ${JSON.stringify(version)}`,
+    `author: ${JSON.stringify(author)}`,
     'license: MIT',
-    `platforms: ${platforms}`,
+    `platforms: ${JSON.stringify(form.platforms)}`,
     'metadata:',
     '  hermes:',
-    `    category: ${form.category}`,
+    `    category: ${JSON.stringify(form.category)}`,
     '---',
   ].join('\n');
 }

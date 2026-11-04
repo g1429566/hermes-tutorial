@@ -21,7 +21,9 @@ The user requires valid amounts only, with missing values excluded and counted r
 
 Suppose the first attempt replaces missing values with zero. Its sum happens to remain 220, but it violates the policy; averaging would expose a larger difference. Therefore one correct number is not sufficient acceptance evidence.
 
-After correction, Hermes recalculates and verifies both the sum and excluded count. The reusable lesson concerns CSV reporting: confirm the missing-value policy and report exclusions. Save it in the relevant skill rather than copying the incident into every memory store.
+The user points out the filled zero. Hermes recalculates and reports a sum of 220, two valid amounts, and one exclusion. That settles this report. Hermes then asks, “Should I use this rule for your future sales reports too?” The user confirms, “Yes. By default, exclude missing sales and report how many you excluded. I’ll tell you if a particular report should fill them with zero.”
+
+That confirmation gives Hermes a standing rule for the sales-report skill. Without it, the transferable step is to ask which missing-value policy the report requires.
 
 ### Six links from feedback to later use
 
@@ -90,7 +92,7 @@ Save verified transferable rules, not a failed sequence dressed as best practice
 
 Disabling one does not imply disabling the others. `/memory pending` and `/skills pending` show staged writes. `/refine` explicitly reviews recent experience; `/learn` reads specified sources or a verified procedure to produce reusable skill content. Both still require actual reading and successful writes.
 
-For example, after verifying the CSV report, ask `/learn` to update the relevant skill with its missing-value policy and checks. Inspect the resulting tool actions, handle pending approval, then use a new session and a new input. `/journey` or `hermes journey` can show learning activity, but a new node is not a correctness certificate. [Controls](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/skill_manager_guards.py)
+For example, after verifying the CSV report, ask `/learn` to update the relevant skill with its missing-value policy and checks. Inspect the resulting tool actions, handle pending approval, then use a new session and a new input. `/journey` or `hermes journey` can show learning activity, but a new node is not a correctness certificate. [Learning from sources](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/website/docs/user-guide/features/skills.md#learning-a-skill-from-sources-learn)
 
 ### Curator maintenance is a separate loop
 

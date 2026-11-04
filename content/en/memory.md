@@ -57,15 +57,19 @@ The current session does not lose the user's new instruction: it is still in rec
 
 ### Edit actual entries
 
-The current tool offers `add`, `patch`, and `remove`, with an explicit top-level `target` of `user` or `memory`. There is no separate `read` action; initial injection and tool results provide the relevant views.
+A model call to `memory` requires two top-level fields. `target` selects the store (`user` or `memory`). `operations` lists the changes to that store. Each list item has an `action` to add an entry (`add`), revise a span (`patch`), or delete a whole entry (`remove`). A single change uses a one-item list. The session reads saved notes at startup, and write results can show the current state. [Tool schema](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool.py#L398)
 
-This JSON describes tool arguments, not a system-terminal command:
+Here are the arguments a model would send to save the language preference. In JSON, braces enclose an object and square brackets enclose a list. The one object in this list specifies the action and the text to save.
 
 ```json
 {
-  "action": "add",
   "target": "user",
-  "content": "User defaults to Chinese and requests English explicitly when needed."
+  "operations": [
+    {
+      "action": "add",
+      "content": "User defaults to Chinese and requests English explicitly when needed."
+    }
+  ]
 }
 ```
 
@@ -73,10 +77,14 @@ For a separate example, assume an entry already says “User defaults to Chinese
 
 ```json
 {
-  "action": "patch",
   "target": "user",
-  "old_text": "defaults to Chinese",
-  "content": "defaults to English"
+  "operations": [
+    {
+      "action": "patch",
+      "old_text": "defaults to Chinese",
+      "content": "defaults to English"
+    }
+  ]
 }
 ```
 
@@ -88,11 +96,11 @@ Older `replace` overwrote an entire matched entry. It is no longer offered by th
 
 “I will remember” is generated text, not evidence of persistence. Inspect actual tool results and the correct file. With write approval enabled, some writes wait in a pending queue. Unattended background changes to existing memory have additional staging rules. `staged` means awaiting review, not applied.
 
-Use `/memory pending`, then inspect and approve or reject the actual identifier. A pending change must not be treated as knowledge already stored. [Write controls](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/skill_manager_guards.py)
+Use `/memory pending`, then inspect and approve or reject the actual identifier. A pending change must not be treated as knowledge already stored. [Write controls](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/website/docs/user-guide/features/memory.md#controlling-memory-writes-write_approval)
 
 Overflow does not silently erase old entries. The model must inspect, shorten duplicates, or remove outdated facts before saving useful new information. Combining two copies of the same language preference is more sensible than deleting an unrelated date convention at random.
 
-The `operations` batch interface applies one top-level target and checks capacity against the resulting state. Use separate calls for different targets. Start with single-entry operations, then use the batch form when the real error requires coordinated edits.
+To make room and save a new entry in one call, put all changes to that target in the same `operations` list. The tool checks capacity against the final state and commits the changes together. If the new entry would still overflow, the earlier removal is rolled back. Use a separate call for the other target.
 
 ### Retrieve historical details
 
@@ -112,16 +120,16 @@ Plugins have their own storage, network dependencies, retention, and cost. Built
 
 ### Run a bounded local check
 
-Use a learning profile, not daily production memory.
+Complete the command-line installation in chapter 01 first. A profile has its own configuration and user data. Create a fresh profile called `memory-lab` so you can start with empty memory.
 
-1. Inspect `/profile` and identify its home and `USER.md`.
-2. Explicitly request a `memory` save of the future language preference.
-3. Inspect the real call result. Handle a pending proposal if present; no call or a failure is not a saved entry.
-4. Read that profile's file and verify the entry.
-5. Start a new session with `/new`, ask an unrelated question, and check loaded preference information as well as behavior. One Chinese answer alone is weak causal evidence.
-6. Explicitly request English this time. Following that request is compatible with the saved conditional preference.
+1. **Create a profile in the system terminal.** Run `hermes profile create memory-lab`. If the name already exists, choose an unused name and substitute it for `memory-lab` in every command below.
+2. **Configure its model.** In the terminal, run `hermes -p memory-lab model`. The `-p` option selects the profile for this command. Choose a provider you can access, follow its authentication prompts, and select a model that supports tool calls.
+3. **Start session A.** Run `hermes -p memory-lab chat` in the terminal. At the Hermes chat prompt, enter `/profile`. Confirm the selected profile name and note its home directory.
+4. **Request a durable save.** In chat, ask “Use the memory tool to remember that I prefer Chinese by default. Use English when I explicitly ask.” Inspect the tool result. If you see an approval prompt, read and confirm the entry. If the result says `staged: true`, enter `/memory pending`, then `/memory approve <id>` with the displayed ID and check the approval result.
+5. **Check the file.** Open the home directory from step 3 in your file manager. Open the `memories` folder, then `USER.md` in a text editor, and look for the preference. If the entry is missing, check the write outcome and target from step 4. If the tool reports that user memory is disabled, inspect the setting in a second system terminal with `hermes -p memory-lab config get memory.user_profile_enabled`.
+6. **Observe a fresh session.** Back in the Hermes chat, enter `/new`, then ask “Give me one tip for naming a file.” Observe the response language. Now ask “Please answer the same question in English this time.” Record the file entry as evidence of persistence and the two responses as evidence of behavior. A model might choose Chinese independently, so a single answer is only a clue.
 
-No disk entry points to writing or approval. A present entry absent from new context points to profile, enablement, or session-start issues. A loaded entry not followed points to wording, conflicts, or execution quality. Diagnose the stage rather than declaring all memory broken.
+[Create and use a profile](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/website/docs/user-guide/profiles.md#quick-start)
 
 ### Predict before revealing the explanation
 

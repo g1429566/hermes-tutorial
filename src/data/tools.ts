@@ -16,6 +16,52 @@ export interface ToolDatum {
   note?: string; // 特殊行为说明
 }
 
+const MEMORY_TOOL_SCHEMA = `{
+  "name": "memory",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "target": {
+        "type": "string",
+        "enum": [
+          "memory",
+          "user"
+        ]
+      },
+      "operations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "add",
+                "patch",
+                "remove"
+              ]
+            },
+            "content": {
+              "type": "string"
+            },
+            "old_text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "target",
+      "operations"
+    ]
+  }
+}`;
+
 export const TOOL_ROUTING_INTRO =
   '模型每轮都能拿到一份工具 schema 清单，但一个工具从「tools/ 目录里的 Python 文件」到' +
   '「模型真正调用它」要经过四道门：import 即注册、自动发现、toolset 收录、平台 adapter 选用。' +
@@ -120,9 +166,8 @@ export const TOOLS: ToolDatum[] = [
     registerLine: 'tools/memory_tool.py · 注册位置',
     check:
       'agent 级工具：INLINE_TOOL_EXECUTORS 表（agent/inline_tool_executors.py）在 registry 分发之前拦截，不进 handle_function_call',
-    schema:
-      '{\n  "name": "memory",\n  "description": "Teaching subset: current built-in memory edits",\n  "parameters": {\n    "type": "object",\n    "properties": {\n      "action": {\n        "type": "string",\n        "enum": [\n          "add",\n          "patch",\n          "remove"\n        ]\n      },\n      "target": {\n        "type": "string",\n        "enum": [\n          "memory",\n          "user"\n        ]\n      },\n      "content": {\n        "type": "string"\n      },\n      "old_text": {\n        "type": "string"\n      }\n    },\n    "required": [\n      "action",\n      "target"\n    ]\n  }\n}',
-    note: '单条操作的教学节选。patch 只改唯一 old_text 片段；operations 批次使用一个顶层 target。',
+    schema: MEMORY_TOOL_SCHEMA,
+    note: '模型每次提交一个 target 和一份 operations 列表。一项修改就放一个操作。add 写入 content，patch 把 old_text 片段改为 content，remove 删除 old_text 定位的整条记录。',
   },
   {
     id: 'web_search',
@@ -325,9 +370,8 @@ export const TOOLS_EN: ToolDatum[] = [
     registerLine: 'tools/memory_tool.py · registration',
     check:
       'Agent-level tool: intercepted via the INLINE_TOOL_EXECUTORS table (agent/inline_tool_executors.py) before registry dispatch, never reaching handle_function_call',
-    schema:
-      '{\n  "name": "memory",\n  "description": "Teaching subset: current built-in memory edits",\n  "parameters": {\n    "type": "object",\n    "properties": {\n      "action": {\n        "type": "string",\n        "enum": [\n          "add",\n          "patch",\n          "remove"\n        ]\n      },\n      "target": {\n        "type": "string",\n        "enum": [\n          "memory",\n          "user"\n        ]\n      },\n      "content": {\n        "type": "string"\n      },\n      "old_text": {\n        "type": "string"\n      }\n    },\n    "required": [\n      "action",\n      "target"\n    ]\n  }\n}',
-    note: 'Teaching subset for single operations. patch edits a unique old_text span; operations batches use one top-level target.',
+    schema: MEMORY_TOOL_SCHEMA,
+    note: 'Each model call supplies a target and an operations list, with one item for a single change. add writes content, patch replaces the old_text span with content, and remove deletes the whole entry identified by old_text.',
   },
   {
     id: 'web_search',

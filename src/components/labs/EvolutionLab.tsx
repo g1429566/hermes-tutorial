@@ -11,8 +11,8 @@ const STEPS = [
     zh: '获得反馈',
     en: 'Feedback',
     body: [
-      '输入 100、缺失、120。用户要求排除缺失并报告条数。总和 220 只是一个验收项，还要得到有效 2 条、缺失 1 条。',
-      'For 100, missing, 120, verify sum 220, valid count 2, and missing count 1. A correct sum alone does not establish policy compliance.',
+      '输入 100、缺失、120。先按本次要求得到总和 220、有效 2 条、缺失 1 条。核对后，用户明确确认以后同类报告也默认采用这条规则。',
+      'For 100, missing, 120, first verify sum 220, valid count 2, and missing count 1. After checking the result, the user explicitly confirms the same default for later reports of this kind.',
     ],
   },
   {
@@ -20,8 +20,8 @@ const STEPS = [
     zh: '确定去向',
     en: 'Choose a store',
     body: [
-      '缺失值处理是 CSV 报告的流程规则，先找相关技能；语言等跨任务偏好才适合 USER.md。一次性数值留在会话历史。',
-      'The missing-value procedure belongs in the reporting skill. Cross-task preferences can belong in USER.md; temporary totals stay in history.',
+      '把用户确认过的缺失值规则整理到相关 CSV 报告技能，注明适用范围。语言等跨任务偏好适合 USER.md，一次性数值留在会话历史。',
+      'Put the confirmed missing-value rule in the reporting skill with its scope stated. Cross-task preferences can belong in USER.md; temporary totals stay in history.',
     ],
   },
   {

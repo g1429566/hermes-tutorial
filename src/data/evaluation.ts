@@ -1,4 +1,4 @@
-// Chapter 32「批处理与 Agent 评测」数据源。
+// Chapter 27「批处理与 Agent 评测」数据源。
 // 对齐 batch_runner.py、mini_swe_runner.py 的模块 docstring 与仓库真实文件。
 
 export const EVALUATION_INTRO =
@@ -36,7 +36,7 @@ export const BATCH_STEPS: BatchStep[] = [
     id: 'trajectory',
     label: '轨迹',
     title: '标准轨迹落盘',
-    body: '每条任务产出 Hermes 格式的 trajectory：from/value 消息对（用户/助手/工具交替），工具调用以 <tool_call>/<tool_response> XML 标记——这正是 RL 训练与蒸馏的数据格式。',
+    body: '保存成功的轨迹记录包含 conversations 数组。其中每条消息用 from 标明来源，用 value 保存内容。工具请求和结果分别位于 <tool_call> 与 <tool_response> 标记中。下方展开了一条 JSONL 记录中的部分字段，实际文件每行存放一条完整的 JSON 记录。',
   },
   {
     id: 'stats',
@@ -56,13 +56,34 @@ export const SWE_RUNNER = {
   ],
 };
 
-export const TRAJECTORY_FORMAT = `# trajectory JSONL 的一行（from/value 消息对）
-{"trajectory": [
-  {"from": "human",  "value": "修复 login 页面的 500 错误"},
-  {"from": "gpt",    "value": "<tool_call>{\\"name\\": \\"search_files\\", ...}</tool_call>"},
-  {"from": "tool",   "value": "<tool_response>{\\"matches\\": [...]}</tool_response>"},
-  {"from": "gpt",    "value": "已定位问题：login.py 第 42 行……"}
-]}`;
+function trajectoryExample(prompt: string, reply: string) {
+  return JSON.stringify(
+    {
+      conversations: [
+        { from: 'human', value: prompt },
+        {
+          from: 'gpt',
+          value:
+            '<think>\n</think>\n<tool_call>\n{"name":"read_file","arguments":{"path":"note.txt"}}\n</tool_call>',
+        },
+        {
+          from: 'tool',
+          value:
+            '<tool_response>\n{"tool_call_id":"call_1","name":"read_file","content":{"content":"1|OK"}}\n</tool_response>',
+        },
+        { from: 'gpt', value: `<think>\n</think>\n${reply}` },
+      ],
+      completed: true,
+    },
+    null,
+    2,
+  );
+}
+
+export const TRAJECTORY_FORMAT = trajectoryExample(
+  '读出 note.txt 中的文字。',
+  '文件中的文字是 OK。',
+);
 
 export const EVAL_ECOSYSTEM: { name: string; desc: string; sourceRef: string }[] = [
   {
@@ -72,7 +93,7 @@ export const EVAL_ECOSYSTEM: { name: string; desc: string; sourceRef: string }[]
   },
   {
     name: 'mini_swe_runner.py',
-    desc: 'SWE 任务执行器：复用 local/docker/modal 后端，产出同构轨迹',
+    desc: 'SWE 任务执行器：复用 local/docker/modal 后端，记录对话与任务元数据',
     sourceRef: 'mini_swe_runner.py',
   },
   {
@@ -124,7 +145,7 @@ export const BATCH_STEPS_EN: BatchStep[] = [
     id: 'trajectory',
     label: 'Trajectory',
     title: 'Standard trajectories on disk',
-    body: 'Each task produces a Hermes-format trajectory: from/value message pairs (user / assistant / tool alternating), with tool calls marked by <tool_call>/<tool_response> XML tags — exactly the data format for RL training and distillation.',
+    body: 'A saved trajectory record contains a conversations array. Each message has a from field for its source and a value field for its content. Tool requests and results appear inside <tool_call> and <tool_response> tags. The example expands selected fields for readability. The JSONL file stores one complete JSON record per line.',
   },
   {
     id: 'stats',
@@ -136,7 +157,7 @@ export const BATCH_STEPS_EN: BatchStep[] = [
 
 export const SWE_RUNNER_EN: typeof SWE_RUNNER = {
   title: 'mini_swe_runner: SWE evaluation on the same backends',
-  body: 'SWE-bench-style software engineering evaluation needs no separate execution layer: mini_swe_runner directly reuses Hermes’s built-in terminal backends (local / docker / modal, chosen via --env), spins up a clean environment in Docker with --image python:3.11-slim to run tasks, and produces trajectories fully isomorphic to batch_runner and trajectory_compressor — the same data can be evaluated and fed into the training pipeline.',
+  body: 'SWE-bench-style software engineering evaluation needs no separate execution layer: mini_swe_runner directly reuses Hermes’s built-in terminal backends (local / docker / modal, chosen via --env), spins up a clean environment in Docker with --image python:3.11-slim to run tasks, and writes results with conversations and task metadata. Check the fields expected by each downstream evaluator or training pipeline.',
   commands: [
     'python mini_swe_runner.py --task "Create a hello world script" --env local',
     'python mini_swe_runner.py --task "List files in /tmp" --env docker --image python:3.11-slim',
@@ -144,13 +165,10 @@ export const SWE_RUNNER_EN: typeof SWE_RUNNER = {
   ],
 };
 
-export const TRAJECTORY_FORMAT_EN = `# One line of trajectory JSONL (from/value message pairs)
-{"trajectory": [
-  {"from": "human",  "value": "Fix the 500 error on the login page"},
-  {"from": "gpt",    "value": "<tool_call>{\\"name\\": \\"search_files\\", ...}</tool_call>"},
-  {"from": "tool",   "value": "<tool_response>{\\"matches\\": [...]}</tool_response>"},
-  {"from": "gpt",    "value": "Located the issue: login.py line 42……"}
-]}`;
+export const TRAJECTORY_FORMAT_EN = trajectoryExample(
+  'Read the text in note.txt.',
+  'The file contains OK.',
+);
 
 export const EVAL_ECOSYSTEM_EN: typeof EVAL_ECOSYSTEM = [
   {
@@ -160,7 +178,7 @@ export const EVAL_ECOSYSTEM_EN: typeof EVAL_ECOSYSTEM = [
   },
   {
     name: 'mini_swe_runner.py',
-    desc: 'SWE task runner: reuses the local/docker/modal backends, produces isomorphic trajectories',
+    desc: 'SWE task runner: reuses the local/docker/modal backends, writes conversation records with task metadata',
     sourceRef: 'mini_swe_runner.py',
   },
   {
@@ -186,8 +204,8 @@ export const EVALUATION_UI = {
   pipelineTitle: { zh: 'batch_runner 的五步', en: 'The five steps of batch_runner' },
   trajectoryKicker: { zh: '轨迹格式', en: 'TRAJECTORY FORMAT' },
   trajectoryTitle: {
-    zh: '评测与训练共用的数据形状',
-    en: 'One data shape shared by evaluation and training',
+    zh: '一条 JSONL 记录的节选（展开显示）',
+    en: 'Selected fields from one JSONL record, expanded for reading',
   },
   ecosystemKicker: { zh: '评测生态', en: 'EVAL ECOSYSTEM' },
   ecosystemTitle: { zh: '同一份轨迹，整条管道', en: 'One trajectory, the whole pipeline' },

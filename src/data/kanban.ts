@@ -1,20 +1,17 @@
-// Chapter 13「Kanban 工作队列」数据源：模拟任务卡、dispatcher 循环、隔离模型。
+// Chapter 16「Kanban 工作队列」数据源：模拟任务卡、dispatcher 循环、隔离模型。
 // 内容对齐 hermes-agent/cron/AGENTS.md 的「Kanban (multi-agent work queue)」一节
 // 与 website/docs/user-guide/features/kanban.md（手动摘录）。
 
 export const KANBAN_INTRO =
-  'kanban 是一块 SQLite 持久化的看板，让多个 profile / worker 在同一批任务上协作：' +
-  '用户用 hermes kanban <verb> 驱动，dispatcher 催生的 worker 用专用 kanban_* toolset 驱动——' +
-  '不在 kanban 任务里时，这些工具的 schema 占用为零。先在下面的模拟面板上亲手移几张卡。';
+  '看板把任务和依赖写入 SQLite 数据库。调度器认领就绪任务，并启动执行者（worker）。执行者处理分配给自己的任务，可以报告完成或遇到阻塞。协调者处理跨任务的调度决定，例如解除阻塞。下面的按钮分别模拟这些角色的动作。';
 
-// 真实 board 的状态机是 triage/todo/scheduled/ready/running/blocked/review/done/archived
-//（hermes_cli/kanban_db.py VALID_STATUSES）；模拟面板取主干四列——running 即"已认领执行中"，
-// 认领本身由 claim_lock 字段记录。
-export type KanbanColumn = 'ready' | 'running' | 'blocked' | 'done';
+// The exercise follows ordinary execution cards without a review stage.
+export type KanbanColumn = 'todo' | 'ready' | 'running' | 'blocked' | 'done';
 
 export const KANBAN_COLUMNS: { id: KanbanColumn; name: string; desc: string }[] = [
-  { id: 'ready', name: 'Ready', desc: '就绪，等待 dispatcher 认领' },
-  { id: 'running', name: 'Running', desc: '已被 worker 原子认领，执行中' },
+  { id: 'todo', name: 'Todo', desc: '等待前置任务完成' },
+  { id: 'ready', name: 'Ready', desc: '就绪，等待调度器认领' },
+  { id: 'running', name: 'Running', desc: '调度器已认领，执行者正在处理' },
   { id: 'blocked', name: 'Blocked', desc: '被阻塞（或连续失败自动阻塞）' },
   { id: 'done', name: 'Done', desc: '完成' },
 ];
@@ -24,28 +21,50 @@ export interface KanbanCard {
   title: string;
   assignee: string;
   column: KanbanColumn;
+  parentId?: string;
 }
 
 export const INITIAL_CARDS: KanbanCard[] = [
   { id: 'T-101', title: '给网关加飞书 adapter 的骨架', assignee: 'coder', column: 'ready' },
   { id: 'T-102', title: '重写技能加载的缓存策略', assignee: 'coder', column: 'ready' },
   { id: 'T-103', title: '审计 plugins/ 的第三方依赖', assignee: 'reviewer', column: 'running' },
-  { id: 'T-104', title: '修复 cron catchup 窗口计算', assignee: 'coder', column: 'running' },
-  { id: 'T-105', title: '等待上游 API 开放配额', assignee: 'ops', column: 'blocked' },
+  { id: 'T-104', title: '核对测试环境的接口权限', assignee: 'coder', column: 'running' },
+  {
+    id: 'T-105',
+    title: '在配额恢复后运行接口测试',
+    assignee: 'ops',
+    column: 'blocked',
+    parentId: 'T-104',
+  },
   { id: 'T-106', title: '补齐 TUI 补全的测试', assignee: 'reviewer', column: 'done' },
 ];
 
-// 卡片上可用的操作（模拟 worker 视角的 kanban_* 工具）
+// Completing a parent recomputes readiness for waiting cards in the real board as well.
+export function moveKanbanCard(cards: KanbanCard[], id: string, to: KanbanColumn): KanbanCard[] {
+  const parentFinished = (card: KanbanCard, board: KanbanCard[]) =>
+    !card.parentId ||
+    board.some((parent) => parent.id === card.parentId && parent.column === 'done');
+  const moved = cards.map((card) => {
+    if (card.id !== id) return card;
+    const waiting = card.column === 'blocked' && to === 'ready' && !parentFinished(card, cards);
+    return { ...card, column: waiting ? ('todo' as const) : to };
+  });
+  if (to !== 'done') return moved;
+  return moved.map((card) =>
+    card.column === 'todo' && parentFinished(card, moved) ? { ...card, column: 'ready' } : card,
+  );
+}
+
 export const CARD_ACTIONS: {
   action: string;
   tool: string;
   from: KanbanColumn[];
   to: KanbanColumn;
 }[] = [
-  { action: '认领', tool: 'dispatcher 原子认领', from: ['ready'], to: 'running' },
-  { action: '完成', tool: 'kanban_complete', from: ['running'], to: 'done' },
-  { action: '阻塞', tool: 'kanban_block', from: ['running', 'ready'], to: 'blocked' },
-  { action: '解阻', tool: 'kanban_unblock', from: ['blocked'], to: 'ready' },
+  { action: '调度器认领', tool: 'dispatcher 原子认领', from: ['ready'], to: 'running' },
+  { action: '执行者完成', tool: 'kanban_complete', from: ['running'], to: 'done' },
+  { action: '执行者报告阻塞', tool: 'kanban_block', from: ['running'], to: 'blocked' },
+  { action: '协调者解阻', tool: 'kanban_unblock', from: ['blocked'], to: 'ready' },
 ];
 
 export interface DispatcherStep {
@@ -63,8 +82,8 @@ export const DISPATCHER_STEPS: DispatcherStep[] = [
 
 export const KANBAN_ISOLATION: { title: string; desc: string }[] = [
   {
-    title: 'Board 是硬边界',
-    desc: 'worker 被 spawn 时环境里钉死 HERMES_KANBAN_BOARD——它根本看不见别的板。',
+    title: '任务属于哪一块板',
+    desc: '执行者启动时带有所属看板和任务标识，任务操作受归属检查约束。',
   },
   {
     title: 'Tenant 是板内软命名空间',
@@ -99,14 +118,12 @@ export const KANBAN_VERBS = [
 // ── 英文版（结构与上方中文导出一一对应） ─────────────────────────
 
 export const KANBAN_INTRO_EN =
-  'kanban is a SQLite-persisted board that lets multiple profiles / workers collaborate on the ' +
-  'same set of tasks: users drive it with hermes kanban <verb>, and dispatcher-spawned workers ' +
-  'drive it with the dedicated kanban_* toolset — which costs zero schema space when you are not ' +
-  'inside a kanban task. Move a few cards on the simulated board below first.';
+  'The board stores tasks and dependencies in SQLite. The dispatcher claims ready work and starts a worker. Each worker runs its assigned task and can report completion or a blocker. An orchestrator handles decisions across tasks, such as unblocking a card. The buttons below simulate actions by these different roles.';
 
 export const KANBAN_COLUMNS_EN: { id: KanbanColumn; name: string; desc: string }[] = [
-  { id: 'ready', name: 'Ready', desc: 'Ready, waiting for a dispatcher to claim' },
-  { id: 'running', name: 'Running', desc: 'Atomically claimed by a worker, in progress' },
+  { id: 'todo', name: 'Todo', desc: 'Waiting for a prerequisite' },
+  { id: 'ready', name: 'Ready', desc: 'Ready for the dispatcher to claim' },
+  { id: 'running', name: 'Running', desc: 'Claimed by the dispatcher and assigned to a worker' },
   { id: 'blocked', name: 'Blocked', desc: 'Blocked (or auto-blocked after repeated failures)' },
   { id: 'done', name: 'Done', desc: 'Done' },
 ];
@@ -132,11 +149,17 @@ export const INITIAL_CARDS_EN: KanbanCard[] = [
   },
   {
     id: 'T-104',
-    title: 'Fix the cron catchup window computation',
+    title: 'Verify API permissions in the test environment',
     assignee: 'coder',
     column: 'running',
   },
-  { id: 'T-105', title: 'Waiting for upstream API quota', assignee: 'ops', column: 'blocked' },
+  {
+    id: 'T-105',
+    title: 'Run integration tests once the API quota is restored',
+    assignee: 'ops',
+    column: 'blocked',
+    parentId: 'T-104',
+  },
   { id: 'T-106', title: 'Backfill tests for TUI completion', assignee: 'reviewer', column: 'done' },
 ];
 
@@ -146,10 +169,15 @@ export const CARD_ACTIONS_EN: {
   from: KanbanColumn[];
   to: KanbanColumn;
 }[] = [
-  { action: 'Claim', tool: 'atomic claim by dispatcher', from: ['ready'], to: 'running' },
-  { action: 'Complete', tool: 'kanban_complete', from: ['running'], to: 'done' },
-  { action: 'Block', tool: 'kanban_block', from: ['running', 'ready'], to: 'blocked' },
-  { action: 'Unblock', tool: 'kanban_unblock', from: ['blocked'], to: 'ready' },
+  {
+    action: 'Dispatcher claims',
+    tool: 'atomic claim by dispatcher',
+    from: ['ready'],
+    to: 'running',
+  },
+  { action: 'Worker completes', tool: 'kanban_complete', from: ['running'], to: 'done' },
+  { action: 'Worker reports blocker', tool: 'kanban_block', from: ['running'], to: 'blocked' },
+  { action: 'Orchestrator unblocks', tool: 'kanban_unblock', from: ['blocked'], to: 'ready' },
 ];
 
 export const DISPATCHER_STEPS_EN: DispatcherStep[] = [
@@ -165,8 +193,8 @@ export const DISPATCHER_STEPS_EN: DispatcherStep[] = [
 
 export const KANBAN_ISOLATION_EN: { title: string; desc: string }[] = [
   {
-    title: 'The board is a hard boundary',
-    desc: 'HERMES_KANBAN_BOARD is pinned into the environment when a worker is spawned — it simply cannot see other boards.',
+    title: 'Assign work to a board',
+    desc: 'Workers start with their assigned board and task identifiers. Task operations check ownership.',
   },
   {
     title: 'Tenant is a soft namespace inside a board',
@@ -186,13 +214,14 @@ export const KANBAN_ISOLATION_EN: { title: string; desc: string }[] = [
 export const KANBAN_LAB_UI = {
   boardKicker: { zh: '面板模拟', en: 'Board Simulation' },
   boardTitle: { zh: '亲手移几张卡', en: 'Move a few cards yourself' },
+  prerequisite: { zh: '前置任务', en: 'Prerequisite' },
   emptyColumn: { zh: '空', en: 'Empty' },
   boardHint: {
-    zh: '你刚才的手动操作，对应 worker 真实调用的 kanban_* 工具（悬停按钮可见）。',
-    en: 'Your manual moves map to the kanban_* tools a real worker calls (hover a button to see).',
+    zh: '假设 API 配额刚恢复。先解阻 T-105，观察它因为 T-104 尚未完成而回到 Todo。再完成 T-104，观察 T-105 进入 Ready。如果先完成 T-104，再解除外部阻塞，T-105 就会直接进入 Ready。',
+    en: 'Assume the API quota has just been restored. Unblock T-105 first. Its prerequisite T-104 is still running, so T-105 goes to Todo. Complete T-104 and watch T-105 become Ready. If T-104 finishes before the unblock, T-105 goes straight to Ready when unblocked.',
   },
   dispatcherKicker: { zh: 'dispatcher', en: 'dispatcher' },
-  dispatcherTitle: { zh: '60 秒一拍的催熟循环', en: 'The ripening loop, one tick per 60 seconds' },
+  dispatcherTitle: { zh: '调度器每轮怎样分配任务', en: 'How a dispatcher tick assigns work' },
   isolationKicker: { zh: '隔离模型', en: 'Isolation Model' },
   isolationTitle: {
     zh: '多 agent 不打架的四个机制',
@@ -200,8 +229,8 @@ export const KANBAN_LAB_UI = {
   },
   footerNote: {
     zh: (verbs: string) =>
-      `入口：用户侧 hermes kanban <${verbs}>；worker 侧 kanban_* toolset（不在 kanban 任务里时 schema 占用为零）。`,
+      `可在终端运行 hermes kanban 命令，子命令包括 ${verbs}。执行者可使用自己的任务工具。配置了 kanban 工具集的协调者可调用 kanban_unblock。`,
     en: (verbs: string) =>
-      `Entry points: hermes kanban <${verbs}> for users; the kanban_* toolset for workers (zero schema cost outside kanban tasks).`,
+      `Use hermes kanban in the terminal. Available subcommands include ${verbs}. Workers get task tools. Orchestrators with the kanban toolset can call kanban_unblock.`,
   },
 } as const;

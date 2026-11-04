@@ -69,32 +69,40 @@ Hermes 为内置记忆提供两种目标。
 
 ### memory 工具怎样编辑条目
 
-在本稿核对的当前版本中，工具支持 `add`、`patch`、`remove`。每次调用明确指定顶层 `target`，值为 `user` 或 `memory`。没有单独的 `read` 动作：启动时自动注入的是内置读取路径，工具结果则可展示实时状态。
+模型调用 `memory` 时必须提供两个顶层字段。`target` 选择要修改的存储（`user` 或 `memory`），`operations` 列出要对它执行的操作。每个操作用 `action` 指定新增（`add`）、局部修改（`patch`）或删除整条（`remove`）。只写一条时，列表里就放一个操作。会话启动时会读取记忆，模型还可以在写入结果中看到当前状态。[工具参数定义](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool.py#L398)
 
 保存本例偏好时，模型提交的参数可以是：
 
 ```json
 {
-  "action": "add",
   "target": "user",
-  "content": "用户默认希望用中文交流，明确要求英文时改用英文。"
+  "operations": [
+    {
+      "action": "add",
+      "content": "用户默认希望用中文交流，明确要求英文时改用英文。"
+    }
+  ]
 }
 ```
 
-这些大括号中的内容是 JSON，一种用字段名和字段值表示数据的文本格式。`action` 指动作，`target` 指存储目标，`content` 是要写入的文字；它展示模型交给工具的参数，不是让用户在终端里直接输入这个对象。
+这是模型交给工具的参数，用 JSON 格式书写。外层大括号包住这次调用的字段。方括号表示列表，里面的一个对象描述一次新增操作，其中 `content` 是要保存的文字。
 
 另设一个独立示例，假设用户已明确提供两项长期偏好，并实际保存为“用户默认希望用中文交流；报告日期注明时区。”后来用户说：“默认改用英文，其他偏好不变。”在原条目唯一匹配的条件下，可以只替换其中一段：
 
 ```json
 {
-  "action": "patch",
   "target": "user",
-  "old_text": "默认希望用中文交流",
-  "content": "默认希望用英文交流"
+  "operations": [
+    {
+      "action": "patch",
+      "old_text": "默认希望用中文交流",
+      "content": "默认希望用英文交流"
+    }
+  ]
 }
 ```
 
-结果是“用户默认希望用英文交流；报告日期注明时区。”日期约定没有被删除。`patch` 保留未匹配的其他文字。若 `old_text` 命中多条条目，或在目标条目里重复出现，工具会要求更明确的定位；模型应增加上下文，而不是猜测要改哪一处。要删除整条过时记录则使用 `remove`，其匹配短语用于定位整条记录。[当前工具实现](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py)
+结果是“用户默认希望用英文交流；报告日期注明时区。”日期约定没有被删除。`patch` 保留未匹配的其他文字。工具优先选择整条文字与 `old_text` 完全相同的条目。如果没有整条匹配，且该片段命中多条不同内容，或者它在选中的条目内重复出现，就需要加上周围的文字以确定目标。要删除整条过时记录则使用 `remove`，其匹配短语用于定位整条记录。[当前工具实现](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py)
 
 旧教材中的 `replace` 有不同语义：它用新内容替换整条匹配条目。当前工具已经不向模型提供这个动作，继续调用会得到改用 `patch` 的提示。因此跟读旧版源码时，不能照搬新版动作；阅读新版教材时，也不能把 `patch` 当成旧式整条替换。
 
@@ -104,7 +112,7 @@ Hermes 为内置记忆提供两种目标。
 
 如果启用了 `memory.write_approval`，交互式 CLI 的前台写入可以要求现场确认，其他场景的写入通常进入待审批队列。当前版本的无人值守后台复盘对修改或移除已有记忆还有额外限制，可能即使总开关关闭也先暂存。`staged` 表示待处理，不能解释成已经写入。
 
-查看待审批项使用 `/memory pending`；选择一项后可用 `/memory approve <id>` 或 `/memory reject <id>` 处理。这里的 `<id>` 要替换成实际显示的标识。审批前先读完整目标和拟修改内容。[写入控制依据](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/skill_manager_guards.py)
+查看待审批项使用 `/memory pending`；选择一项后可用 `/memory approve <id>` 或 `/memory reject <id>` 处理。这里的 `<id>` 要替换成实际显示的标识。审批前先读完整目标和拟修改内容。[写入控制依据](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/website/docs/user-guide/features/memory.md#controlling-memory-writes-write_approval)
 
 ### 容量满了怎样处理
 
@@ -112,7 +120,7 @@ Hermes 为内置记忆提供两种目标。
 
 下面用一个不涉及真实字符计数的例子说明选择。假设文件已有两条：“用户长期使用中文交流”“用户的首选交流语言是中文”，又要保存“用户要求日期写明时区”。先合并重复语言偏好，比随机删除日期约定更合理。合并后还要检查是否真的满足该文件的容量限制。
 
-当前接口也支持同一目标下的 `operations` 批量编辑；它在最终状态检查容量，避免先删除成功、后新增失败而留下半套更新。初次学习先掌握单条编辑，再按真实错误结果决定是否需要批量操作。不要把无关的两种 target 混进同一个批次。[容量与批次实现](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py)
+需要同时整理和新增时，把针对同一个 `target` 的多个操作按顺序放进同一份 `operations` 列表。工具检查所有操作完成后的总容量，全部通过才提交。这样，最后的新增超出容量时，前面的删除也不会单独生效。修改另一份文件需另发一次调用。[容量与批次实现](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py)
 
 ### 历史搜索怎样补上细节
 
@@ -134,16 +142,16 @@ Hermes 通过 `MemoryProvider` 接口与这些实现配合：准备用户回合�
 
 ### 动手核验一次跨会话记忆
 
-在学习用 profile 中操作，先确认内置用户画像可用。以下是实验步骤，不预设每个模型都会正确调用工具。
+先完成第 01 章的命令行安装。profile 是一套独立的配置和用户数据。这里新建一个名为 `memory-lab` 的学习 profile，让它从空白记忆开始。
 
-1. 查看 `/profile` 所示的当前身份与 home，记录你要检查哪份 `USER.md`。
-2. 发送：“请使用 memory 工具记住：以后默认用中文回答，明确要求英文时再切换。”
-3. 检查是否出现实际 `memory` 调用；若显示待审批，先查看并处理对应提案。没有调用或调用失败，就不能勾选“已保存”。
-4. 在当前 profile 的 `memories/USER.md` 核对条目是否存在。读取文件只是核验，不要把另一个 profile 的同名文件当作结果。
-5. 用 `/new` 创建新会话，提出一个未指定语言的普通问题，观察回答。同时核对新会话加载的偏好或相关状态；单凭一次中文回答，还不能排除模型本来就倾向用中文。
-6. 再明确要求“这次请用英文回答”。合理行为是遵循这次要求，因为保存的偏好本来就包含这个条件。
+1. **在系统终端创建 profile。** 运行 `hermes profile create memory-lab`。若提示名称已存在，换一个新名字，并在下面每条命令里用同一个名字替换 `memory-lab`。
+2. **为它配置模型。** 在系统终端运行 `hermes -p memory-lab model`。`-p` 指定本次命令使用哪个 profile。在向导中选择可访问且支持工具调用的模型服务，按提示完成认证并选定模型。
+3. **开始会话 A。** 在系统终端运行 `hermes -p memory-lab chat`。出现 Hermes 聊天输入框后，输入 `/profile`。确认显示的名字是你的学习 profile，并记下它的 home 目录。
+4. **请求一次长期保存。** 在聊天框发送“请用 memory 工具记住，以后默认用中文回答，明确要求英文时才切换。”检查工具执行结果。若弹出审批提示，读完条目再确认。若结果包含 `staged: true`，输入 `/memory pending` 查看提案，用 `/memory approve <id>` 批准相应项，把 `<id>` 换成它的实际编号，并查看批准结果。
+5. **核对磁盘。** 用文件管理器打开第三步记下的 home 目录，进入 `memories`，用文本编辑器打开 `USER.md`，查找刚保存的偏好。若找不到，回到第四步检查实际写入结果和目标。如果工具提示用户记忆已关闭，可在另一个系统终端运行 `hermes -p memory-lab config get memory.user_profile_enabled` 查看设置。
+6. **观察新会话。** 回到 Hermes 聊天框，输入 `/new`，再问“Give me one tip for naming a file.”，观察回复使用哪种语言。然后要求“这次请用英文回答同一个问题”，观察它是否按你的要求切换。记录磁盘条目和两次回答，分别作为保存和行为的证据。模型本身也可能恰好选择中文，单次回答只能提供线索。
 
-如果第三步没有落盘，问题在写入或审批；如果第四步存在而新会话没有加载，检查 profile、开关与是否真建了新会话；如果已经加载却未遵循，需要检查条目措辞、当前要求冲突或模型执行质量。把这些问题分开，比笼统说“记忆坏了”更容易定位。
+[创建和使用 profile](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/website/docs/user-guide/profiles.md#quick-start)
 
 ### 先预测再核对
 

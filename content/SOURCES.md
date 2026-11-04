@@ -8,12 +8,13 @@
 - 教材覆盖：检查原有 33 章的中文主讲数据、标题与简介、相关实验说明，重点阅读 MemoryLab、SkillCuratorLab、GatewayFlowLab、ToolBuilderLab 及章节渲染入口。网站包含 34 章双语正文，新增独立自我进化章节，原有章节 ID 保持稳定。
 - 当前上游逐行核对集中在内置记忆、技能写入、后台复盘、策展、工具并发、模型流式调用、内置委派与安装入口。其他章节使用本地实现、项目规范和跨章一致性复核；不宣称所有平台、插件和真实运行路径已在上游逐一端到端验证。
 - 已按该源码版本修订双语讲解与实验说明。文中的本机练习供学习者按条件执行，本轮没有调用真实模型、修改个人记忆或启动定时任务。
+- 本轮复审继续使用上述固定版本核对接口与实验。后续上游提交需要单独复核后再升级教程基线。
 
 以下链接固定到同一提交，避免随 main 更新改变行号。段落说明采用原创归纳，代码链接用于核对机制。
 
 ## S1 内置记忆与工具接口
 
-- [tools/memory_tool.py 第 2 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool.py#L2)：当前工具为 add、patch、remove，旧 replace 不再向模型提供。
+- [tools/memory_tool.py 第 398 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool.py#L398)：模型接口要求顶层 `target` 与 `operations`；单条修改使用只有一项的数组，动作是 add、patch 或 remove。顶层 action 仅由后端兼容旧调用。
 - [tools/memory_tool_store.py 第 223 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py#L223)：定位 `load_from_disk`。
 - [tools/memory_tool_store.py 第 429 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py#L429)：定位 `patch`。
 - [tools/memory_tool_store.py 第 562 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/memory_tool_store.py#L562)：定位 `apply_batch`。
@@ -128,6 +129,16 @@
 本地教材的 `src/data/chapters.ts` 中 sourceFiles 经存在性核验，发现 `plugin-catalog/mcp-serve.yaml` 已不存在。Hermes 内部界面协议定位于本地 `tui_gateway/contracts/`、`apps/shared/`；MCP 客户端为 `tools/mcp_tool*.py`；ACP 为 `acp_adapter/`；A2A 的本地实现位于 `plugins/platforms/a2a/`。本轮核对的是协议职责与引用失效，不把旧插件安装命令重新包装成已验证的新入口。
 
 扩展顺序以本地根 `AGENTS.md` 的 Footprint Ladder 为准：先扩展已有代码，再考虑 CLI 加技能、服务门控工具、插件、MCP，新增核心工具是最后选择。MCP 的服务内部可调用 agent，不能从协议角色推出“server 内绝无 agent”。
+
+## S15 复审中修正的实验契约
+
+- [agent/agent_init.py 第 1234 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/agent/agent_init.py#L1234) 和 [agent/system_prompt.py 第 522 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/agent/system_prompt.py#L522) 表明，cron 的两份内置记忆分别受 `memory.memory_enabled` 与 `memory.user_profile_enabled` 控制。工具集合控制模型能调用的工具，文件载入由这些配置决定。
+- [tools/write_approval.py 第 74 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/write_approval.py#L74) 按独立 ID 保存提案。模拟器中的直接保存保留此前的待审批项，审批后再移除该项。
+- [tools/kanban_tools.py 第 1260 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/tools/kanban_tools.py#L1260) 规定解阻属于协调者操作。有未完成父任务时，卡片先回到 todo，依赖满足后才能就绪。
+- [batch_runner.py 第 359 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/batch_runner.py#L359) 将轨迹消息保存到 `conversations`。评测页面按这个实际落盘字段展示可解析的 JSON 样例。
+- [toolsets.py 第 49 行](https://github.com/NousResearch/hermes-agent/blob/9302ba9e212c63ba24cdf1f47f26b47bcd3b042e/toolsets.py#L49) 定义每个工具组合为带有 `tools` 与 `includes` 的对象。工具生成器采用这个结构，并核对生成的 handler 与模拟返回值一致。
+
+教学步骤还补齐学习 profile 的创建、模型配置和启动，再进入记忆练习。CSV 例子在用户明确确认适用范围后，才将缺失值规则写为同类报告的约定。技能与工具生成器核验引号、反斜杠和换行等输入的转义。
 
 ## 网站验证与真实运行边界
 

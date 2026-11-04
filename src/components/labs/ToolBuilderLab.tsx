@@ -55,7 +55,7 @@ const labelCls = 'block font-mono text-[11px] tracking-[0.15em] text-muted';
 const inputCls =
   'mt-1.5 w-full rounded border border-line bg-white px-3 py-2 font-mono text-sm text-ink placeholder:text-muted/60 focus:border-ink focus:outline-none';
 
-// Chapter 19「加一个新工具」：工具注册实验。
+// Chapter 21「加一个新工具」：工具注册实验。
 // 左：工具定义表单；右：tools/your_tool.py 实时预览；下方：toolsets.py 提醒 + 模拟调用。
 export default function ToolBuilderLab() {
   const { lang } = useLang();
@@ -69,14 +69,14 @@ export default function ToolBuilderLab() {
   const { form, simulated } = state;
 
   const nameOk = TOOL_NAME_RE.test(form.name.trim());
-  const call = simulated ? simulateToolCall(form) : null;
+  const sampleCall = simulateToolCall(form, lang);
+  const call = nameOk && simulated ? sampleCall : null;
 
   // 沙箱代码：最小 registry stub + 生成的工具文件 + 一次 handler 分发（Pyodide 真跑）
-  const safeParam = /^\w+$/.test(form.paramName.trim()) ? form.paramName.trim() : 'param';
   const sandboxCode = [
-    'import sys, types, json, os',
+    'import sys, types, json',
     '',
-    '# ① 沙箱 stub：顶替真实的 tools/registry.py 和 agent/secret_scope',
+    '# 1. Local practice stubs for registration and optional credentials',
     '_calls = []',
     'class _Registry:',
     '    def register(self, **kw):',
@@ -86,20 +86,21 @@ export default function ToolBuilderLab() {
     'sys.modules["tools"] = types.ModuleType("tools")',
     'sys.modules["tools.registry"] = _mod',
     '_secret = types.ModuleType("agent.secret_scope")',
-    '_secret.get_secret = lambda name, default=None: os.getenv(name, default)',
+    '_secret.get_secret = lambda name, default=None: "demo-only"',
     '_agent = types.ModuleType("agent")',
     '_agent.secret_scope = _secret',
     'sys.modules["agent"] = _agent',
     'sys.modules["agent.secret_scope"] = _secret',
     '',
-    '# ② 你的工具文件（与右侧预览一致）',
+    '# 2. The generated tool module',
     buildToolCode(form),
     '',
-    '# ③ 模拟 handle_function_call 的一次分发',
+    '# 3. Exercise the registered handler with the same example input',
     '_call = _calls[-1]',
-    'print("注册成功:", _call["name"], "→ toolset:", _call["toolset"])',
-    `_result = _call["handler"]({${JSON.stringify(safeParam)}: "示例输入"})`,
-    'print("handler 返回（JSON 字符串）:")',
+    'print("tool:", _call["name"], "→ toolset:", _call["toolset"])',
+    'assert _call["check_fn"]()',
+    `_result = _call["handler"](${sampleCall.argsPython})`,
+    'print("handler JSON:")',
     'print(_result)',
   ].join('\n');
 
@@ -237,6 +238,7 @@ export default function ToolBuilderLab() {
           />
           <button
             type="button"
+            disabled={!nameOk}
             onClick={() => update({ form, simulated: true })}
             className="rounded bg-ink px-5 py-2.5 font-mono text-sm text-acid transition-colors hover:bg-ink/90"
           >
@@ -254,7 +256,7 @@ export default function ToolBuilderLab() {
           {pick(lang, TOOL_BUILDER_UI.toolsetsBody)}
         </p>
         <div className="mt-4">
-          <CodeBlock file="toolsets.py" code={buildToolsetsCode(form)} />
+          <CodeBlock file="toolsets.py · TOOLSETS" code={buildToolsetsCode(form)} />
         </div>
       </div>
 
@@ -280,7 +282,7 @@ export default function ToolBuilderLab() {
             <div className="space-y-4">
               <CodeBlock file={pick(lang, TOOL_BUILDER_UI.dispatchFile)} code={call.requestLine} />
               <CodeBlock
-                file={`${form.name.trim() || 'example_tool'}${pick(lang, TOOL_BUILDER_UI.resultFileSuffix)}`}
+                file={`handle${pick(lang, TOOL_BUILDER_UI.resultFileSuffix)}`}
                 code={call.resultJson}
                 note={pick(lang, TOOL_BUILDER_UI.resultNote)}
               />
